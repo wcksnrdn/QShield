@@ -200,8 +200,15 @@ def _a7():
     for i in range(15):
         scan(c, qr(PENYERANG), device=f"penyerang-{i:04d}")
 
-    korban = scan(c, qr(KORBAN, pan="936000149000000001"), device="pelanggan-0001")
-    sebelah = scan(c, qr(TETANGGA, pan="936000149000000003"),
+    # Nama di QR harus cocok dengan nama di bindingnya. Versi pertama
+    # pemeriksaan ini memakai nama bawaan helper untuk KEDUA merchant,
+    # sehingga tetangganya tampak berganti nama — dan sinyal
+    # nmid_name_inconsistent menandainya, dengan benar. Fixture yang
+    # ceroboh, bukan kode yang salah.
+    korban = scan(c, qr(KORBAN, pan="936000149000000001",
+                        nama="WARUNG BU SRI"), device="pelanggan-0001")
+    sebelah = scan(c, qr(TETANGGA, pan="936000149000000003",
+                         nama="TOKO SEBELAH"),
                    lat=LAT - 0.00007, device="pelanggan-0002")
 
     assert korban["layers"]["behavior"] == 0, (
@@ -348,6 +355,102 @@ def _a16():
         assert d["action"] == "proceed", (
             f"percobaan ke-{i + 1} di kasir yang sama -> {d['action']}")
     return "3 percobaan di satu kasir tetap proceed"
+
+
+@serangan("Stiker luar kota ditempel di warung — PEMINDAIAN PERTAMA")
+def _a17():
+    s_, c = fresh_store()
+
+    def q(nmid, nama, kota):
+        acct = emvco.build_tlv({
+            "00": "ID.CO.QRIS.WWW", "01": "93600899" + nmid[-10:],
+            "02": nmid, "03": "UMI"})
+        return emvco.build({
+            "00": "01", "01": "11", "26": acct, "52": "5812", "53": "360",
+            "58": "ID", "59": nama, "60": kota, "61": "40257"})
+
+    # Wilayah harus dikenal dulu. Sebelum itu sistem WAJIB diam —
+    # ketiadaan pengetahuan bukan izin menuduh (invarian §2).
+    d = scan(c, q("ID1000000000001", "ES BUAH", "JAKARTA"),
+             lat=LAT + 0.03, device="warga-0001")
+    assert "city_mismatch" not in d["signals"], (
+        "menuduh padahal wilayahnya belum dikenal")
+
+    for i in range(2, 10):
+        scan(c, q(f"ID10000000000{i:02d}", f"TOKO {i}", "BANDUNG"),
+             lat=LAT + 0.03 + i * 2e-4, device=f"warga-{i:04d}")
+
+    # Sekarang: stiker luar kota, pemindaian PERTAMA, tanpa riwayat
+    # apa pun tentang merchant itu.
+    d = scan(c, q("ID1000000000099", "ES BUAH PAK ASEP", "JAKARTA"),
+             lat=LAT + 0.03, device="warga-9999")
+    assert "city_mismatch" in d["signals"], (
+        f"stiker luar kota lolos pada scan pertama: {d['signals']}")
+    assert d["action"] in ("step_up", "cooling_off"), (
+        f"friksi cuma {d['action']}")
+
+    # Merchant Bandung yang benar-benar baru TIDAK boleh ikut kena.
+    bersih = scan(c, q("ID1000000000088", "WARUNG BARU", "BANDUNG"),
+                  lat=LAT + 0.03, device="warga-8888")
+    assert "city_mismatch" not in bersih["signals"], (
+        "merchant sah yang baru ikut tertuduh")
+    return f"tertangkap pada scan pertama -> {d['action']}; merchant sah bersih"
+
+
+@serangan("Meracuni pengetahuan wilayah dengan pemindaian berulang")
+def _a18():
+    s_, c = fresh_store()
+
+    def q(nmid, kota):
+        acct = emvco.build_tlv({
+            "00": "ID.CO.QRIS.WWW", "01": "93600899" + nmid[-10:],
+            "02": nmid, "03": "UMI"})
+        return emvco.build({
+            "00": "01", "01": "11", "26": acct, "52": "5812", "53": "360",
+            "58": "ID", "59": "X", "60": kota, "61": "40257"})
+
+    for i in range(2, 10):
+        scan(c, q(f"ID10000000000{i:02d}", "BANDUNG"),
+             lat=LAT + 0.03 + i * 2e-4, device=f"warga-{i:04d}")
+
+    # Penyerang membanjiri wilayah dengan satu stiker "JAKARTA".
+    for i in range(400):
+        scan(c, q("ID1000000000099", "JAKARTA"), lat=LAT + 0.03,
+             device=f"racun-{i:05d}")
+
+    kota, setuju, total = s_.area_city(LAT + 0.03, LNG)
+    assert kota == "BANDUNG", (
+        f"pengetahuan wilayah berhasil diracuni jadi {kota}")
+    return (f"400 pemindaian racun, wilayah tetap {kota} "
+            f"({setuju}/{total} NMID) — yang dihitung NMID, bukan pemindaian")
+
+
+@serangan("Satu NMID dipakai untuk banyak korban dengan nama berbeda")
+def _a19():
+    s_, c = fresh_store()
+
+    def q(nmid, nama):
+        acct = emvco.build_tlv({
+            "00": "ID.CO.QRIS.WWW", "01": "93600899" + nmid[-10:],
+            "02": nmid, "03": "UMI"})
+        return emvco.build({
+            "00": "01", "01": "11", "26": acct, "52": "5812", "53": "360",
+            "58": "ID", "59": nama, "60": "BANDUNG", "61": "40257"})
+
+    N = "ID1000000000077"
+    scan(c, q(N, "LAUNDRY KILAT"), lat=LAT + 0.02, device="korban-0001")
+    d = scan(c, q(N, "ES BUAH PAK ASEP"), lat=LAT + 0.05, device="korban-0002")
+    assert "nmid_name_inconsistent" in d["signals"], (
+        f"satu NMID dua nama lolos: {d['signals']}")
+    assert d["action"] == "cooling_off"
+
+    # Merchant sah yang namanya konsisten tidak boleh kena.
+    scan(c, q("ID1000000000066", "TOKO KONSISTEN"), lat=LAT + 0.07,
+         device="warga-0001")
+    bersih = scan(c, q("ID1000000000066", "TOKO KONSISTEN"), lat=LAT + 0.07,
+                  device="warga-0002")
+    assert "nmid_name_inconsistent" not in bersih["signals"]
+    return "dua nama -> cooling_off; nama konsisten tetap bersih"
 
 
 # ==================================================================
@@ -532,6 +635,102 @@ def _a16():
         assert d["action"] == "proceed", (
             f"percobaan ke-{i + 1} di kasir yang sama -> {d['action']}")
     return "3 percobaan di satu kasir tetap proceed"
+
+
+@serangan("Stiker luar kota ditempel di warung — PEMINDAIAN PERTAMA")
+def _a17():
+    s_, c = fresh_store()
+
+    def q(nmid, nama, kota):
+        acct = emvco.build_tlv({
+            "00": "ID.CO.QRIS.WWW", "01": "93600899" + nmid[-10:],
+            "02": nmid, "03": "UMI"})
+        return emvco.build({
+            "00": "01", "01": "11", "26": acct, "52": "5812", "53": "360",
+            "58": "ID", "59": nama, "60": kota, "61": "40257"})
+
+    # Wilayah harus dikenal dulu. Sebelum itu sistem WAJIB diam —
+    # ketiadaan pengetahuan bukan izin menuduh (invarian §2).
+    d = scan(c, q("ID1000000000001", "ES BUAH", "JAKARTA"),
+             lat=LAT + 0.03, device="warga-0001")
+    assert "city_mismatch" not in d["signals"], (
+        "menuduh padahal wilayahnya belum dikenal")
+
+    for i in range(2, 10):
+        scan(c, q(f"ID10000000000{i:02d}", f"TOKO {i}", "BANDUNG"),
+             lat=LAT + 0.03 + i * 2e-4, device=f"warga-{i:04d}")
+
+    # Sekarang: stiker luar kota, pemindaian PERTAMA, tanpa riwayat
+    # apa pun tentang merchant itu.
+    d = scan(c, q("ID1000000000099", "ES BUAH PAK ASEP", "JAKARTA"),
+             lat=LAT + 0.03, device="warga-9999")
+    assert "city_mismatch" in d["signals"], (
+        f"stiker luar kota lolos pada scan pertama: {d['signals']}")
+    assert d["action"] in ("step_up", "cooling_off"), (
+        f"friksi cuma {d['action']}")
+
+    # Merchant Bandung yang benar-benar baru TIDAK boleh ikut kena.
+    bersih = scan(c, q("ID1000000000088", "WARUNG BARU", "BANDUNG"),
+                  lat=LAT + 0.03, device="warga-8888")
+    assert "city_mismatch" not in bersih["signals"], (
+        "merchant sah yang baru ikut tertuduh")
+    return f"tertangkap pada scan pertama -> {d['action']}; merchant sah bersih"
+
+
+@serangan("Meracuni pengetahuan wilayah dengan pemindaian berulang")
+def _a18():
+    s_, c = fresh_store()
+
+    def q(nmid, kota):
+        acct = emvco.build_tlv({
+            "00": "ID.CO.QRIS.WWW", "01": "93600899" + nmid[-10:],
+            "02": nmid, "03": "UMI"})
+        return emvco.build({
+            "00": "01", "01": "11", "26": acct, "52": "5812", "53": "360",
+            "58": "ID", "59": "X", "60": kota, "61": "40257"})
+
+    for i in range(2, 10):
+        scan(c, q(f"ID10000000000{i:02d}", "BANDUNG"),
+             lat=LAT + 0.03 + i * 2e-4, device=f"warga-{i:04d}")
+
+    # Penyerang membanjiri wilayah dengan satu stiker "JAKARTA".
+    for i in range(400):
+        scan(c, q("ID1000000000099", "JAKARTA"), lat=LAT + 0.03,
+             device=f"racun-{i:05d}")
+
+    kota, setuju, total = s_.area_city(LAT + 0.03, LNG)
+    assert kota == "BANDUNG", (
+        f"pengetahuan wilayah berhasil diracuni jadi {kota}")
+    return (f"400 pemindaian racun, wilayah tetap {kota} "
+            f"({setuju}/{total} NMID) — yang dihitung NMID, bukan pemindaian")
+
+
+@serangan("Satu NMID dipakai untuk banyak korban dengan nama berbeda")
+def _a19():
+    s_, c = fresh_store()
+
+    def q(nmid, nama):
+        acct = emvco.build_tlv({
+            "00": "ID.CO.QRIS.WWW", "01": "93600899" + nmid[-10:],
+            "02": nmid, "03": "UMI"})
+        return emvco.build({
+            "00": "01", "01": "11", "26": acct, "52": "5812", "53": "360",
+            "58": "ID", "59": nama, "60": "BANDUNG", "61": "40257"})
+
+    N = "ID1000000000077"
+    scan(c, q(N, "LAUNDRY KILAT"), lat=LAT + 0.02, device="korban-0001")
+    d = scan(c, q(N, "ES BUAH PAK ASEP"), lat=LAT + 0.05, device="korban-0002")
+    assert "nmid_name_inconsistent" in d["signals"], (
+        f"satu NMID dua nama lolos: {d['signals']}")
+    assert d["action"] == "cooling_off"
+
+    # Merchant sah yang namanya konsisten tidak boleh kena.
+    scan(c, q("ID1000000000066", "TOKO KONSISTEN"), lat=LAT + 0.07,
+         device="warga-0001")
+    bersih = scan(c, q("ID1000000000066", "TOKO KONSISTEN"), lat=LAT + 0.07,
+                  device="warga-0002")
+    assert "nmid_name_inconsistent" not in bersih["signals"]
+    return "dua nama -> cooling_off; nama konsisten tetap bersih"
 
 
 # ==================================================================

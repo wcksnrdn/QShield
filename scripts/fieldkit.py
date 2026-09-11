@@ -288,6 +288,59 @@ def cmd_analyse(argv):
         print("       Belum cukup untuk menutup R7, tapi ini bukti pertama")
         print("       yang bukan dari generator kami sendiri.")
 
+    # --- 4b. kota vs lokasi sesungguhnya ---------------------------
+    print()
+    print("4b. KOTA DI STIKER vs LOKASI SESUNGGUHNYA  (sinyal city_mismatch)")
+    print("-" * 74)
+    from collections import Counter
+    per_area = defaultdict(Counter)
+    kota_label = {}
+    for d in data:
+        try:
+            parsed = emvco.parse(d["payload"])
+        except emvco.ParseError:
+            continue
+        kota = bd.normalize_city(parsed.merchant_city)
+        if not kota:
+            continue
+        gh5 = geo.encode(d["lat"], d["lng"], bd.AREA_CITY_PRECISION)
+        nm = parsed.nmid or d["payload"][:20]
+        per_area[gh5][kota] = per_area[gh5][kota]
+        kota_label.setdefault((gh5, kota), set()).add(nm)
+
+    if not kota_label:
+        print("     (belum ada payload yang bisa diurai)")
+    else:
+        beda = 0
+        for gh5 in sorted({k[0] for k in kota_label}):
+            suara = {kota: len(nmids) for (g, kota), nmids
+                     in kota_label.items() if g == gh5}
+            total = sum(suara.values())
+            dominan = max(suara, key=suara.get)
+            cukup = (suara[dominan] >= bd.AREA_CITY_MIN_NMIDS
+                     and suara[dominan] / total >= bd.AREA_CITY_MIN_SHARE)
+            lain = {k: v for k, v in suara.items() if k != dominan}
+            beda += sum(lain.values())
+            tanda = "cukup" if cukup else "belum cukup"
+            print(f"     sel {gh5}  {dominan:<18} {suara[dominan]:>3}/{total:<3} "
+                  f"({tanda})")
+            for k, v in sorted(lain.items(), key=lambda x: -x[1]):
+                print(f"                    berbeda: {k:<18} {v:>3} NMID")
+
+        print()
+        print(f"     AREA_CITY_MIN_NMIDS = {bd.AREA_CITY_MIN_NMIDS}, "
+              f"MIN_SHARE = {bd.AREA_CITY_MIN_SHARE}")
+        if beda:
+            print(f"     {beda} NMID menyebut kota BERBEDA dari wilayahnya.")
+            print("     PERIKSA satu per satu: kalau itu merchant sah (franchise,")
+            print("     kantor pusat di kota lain, merchant yang pindah), maka")
+            print("     city_mismatch akan menandai merchant jujur dan bobotnya")
+            print("     harus turun — atau sinyalnya dibuang, seperti Keputusan 13.")
+        else:
+            print("     Nol merchant sah yang menyebut kota berbeda.")
+            print("     Belum membuktikan apa-apa kalau sampelnya kecil, tapi")
+            print("     ini data pertama yang menguji sinyalnya.")
+
     # --- 5. ringkasan ----------------------------------------------
     print()
     print("=" * 74)
@@ -309,6 +362,18 @@ def cmd_analyse(argv):
     if urutan_tidak_naik or crc_kecil:
         usul.append("sinyal sidik jari encoding menandai payload sungguhan — "
                     "turunkan bobot atau buang")
+    if kota_label:
+        salah_kota = sum(
+            v for gh5 in {k[0] for k in kota_label}
+            for k, v in {kk: len(vv) for (g, kk), vv in kota_label.items()
+                         if g == gh5}.items()
+            if k != max({kk: len(vv) for (g, kk), vv in kota_label.items()
+                         if g == gh5}, key=lambda x: len(
+                            kota_label[(gh5, x)])))
+        if salah_kota:
+            usul.append(f"{salah_kota} merchant menyebut kota berbeda dari "
+                        f"wilayahnya — periksa apakah mereka sah sebelum "
+                        f"memercayai city_mismatch")
 
     if usul:
         for u in usul:
