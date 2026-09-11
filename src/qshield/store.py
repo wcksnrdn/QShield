@@ -24,7 +24,7 @@ import secrets
 import sqlite3
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from . import behavior as bh
@@ -98,6 +98,24 @@ CREATE TABLE IF NOT EXISTS registrations (
     UNIQUE (nmid)
 );
 
+-- Jejak pemakaian QR DINAMIS. Yang dilacak adalah ARTEFAKNYA, bukan
+-- orangnya: tidak ada device apa pun di sini. Koordinat yang disimpan
+-- adalah tempat QR itu pertama terlihat — properti mesin kasir, sama
+-- kategorinya dengan koordinat di tabel bindings.
+--
+-- QR dinamis berumur pendek, jadi barisnya dipangkas berkala.
+CREATE TABLE IF NOT EXISTS dynamic_qr (
+    payload_hash   TEXT PRIMARY KEY,
+    nmid           TEXT    NOT NULL,
+    lat            REAL    NOT NULL,
+    lng            REAL    NOT NULL,
+    times_seen     INTEGER NOT NULL DEFAULT 1,
+    max_spread_m   REAL    NOT NULL DEFAULT 0,
+    first_seen     TEXT    NOT NULL,
+    last_seen      TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_dynqr_last ON dynamic_qr(last_seen);
 CREATE INDEX IF NOT EXISTS idx_reg_nmid ON registrations(nmid);
 CREATE INDEX IF NOT EXISTS idx_bindings_gh7  ON bindings(geohash_7);
 CREATE INDEX IF NOT EXISTS idx_bindings_nmid ON bindings(nmid);
@@ -541,6 +559,76 @@ class Store:
                 "SELECT * FROM registrations WHERE nmid = ? AND revoked_at IS NULL",
                 (nmid,)).fetchone()
         return dict(r) if r else None
+
+    # --- jejak QR dinamis ------------------------------------------
+
+    def note_dynamic_qr(self, payload: str, nmid: str, lat: float, lng: float,
+                        now: Optional[datetime] = None) -> dict:
+        """Catat satu kemunculan QR dinamis, kembalikan riwayatnya.
+
+        Dicatat TERLEPAS dari verdict — ini bukan pengamatan yang
+        membangun reputasi (invarian §3 tidak tersentuh), melainkan
+        penghitung pemakaian sebuah artefak sekali pakai. Angkanya hanya
+        pernah menaikkan risiko, tidak pernah menurunkan.
+
+        Yang disimpan adalah hash payload, bukan payloadnya: cukup untuk
+        mengenali QR yang sama muncul lagi, tidak cukup untuk memulihkan
+        identitas merchant dari basis data yang bocor.
+        """
+        now = now or datetime.now(timezone.utc)
+        h = hashlib.sha256(f"{self._salt}|{payload}".encode("utf-8")).hexdigest()
+        waktu = _iso(now)
+
+        # Pemangkasan dititipkan ke jalur tulis alih-alih penjadwal
+        # terpisah: satu proses lebih sedikit yang bisa mati diam-diam,
+        # dan tabel ini hanya tumbuh saat ada yang menulisinya.
+        self._dyn_writes = getattr(self, "_dyn_writes", 0) + 1
+        if self._dyn_writes % 500 == 0:
+            self.prune_dynamic_qr(now)
+
+        with self._lock:
+            self.conn.execute("BEGIN IMMEDIATE")
+            try:
+                baris = self.conn.execute(
+                    "SELECT * FROM dynamic_qr WHERE payload_hash = ?", (h,)
+                ).fetchone()
+
+                if baris is None:
+                    self.conn.execute(
+                        """INSERT INTO dynamic_qr
+                           (payload_hash, nmid, lat, lng, times_seen,
+                            max_spread_m, first_seen, last_seen)
+                           VALUES (?, ?, ?, ?, 1, 0, ?, ?)""",
+                        (h, nmid, lat, lng, waktu, waktu))
+                    hasil = {"times_seen": 1, "max_spread_m": 0.0,
+                             "first_seen": now}
+                else:
+                    sebar = max(
+                        baris["max_spread_m"],
+                        geo.haversine_m(baris["lat"], baris["lng"], lat, lng))
+                    self.conn.execute(
+                        """UPDATE dynamic_qr
+                           SET times_seen = times_seen + 1,
+                               max_spread_m = ?, last_seen = ?
+                           WHERE payload_hash = ?""",
+                        (sebar, waktu, h))
+                    hasil = {"times_seen": baris["times_seen"] + 1,
+                             "max_spread_m": sebar,
+                             "first_seen": _parse(baris["first_seen"])}
+                self.conn.execute("COMMIT")
+            except Exception:
+                self.conn.execute("ROLLBACK")
+                raise
+        return hasil
+
+    def prune_dynamic_qr(self, now: Optional[datetime] = None) -> int:
+        """Buang jejak QR dinamis yang sudah lewat masa hidupnya."""
+        now = now or datetime.now(timezone.utc)
+        batas = _iso(now - timedelta(hours=bd.DYNAMIC_QR_TTL_HOURS))
+        with self._lock:
+            cur = self.conn.execute(
+                "DELETE FROM dynamic_qr WHERE last_seen < ?", (batas,))
+        return cur.rowcount
 
     def note_anomaly(self, binding_id: int,
                      now: Optional[datetime] = None) -> None:

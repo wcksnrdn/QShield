@@ -37,6 +37,11 @@ ANCHOR_RADIUS_M = 50        # dua pemindaian dianggap satu jangkar
 # itu mengunci jangkar pada galat awalnya dan membuang seluruh
 # manfaatnya. Di atas itu, seretan tumbuh tanpa imbalan akurasi.
 ANCHOR_MAX_DRIFT_M = 20
+
+# Masa hidup jejak QR dinamis. QR dinamis dibuat untuk satu transaksi
+# dan kedaluwarsa dalam hitungan menit sampai jam; 48 jam memberi ruang
+# untuk pemindaian yang tertunda tanpa menyimpan apa pun berlama-lama.
+DYNAMIC_QR_TTL_HOURS = 48
 INDEX_PRECISION = 7         # presisi geohash untuk indeks query
 AREA_PRECISION = 6          # presisi untuk deteksi sebaran antar-area
 SCATTER_MIN_KM = 1.0        # jarak minimum agar dianggap area berbeda

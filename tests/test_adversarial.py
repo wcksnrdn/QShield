@@ -288,6 +288,68 @@ def _a13():
     return "permintaan tanpa accuracy_m ditolak 422 di batas sistem"
 
 
+@serangan("Satu QR dinamis disebar ke banyak korban")
+def _a14():
+    _, c = fresh_store()
+
+    def dinamis(tagihan, nominal="250000.00"):
+        acct = emvco.build_tlv({
+            "00": "ID.CO.QRIS.WWW", "01": "936000149000000002",
+            "02": PENYERANG, "03": "UMI"})
+        return emvco.build({
+            "00": "01", "01": "12", "26": acct, "52": "5812", "53": "360",
+            "54": nominal, "58": "ID", "59": "TOKO ONLINE", "60": "BANDUNG",
+            "62": emvco.build_tlv({"01": tagihan})})
+
+    p = dinamis("INV-9999")
+    lokasi = [(LAT, LNG), (-6.9200, 107.6150), (-6.9350, 107.6300),
+              (-6.9000, 107.5900), (-6.8900, 107.6500)]
+    hasil = [scan(c, p, lat=la, lng=ln, device=f"korban-{i:04d}")
+             for i, (la, ln) in enumerate(lokasi)]
+
+    # Korban PERTAMA tidak bisa dilindungi — QR itu belum punya riwayat
+    # apa pun. Itu batasan yang sama dengan cold start, dan diakui.
+    assert all(h["action"] == "cooling_off" for h in hasil[1:]), (
+        f"korban berikutnya lolos: {[h['action'] for h in hasil[1:]]}")
+    assert "dynamic_qr_spread" in hasil[1]["signals"]
+    return (f"korban ke-1 lolos (tanpa riwayat), korban ke-2 dst "
+            f"dihentikan — {len(lokasi) - 1} dari {len(lokasi)}")
+
+
+@serangan("Stiker statis tidak ikut tertuduh dipakai ulang")
+def _a15():
+    _, c = fresh_store()
+    # Stiker statis MEMANG dipindai ribuan kali. Kalau sinyal pemakaian
+    # ulang bocor ke jalur statis, seluruh merchant sah tertuduh.
+    p = qr(KORBAN, pan="936000149000000001")
+    for i in range(40):
+        d = scan(c, p, device=f"pelanggan-{i:04d}")
+    dinamis = [s for s in d["signals"] if "dynamic" in s]
+    assert not dinamis, f"stiker statis kena sinyal dinamis: {dinamis}"
+    assert d["action"] == "proceed", f"40 pemindaian sah -> {d['action']}"
+    return "40 pemindaian stiker statis, nol sinyal pemakaian ulang"
+
+
+@serangan("QR dinamis sah yang dipindai ulang di kasir yang sama")
+def _a16():
+    _, c = fresh_store()
+    acct = emvco.build_tlv({
+        "00": "ID.CO.QRIS.WWW", "01": "936000149000000001",
+        "02": KORBAN, "03": "UMI"})
+    p = emvco.build({
+        "00": "01", "01": "12", "26": acct, "52": "5812", "53": "360",
+        "54": "50000.00", "58": "ID", "59": "WARUNG BU SRI", "60": "BANDUNG",
+        "62": emvco.build_tlv({"01": "INV-0042"})})
+
+    # Tiga percobaan di kasir yang sama: kamera gagal fokus, dibatalkan,
+    # lalu berhasil. Galat GPS-nya belasan meter, bukan kilometer.
+    for i in range(3):
+        d = scan(c, p, lat=LAT + 0.00008 * i, device="pembeli-0001")
+        assert d["action"] == "proceed", (
+            f"percobaan ke-{i + 1} di kasir yang sama -> {d['action']}")
+    return "3 percobaan di satu kasir tetap proceed"
+
+
 # ==================================================================
 # Batasan yang diakui — di sini yang diuji adalah KEJUJURAN sistem
 # ==================================================================
@@ -408,6 +470,68 @@ def _a13():
         f"pintu keluar dari invarian §6 terbuka"
     )
     return "permintaan tanpa accuracy_m ditolak 422 di batas sistem"
+
+
+@serangan("Satu QR dinamis disebar ke banyak korban")
+def _a14():
+    _, c = fresh_store()
+
+    def dinamis(tagihan, nominal="250000.00"):
+        acct = emvco.build_tlv({
+            "00": "ID.CO.QRIS.WWW", "01": "936000149000000002",
+            "02": PENYERANG, "03": "UMI"})
+        return emvco.build({
+            "00": "01", "01": "12", "26": acct, "52": "5812", "53": "360",
+            "54": nominal, "58": "ID", "59": "TOKO ONLINE", "60": "BANDUNG",
+            "62": emvco.build_tlv({"01": tagihan})})
+
+    p = dinamis("INV-9999")
+    lokasi = [(LAT, LNG), (-6.9200, 107.6150), (-6.9350, 107.6300),
+              (-6.9000, 107.5900), (-6.8900, 107.6500)]
+    hasil = [scan(c, p, lat=la, lng=ln, device=f"korban-{i:04d}")
+             for i, (la, ln) in enumerate(lokasi)]
+
+    # Korban PERTAMA tidak bisa dilindungi — QR itu belum punya riwayat
+    # apa pun. Itu batasan yang sama dengan cold start, dan diakui.
+    assert all(h["action"] == "cooling_off" for h in hasil[1:]), (
+        f"korban berikutnya lolos: {[h['action'] for h in hasil[1:]]}")
+    assert "dynamic_qr_spread" in hasil[1]["signals"]
+    return (f"korban ke-1 lolos (tanpa riwayat), korban ke-2 dst "
+            f"dihentikan — {len(lokasi) - 1} dari {len(lokasi)}")
+
+
+@serangan("Stiker statis tidak ikut tertuduh dipakai ulang")
+def _a15():
+    _, c = fresh_store()
+    # Stiker statis MEMANG dipindai ribuan kali. Kalau sinyal pemakaian
+    # ulang bocor ke jalur statis, seluruh merchant sah tertuduh.
+    p = qr(KORBAN, pan="936000149000000001")
+    for i in range(40):
+        d = scan(c, p, device=f"pelanggan-{i:04d}")
+    dinamis = [s for s in d["signals"] if "dynamic" in s]
+    assert not dinamis, f"stiker statis kena sinyal dinamis: {dinamis}"
+    assert d["action"] == "proceed", f"40 pemindaian sah -> {d['action']}"
+    return "40 pemindaian stiker statis, nol sinyal pemakaian ulang"
+
+
+@serangan("QR dinamis sah yang dipindai ulang di kasir yang sama")
+def _a16():
+    _, c = fresh_store()
+    acct = emvco.build_tlv({
+        "00": "ID.CO.QRIS.WWW", "01": "936000149000000001",
+        "02": KORBAN, "03": "UMI"})
+    p = emvco.build({
+        "00": "01", "01": "12", "26": acct, "52": "5812", "53": "360",
+        "54": "50000.00", "58": "ID", "59": "WARUNG BU SRI", "60": "BANDUNG",
+        "62": emvco.build_tlv({"01": "INV-0042"})})
+
+    # Tiga percobaan di kasir yang sama: kamera gagal fokus, dibatalkan,
+    # lalu berhasil. Galat GPS-nya belasan meter, bukan kilometer.
+    for i in range(3):
+        d = scan(c, p, lat=LAT + 0.00008 * i, device="pembeli-0001")
+        assert d["action"] == "proceed", (
+            f"percobaan ke-{i + 1} di kasir yang sama -> {d['action']}")
+    return "3 percobaan di satu kasir tetap proceed"
 
 
 # ==================================================================

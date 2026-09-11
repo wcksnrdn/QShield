@@ -86,6 +86,31 @@ W_IMPLAUSIBLE_ACCURACY = 45
 # diselesaikan dengan menambah skor. Sekarang accuracy_m wajib, dan
 # permintaan tanpanya ditolak 422 di batas sistem.
 
+# --- Pemakaian ulang QR dinamis ------------------------------------
+#
+# QR dinamis dibuat untuk SATU transaksi: satu nominal, satu nomor
+# tagihan, ditampilkan di satu mesin kasir. Stiker statis memang
+# dipindai ribuan kali — itu gunanya — jadi sinyal ini hanya berlaku
+# untuk yang dinamis.
+#
+# Yang dideteksi BUKAN replay kriptografis. Itu menuntut nonce sekali
+# pakai di sisi PJP dan memang di luar jangkauan lapisan pra-pembayaran.
+# Yang dideteksi: artefak sekali pakai yang dipakai berkali-kali —
+# modus "satu QR disebar ke puluhan korban lewat pesan".
+#
+# Dikalibrasi di calibrate_dynamic.py:
+#   ambang 4 kali    menandai 0,60% QR dinamis yang sah
+#   ambang 150 m     menandai 0,000% (galat GPS p99,9 hanya 34 m)
+#
+# Sebaran jarak diberi bobot lebih berat karena ia sinyal yang jauh
+# lebih kuat: empat kali pemindaian masih punya penjelasan wajar,
+# sedangkan satu QR yang dipindai di dua tempat berjauhan tidak.
+DYNAMIC_REUSE_THRESHOLD = 4
+DYNAMIC_SPREAD_M = 150
+
+W_DYNAMIC_REUSED = 30
+W_DYNAMIC_SPREAD = 55
+
 # --- Integritas perangkat ------------------------------------------
 #
 # Diisi klien NATIVE; klien web tidak akan pernah bisa mengisinya karena
@@ -175,6 +200,39 @@ def _location_claim_signals(accuracy_m, has_coords: bool) -> list:
                 f"penerima sungguhan"
             ),
         ))
+    return out
+
+
+def _dynamic_qr_signals(parsed, riwayat) -> list:
+    """Sinyal dari jejak pemakaian satu QR dinamis."""
+    if riwayat is None or parsed.is_static:
+        return []
+
+    out = []
+    sebar = riwayat.get("max_spread_m", 0.0)
+    kali = riwayat.get("times_seen", 1)
+
+    if sebar > DYNAMIC_SPREAD_M:
+        out.append(Signal(
+            name="dynamic_qr_spread",
+            weight=W_DYNAMIC_SPREAD,
+            reason=(
+                f"Kode pembayaran sekali-pakai ini sudah dipindai di tempat "
+                f"lain berjarak {sebar / 1000:.1f} km — kode dinamis yang sah "
+                f"hanya muncul di satu kasir"
+            ),
+        ))
+
+    if kali >= DYNAMIC_REUSE_THRESHOLD:
+        out.append(Signal(
+            name="dynamic_qr_reused",
+            weight=W_DYNAMIC_REUSED,
+            reason=(
+                f"Kode pembayaran ini sudah dipakai {kali} kali — kode "
+                f"dinamis dibuat untuk satu transaksi saja"
+            ),
+        ))
+
     return out
 
 
@@ -331,6 +389,7 @@ def evaluate(
     accuracy_m: Optional[float] = None,
     has_coords: bool = False,
     integrity=None,
+    dynamic_history=None,
 ) -> BehaviorResult:
     """Nilai perilaku satu pemindaian.
 
@@ -342,12 +401,14 @@ def evaluate(
     accuracy_m           akurasi yang DIKLAIM klien, tidak dipercaya
     has_coords           True bila permintaan memang menyertakan koordinat
     integrity            laporan integritas dari klien native, kalau ada
+    dynamic_history      jejak pemakaian QR dinamis ini, kalau ada
     """
     now = now or datetime.now(timezone.utc)
 
     signals = (_structural_signals(parsed)
                + _location_claim_signals(accuracy_m, has_coords)
                + _device_signals(integrity)
+               + _dynamic_qr_signals(parsed, dynamic_history)
                + _behavioral_signals(state, nmid_matches_anchor, now))
 
     # Sidik jari encoding dibatasi bersama-sama: sekumpulan sinyal lemah
