@@ -257,6 +257,22 @@ textarea{min-height:78px;resize:vertical;
         <button class="btn ghost" style="margin:0" id="useHere">Pakai posisi sekarang</button></div>
     </div>
 
+    <label>Mode survei kalibrasi</label>
+    <select id="survei">
+      <option value="off">mati</option>
+      <option value="on">nyala — simpan tiap pemindaian untuk kalibrasi</option>
+    </select>
+    <div class="hint">Hanya berfungsi bila server dijalankan dengan
+      <code style="background:rgba(0,0,0,.3);padding:1px 4px;border-radius:4px">QSHIELD_FIELD_MODE=on</code>.
+      Mode ini menyimpan payload mentah dan koordinat presisi — untuk
+      kalibrasi tim sendiri, jangan pernah di lingkungan pengguna.</div>
+
+    <label>Label lokasi (wajib saat survei)</label>
+    <input id="labelsurvei" placeholder="Warung Bu Sri" autocomplete="off">
+    <div class="hint">Label SAMA untuk pemindaian berulang di merchant yang
+      sama; label BERBEDA untuk merchant berbeda walau bersebelahan. Inilah
+      kebenaran dasar yang dipakai analisisnya.</div>
+
     <label>Kode QRIS manual</label>
     <textarea id="payload" placeholder="00020101021126660014ID.CO.QRIS.WWW..."></textarea>
     <button class="btn" id="send" style="margin-top:10px">Verifikasi kode ini</button>
@@ -305,7 +321,7 @@ if (!dev) {
 $("dev").value = dev;
 $("apikey").value = localStorage.getItem("qs_key") || "";
 $("apikey").addEventListener("change", e => localStorage.setItem("qs_key", e.target.value.trim()));
-["src","rlat","rlng","racc"].forEach(k => {
+["src","rlat","rlng","racc","survei","labelsurvei"].forEach(k => {
   const el = $(k), v = localStorage.getItem("qs_" + k);
   if (v) el.value = v;
   el.addEventListener("change", e => localStorage.setItem("qs_" + k, e.target.value));
@@ -362,6 +378,26 @@ async function verifikasi(payload){
     r = await fetch("/api/v1/verify", {method:"POST", headers:head, body:JSON.stringify(body)});
     d = await r.json();
   } catch (e) { catatan("<b>Tidak bisa menghubungi server.</b> " + e.message); return; }
+
+  // Mode survei: simpan pemindaian ini untuk kalibrasi lapangan.
+  // Dijalankan SETELAH verifikasi dan tidak memengaruhi putusannya —
+  // pengumpulan data tidak boleh mengubah apa yang dilihat pengguna.
+  if ($("survei").value === "on") {
+    const label = $("labelsurvei").value.trim();
+    if (!label) {
+      catatan("<b>Mode survei aktif tapi label kosong.</b> Isi label lokasi " +
+        "di setelan — tanpa itu datanya tidak bisa dipakai mengkalibrasi.");
+    } else {
+      fetch("/api/v1/field", {method:"POST", headers:head, body:JSON.stringify({
+        payload, lat: loc.lat, lng: loc.lng,
+        accuracy_m: loc.accuracy_m, label})})
+        .then(x => x.json())
+        .then(x => { if (x.ok) catatan(
+          "<b>Survei:</b> tersimpan sebagai <b>" + esc(label) + "</b>. " +
+          "Total " + x.tersimpan + " pemindaian."); })
+        .catch(() => {});
+    }
+  }
 
   if (!r.ok) {
     const p = {401:"Kunci API tidak valid atau belum diisi di setelan.",

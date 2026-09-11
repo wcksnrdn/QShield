@@ -91,6 +91,9 @@ scripts/         skrip yang dijalankan langsung, bukan bagian dari package
   preflight.py        pemeriksaan kesiapan sebelum demo
   calibrate_geo.py    kalibrasi presisi geohash
   calibrate_layer2.py kalibrasi konstanta Layer 2
+  calibrate_anchor.py kalibrasi penghalusan jangkar
+  calibrate_dynamic.py kalibrasi deteksi QR dinamis dipakai ulang
+  fieldkit.py         kumpulkan & analisis data lapangan
 tests/           test_*.py — dijalankan langsung (bukan lewat pytest)
 ```
 
@@ -183,6 +186,33 @@ dipakai membobol invarian akurasi GPS (diuji di `test_hardening.py`).
 Sampaikan terus terang ke juri: menolak memberi putusan saat sinyal buruk
 memang fitur, bukan bug.
 
+## Kalibrasi lapangan
+
+Hampir semua parameter masih bertanda "titik awal demo". Menutupnya
+menuntut data nyata:
+
+```bash
+QSHIELD_FIELD_MODE=on QSHIELD_AUTH=off \
+  uvicorn qshield.api:app --host 0.0.0.0 --port 8000 \
+    --ssl-certfile certs/cert.pem --ssl-keyfile certs/key.pem
+```
+
+Buka scanner dari HP, nyalakan **Mode survei** di setelan, isi label
+lokasi, lalu berkeliling memindai QRIS sungguhan. Label SAMA untuk
+pemindaian berulang di merchant yang sama; label BERBEDA untuk merchant
+berbeda walau bersebelahan.
+
+```bash
+python scripts/fieldkit.py status      # berapa data terkumpul, apa yang kurang
+python scripts/fieldkit.py analyse     # turunkan parameternya
+```
+
+> **Mode survei menyimpan payload mentah dan koordinat presisi** — persis
+> dua hal yang model privasi sistem ini sengaja tidak simpan. Ia mati
+> secara bawaan, tetap menuntut kunci API, dan diteriakkan sebagai
+> BAHAYA saat start. Jangan pernah menyalakannya di lingkungan yang
+> melayani pengguna sungguhan.
+
 ## Konfigurasi
 
 Semua lewat env var, semuanya punya nilai bawaan yang aman:
@@ -196,6 +226,8 @@ Semua lewat env var, semuanya punya nilai bawaan yang aman:
 | `QSHIELD_RATE_WINDOW` | `60` | panjang jendela (detik) |
 | `QSHIELD_LOG_LEVEL` | `INFO` | level audit log |
 | `QSHIELD_VENUE_FIXTURE` | `venue.json` | berkas rekaman koordinat |
+| `QSHIELD_FIELD_MODE` | *(kosong)* | `on` membuka endpoint survei kalibrasi |
+| `QSHIELD_FIELD_FILE` | `fielddata.jsonl` | berkas hasil survei |
 | `QSHIELD_DEVICE_SALT` | *(dibangkitkan sekali, disimpan di basis data)* | garam untuk `device_ref`; harus stabil — mengubahnya membuat pengamat lama terhitung ulang |
 
 Di WiFi acara yang ber-NAT seluruh ruangan terlihat sebagai satu alamat —

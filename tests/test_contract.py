@@ -85,6 +85,8 @@ JALUR = {
     # endpoint baru tidak memecah klien yang sudah ada.
     "/api/v1/merchants",
     "/api/v1/merchants/{nmid}",
+    # Ditambahkan 11 Sep 2026. Mati kecuali QSHIELD_FIELD_MODE=on.
+    "/api/v1/field",
 }
 
 _hasil = []

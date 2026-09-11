@@ -33,6 +33,8 @@ SETELAN = (
     ("QSHIELD_DEVICE_SALT", "", "garam device_ref; kosong = dibangkitkan"),
     ("QSHIELD_LOG_LEVEL", "INFO", "level audit log"),
     ("QSHIELD_DB", "qshield.db", "lokasi basis data"),
+    ("QSHIELD_FIELD_MODE", "", "'on' membuka endpoint survei kalibrasi"),
+    ("QSHIELD_FIELD_FILE", "fielddata.jsonl", "berkas hasil survei"),
 )
 
 
@@ -86,6 +88,15 @@ def warnings() -> list:
     if laju in ("off", "0", "false", "no"):
         keluar.append(("BAHAYA", (
             "QSHIELD_RATE_LIMIT=off — tidak ada pembatasan laju sama sekali.")))
+
+    if os.environ.get("QSHIELD_FIELD_MODE", "").strip().lower() == "on":
+        keluar.append(("BAHAYA", (
+            "QSHIELD_FIELD_MODE=on — endpoint survei terbuka. Mode ini "
+            "MENYIMPAN PAYLOAD MENTAH DAN KOORDINAT PRESISI ke berkas, "
+            "persis dua hal yang model privasi sistem ini sengaja tidak "
+            "simpan. Hanya untuk kalibrasi lapangan oleh tim sendiri; "
+            "jangan pernah menyalakannya di lingkungan yang melayani "
+            "pengguna sungguhan.")))
 
     origins = os.environ.get("QSHIELD_ALLOWED_ORIGINS", "")
     if "*" in origins:
