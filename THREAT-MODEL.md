@@ -126,6 +126,8 @@ bukan sekadar gangguan UX.
 | T11 | Meracuni jangkar merchant jujur agar skornya naik (DoS reputasi) | P5 | `repeated_anomaly_at_anchor` dimatikan bila yang memindai adalah merchant **mapan** di jangkar itu; "mapan" diambil dari putusan Layer 1 | `test_adversarial.py` "Meracuni jangkar merchant jujur" |
 | T12 | Merchant bersebelahan saling memicu alarm | — (bukan serangan, tapi merusak A4) | Koeksistensi dibedakan dari penggantian: bila keduanya mapan dan aktif → `adjacent_merchant`, bobot ringan | `test_invariants.py` #7 (jarak 5-35 m) |
 | T13 | Putusan palsu dari GPS yang tidak layak dipercaya | P3 | `accuracy_m` > 100 m → menolak memberi putusan lokasi, `unknown` + alasan eksplisit | `test_invariants.py` #6 |
+| T36 | Satu QR dinamis disebar ke banyak korban | P2 | Sebaran jarak dan jumlah pemakaian dilacak per payload; ambang dikalibrasi terhadap perilaku pemindaian yang sah | `test_adversarial.py` "disebar ke banyak korban" |
+| T37 | Sinyal pemakaian ulang menuduh stiker statis | — (positif palsu, aset A4) | Sinyal hanya berlaku bila tag 01 = dinamis | `test_adversarial.py` "statis tidak ikut tertuduh" |
 | T28 | Akurasi dikarang di bawah batas fisik perangkat | P3 | GNSS ponsel tidak pernah melaporkan radius <1 m; nilai di bawah itu ditandai `implausible_accuracy` | `test_adversarial.py` "Akurasi GPS dikarang" |
 | T29 | `accuracy_m` dihilangkan untuk melewati T13 | P3 | Field ini **wajib**; absennya ditolak `422` di batas sistem, bukan diberi skor | `test_adversarial.py` "Akurasi dihilangkan" |
 | T32 | Perangkat di-root / aplikasi dimodifikasi | P3 | Dilaporkan klien native lewat `device_integrity`; `rooted` dan `attested: false` diberi skor | `test_contract.py` "Integritas perangkat opsional" |
@@ -170,7 +172,7 @@ diam-diam mengklaim bisa menahan hal-hal di bawah ini.
 | # | Risiko residual | Kenapa belum ditahan | Rencana | Dampak nyata |
 |---|---|---|---|---|
 | R1 | **Mock location / GPS palsu** | Server tidak bisa memverifikasi koordinat. Klien WEB tidak bisa memeriksa integritas perangkat — browser sengaja tidak membocorkannya | **Slot protokolnya sudah ada**: `device_integrity` diisi klien native, dan PJP yang mengintegrasikan sudah punya aplikasi native | **Dipersempit jauh.** `mock_location: true` menolak putusan lokasi sama sekali; root & attestation gagal diberi skor; ketiadaan laporan diungkapkan (`not_provided`), tidak dianggap aman |
-| R2 | **Replay QR dinamis** | Tidak ada pelacakan nonce per transaksi; butuh keterlibatan PJP | Di luar jangkauan lapisan pra-pembayaran | Sistem tidak mengklaim bisa (diuji) |
+| R2 | **Replay QR dinamis** | Proteksi replay kriptografis menuntut nonce sekali pakai di sisi PJP | Tetap butuh PJP untuk penutupan penuh | **Dipersempit.** Pemakaian ulang artefak sekali pakai terdeteksi: sebaran >150 m (0,000% positif palsu) dan pemakaian >=4 kali (0,60%). Korban PERTAMA tetap tidak terlindungi — tidak ada riwayat |
 | R3 | **Merchant berjarak <15 m** | Presisi GPS tidak cukup memisahkan | Ambient WiFi fingerprinting; tidak tersedia lewat browser | **Dipersempit.** Jangkar kini rata-rata berjalan, galatnya 6,3 m -> 1,0 m pada 47 pengamatan; ditambah `adjacent_merchant` |
 | R4 | ~~Cold start~~ **DITUTUP untuk merchant terdaftar** | — | PJP mendaftarkan ikatan merchant-lokasi; sisanya tetap `unknown` yang jujur | Merchant terdaftar `verified` seketika tanpa menunggu konsensus |
 | R5 | ~~Merchant sah pindah lokasi~~ **DITUTUP** | — | PJP mendaftarkan ulang di lokasi baru; jangkar lama otomatis berhenti resmi | Tidak lagi memicu alarm |

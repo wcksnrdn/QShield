@@ -532,6 +532,14 @@ def verify(req: VerifyRequest, request: Request):
             processing_ms=elapsed,
         )
 
+    # Jejak QR dinamis dicatat lebih dulu supaya pemindaian ini sendiri
+    # ikut terhitung — kalau tidak, korban pertama sebuah QR yang disebar
+    # tidak pernah melihat angka apa pun.
+    riwayat_dinamis = None
+    if not parsed.is_static:
+        riwayat_dinamis = store.note_dynamic_qr(
+            req.payload, nmid, req.lat, req.lng)
+
     nearby = store.nearby(req.lat, req.lng)
     elsewhere = store.by_nmid(nmid)
     anchor_id, anchor_nmid, anchor_state = store.anchor_state(req.lat, req.lng)
@@ -562,6 +570,7 @@ def verify(req: VerifyRequest, request: Request):
         accuracy_m=req.accuracy_m,
         has_coords=True,
         integrity=di,
+        dynamic_history=riwayat_dinamis,
     )
 
     verdict = _tandai_replay(bd.compose(lokasi, perilaku), req)

@@ -1191,6 +1191,62 @@ dinyatakan resmi berada di suatu titik.
 
 ---
 
+## Keputusan 35 — QR dinamis yang dipakai ulang (R2), dan apa yang TIDAK diklaim
+
+R2 sebelumnya ditulis sebagai "butuh nonce per transaksi di sisi PJP,
+di luar jangkauan". Separuhnya benar, dan separuh lagi terlalu cepat
+menyerah.
+
+**Yang memang di luar jangkauan:** proteksi replay kriptografis. Itu
+menuntut nonce sekali pakai yang diterbitkan dan diverifikasi PJP.
+
+**Yang ternyata bisa:** mendeteksi artefak sekali pakai yang dipakai
+berkali-kali. QR dinamis dibuat untuk SATU transaksi — satu nominal,
+satu nomor tagihan, ditampilkan di satu mesin kasir. Modus nyatanya di
+Indonesia: satu QR dinamis disebar ke puluhan korban lewat pesan, tiap
+orang membayar nominal yang sama.
+
+Dikalibrasi di `calibrate_dynamic.py`:
+
+| Ambang | QR dinamis SAH yang tertandai |
+|---|---|
+| dipakai >= 4 kali | 0,60% |
+| sebaran > 150 m | **0,000%** |
+
+Sebaran jarak diberi bobot lebih berat (55 vs 30) karena ia sinyal yang
+jauh lebih kuat: empat kali pemindaian masih punya penjelasan wajar
+(kamera gagal fokus, dibatalkan, diulang), sedangkan satu QR yang
+dipindai di dua tempat berjauhan tidak. Galat GPS terburuk pun hanya
+34 m di persentil 99,9 — jauh di bawah 150 m.
+
+**Hanya berlaku untuk QR dinamis.** Stiker statis memang dipindai
+ribuan kali; itu gunanya. Diuji: 40 pemindaian stiker statis
+menghasilkan nol sinyal pemakaian ulang.
+
+**Batasan yang diakui: korban PERTAMA tidak bisa dilindungi.** QR yang
+baru disebar belum punya riwayat apa pun, persis seperti cold start.
+Diuji dan dicatat apa adanya — 4 dari 5 korban dihentikan, bukan 5
+dari 5.
+
+**Privasi.** Tabel `dynamic_qr` tidak menyimpan device apa pun. Yang
+disimpan adalah hash payload — cukup untuk mengenali QR yang sama
+muncul lagi, tidak cukup untuk memulihkan identitas merchant dari
+basis data yang bocor — beserta titik kemunculan pertamanya, properti
+mesin kasir yang sekategori dengan koordinat di tabel `bindings`.
+Barisnya dipangkas setelah 48 jam, dititipkan ke jalur tulis alih-alih
+penjadwal terpisah: satu proses lebih sedikit yang bisa mati diam-diam.
+
+**Catatan latensi.** Penghalusan jangkar dan pencatatan QR dinamis
+menambah kerja per permintaan. Terukur ulang di mesin yang tidak
+sedang sibuk: server p50 0,63 ms, end-to-end lewat TestClient p50
+4,3 ms (sebelumnya 2,5 ms). Masih jauh di bawah anggaran 200 ms.
+
+Angka 22 ms yang sempat terbaca berasal dari pengukuran saat seluruh
+suite berjalan bersamaan — derau, bukan regresi. Layak dicatat karena
+hampir membuat saya "memperbaiki" sesuatu yang tidak rusak.
+
+---
+
 ## Hasil pengujian
 
 ```
