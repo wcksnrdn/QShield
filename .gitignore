@@ -22,3 +22,6 @@ data/
 
 # Sertifikat lokal — JANGAN di-commit, key.pem itu kunci privat
 certs/
+
+# Data survei kalibrasi — payload mentah + koordinat presisi, JANGAN di-commit
+fielddata.jsonl

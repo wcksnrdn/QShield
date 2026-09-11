@@ -347,6 +347,59 @@ def health():
     return {"status": "ok", **store.stats()}
 
 
+# --- Survei kalibrasi lapangan -------------------------------------
+#
+# Mode ini sengaja MELANGGAR model privasi sistem: ia menyimpan payload
+# mentah dan koordinat presisi ke berkas. Itu memang yang dibutuhkan
+# untuk menurunkan ulang parameter dari data nyata — dan itu juga
+# alasan ia harus mustahil menyala tanpa sengaja.
+#
+# Tiga pagar:
+#   1. mati kecuali QSHIELD_FIELD_MODE=on disetel eksplisit
+#   2. tetap menuntut kunci API seperti endpoint lain
+#   3. diteriakkan sebagai BAHAYA oleh config.warnings() saat start
+#
+# Datanya masuk berkas terpisah, tidak pernah ke basis data produksi.
+FIELD_MODE = os.environ.get("QSHIELD_FIELD_MODE", "").strip().lower() == "on"
+FIELD_FILE = os.environ.get("QSHIELD_FIELD_FILE", "fielddata.jsonl")
+
+
+class FieldSample(BaseModel):
+    payload: str = Field(..., min_length=8, max_length=MAX_PAYLOAD_CHARS,
+                         pattern=r"^[\x20-\x7E]+$")
+    lat: float = Field(..., ge=-90, le=90)
+    lng: float = Field(..., ge=-180, le=180)
+    accuracy_m: float = Field(..., ge=0, le=MAX_ACCURACY_M)
+    # Label yang diketik surveyor: nama tempat, atau penanda bahwa ini
+    # pemindaian berulang di titik yang sama. Inilah kebenaran dasar
+    # yang membuat datanya bisa dipakai mengkalibrasi.
+    label: str = Field(..., min_length=1, max_length=64,
+                       pattern=r"^[A-Za-z0-9 _.-]+$")
+    note: Optional[str] = Field(None, max_length=200)
+
+
+@app.post("/api/v1/field", status_code=201)
+def survei(sample: FieldSample, request: Request, response: Response):
+    if not FIELD_MODE:
+        response.status_code = 404
+        return {"detail": "Mode survei tidak aktif"}
+
+    baris = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "surveyor": getattr(request.state, "client_id", None) or "anonymous",
+        "payload": sample.payload,
+        "lat": sample.lat, "lng": sample.lng,
+        "accuracy_m": sample.accuracy_m,
+        "label": sample.label,
+        "note": sample.note,
+    }
+    with open(FIELD_FILE, "a") as f:
+        f.write(json.dumps(baris, ensure_ascii=False) + "\n")
+
+    jumlah = sum(1 for _ in open(FIELD_FILE))
+    return {"ok": True, "tersimpan": jumlah, "label": sample.label}
+
+
 class RegisterRequest(BaseModel):
     """Pernyataan penyelenggara tentang ikatan merchant-lokasi.
 

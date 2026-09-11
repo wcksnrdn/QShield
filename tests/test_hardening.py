@@ -475,6 +475,82 @@ def _t6():
     return "kuota dikunci ke 'client:pjp-alpha', bukan alamat IP (menutup R8)"
 
 
+# --- Mode survei kalibrasi -----------------------------------------
+
+@cek("Mode survei mati secara bawaan")
+def _sv1():
+    c = siapkan()
+    lama = api.FIELD_MODE
+    api.FIELD_MODE = False
+    try:
+        r = c.post("/api/v1/field", json={
+            "payload": qr(), "lat": LAT, "lng": LNG,
+            "accuracy_m": 9.0, "label": "Uji"})
+        assert r.status_code == 404, (
+            f"HTTP {r.status_code} — endpoint survei hidup tanpa disetel")
+    finally:
+        api.FIELD_MODE = lama
+    return "404 saat QSHIELD_FIELD_MODE tidak disetel"
+
+
+@cek("Mode survei tetap menuntut kunci API")
+def _sv2():
+    c = siapkan(clients=REGISTRY_UJI)
+    lama = api.FIELD_MODE
+    api.FIELD_MODE = True
+    try:
+        # Mode ini menyimpan payload mentah dan koordinat presisi.
+        # Endpoint seperti itu tidak boleh terbuka untuk siapa pun.
+        r = c.post("/api/v1/field", json={
+            "payload": qr(), "lat": LAT, "lng": LNG,
+            "accuracy_m": 9.0, "label": "Uji"})
+        assert r.status_code == 401, f"tanpa kunci -> HTTP {r.status_code}"
+    finally:
+        api.FIELD_MODE = lama
+    return "401 tanpa kunci, walau mode survei menyala"
+
+
+@cek("Label survei divalidasi seperti masukan lain")
+def _sv3():
+    import tempfile as _tf
+    c = siapkan()
+    lama_mode, lama_berkas = api.FIELD_MODE, api.FIELD_FILE
+    api.FIELD_MODE = True
+    api.FIELD_FILE = os.path.join(_tf.mkdtemp(), "f.jsonl")
+    try:
+        for jahat in ("../../etc/passwd", "a\x00b", "'; DROP TABLE x;--", ""):
+            r = c.post("/api/v1/field", json={
+                "payload": qr(), "lat": LAT, "lng": LNG,
+                "accuracy_m": 9.0, "label": jahat})
+            assert r.status_code == 422, f"{jahat!r} diterima"
+        r = c.post("/api/v1/field", json={
+            "payload": qr(), "lat": LAT, "lng": LNG,
+            "accuracy_m": 9.0, "label": "Warung Bu Sri"})
+        assert r.status_code == 201, f"label sah ditolak: {r.status_code}"
+    finally:
+        api.FIELD_MODE, api.FIELD_FILE = lama_mode, lama_berkas
+    return "traversal, null byte, SQL, dan label kosong ditolak"
+
+
+@cek("Mode survei diteriakkan sebagai BAHAYA")
+def _sv4():
+    from qshield import config
+    lama = os.environ.get("QSHIELD_FIELD_MODE")
+    os.environ["QSHIELD_FIELD_MODE"] = "on"
+    try:
+        bahaya = [p for t, p in config.warnings() if t == "BAHAYA"
+                  and "FIELD_MODE" in p]
+        assert bahaya, "mode survei menyala tanpa peringatan BAHAYA"
+        assert "PAYLOAD MENTAH" in bahaya[0], (
+            "peringatannya tidak menyebut apa yang sebenarnya disimpan")
+    finally:
+        if lama is None:
+            os.environ.pop("QSHIELD_FIELD_MODE", None)
+        else:
+            os.environ["QSHIELD_FIELD_MODE"] = lama
+    return "peringatan menyebut payload mentah dan koordinat presisi"
+
+
 # --- Konkurensi ----------------------------------------------------
 
 @cek("Permintaan serentak tidak merusak hitungan pengamat")

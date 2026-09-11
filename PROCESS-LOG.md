@@ -1247,6 +1247,56 @@ hampir membuat saya "memperbaiki" sesuatu yang tidak rusak.
 
 ---
 
+## Keputusan 36 — Kalibrasi lapangan, dan mode yang sengaja melanggar privasi
+
+Hampir setiap konstanta di sistem ini bertanda "titik awal untuk demo,
+bukan hasil kalibrasi lapangan". Itu kelemahan yang paling sering muncul
+di dokumen kami sendiri, dan satu-satunya cara menutupnya adalah pergi
+memindai QRIS sungguhan.
+
+**Masalahnya: kalibrasi menuntut persis apa yang privasi melarang.**
+Untuk menurunkan sigma GPS, radius jangkar, dan korpus payload, kami
+butuh payload mentah dan koordinat presisi — dua hal yang Keputusan 6
+dan 24 sengaja pastikan tidak pernah tersimpan.
+
+Jalan keluarnya bukan melonggarkan model privasi, melainkan memisahkan
+mode yang melanggarnya secara terbuka:
+
+1. **Mati kecuali `QSHIELD_FIELD_MODE=on`** disetel eksplisit. Bawaannya
+   endpoint `/api/v1/field` mengembalikan `404`, bukan sekadar menolak.
+2. **Tetap menuntut kunci API.** Endpoint yang menyimpan payload mentah
+   tidak boleh terbuka untuk siapa pun.
+3. **Diteriakkan sebagai BAHAYA saat start**, dengan kalimat yang
+   menyebut persis apa yang disimpan — bukan peringatan samar.
+4. **Datanya masuk berkas terpisah**, tidak pernah ke basis data
+   produksi, dan berkasnya masuk `.gitignore`.
+
+**`fieldkit.py analyse` menurunkan parameternya dari data itu:** sebaran
+akurasi perangkat, sigma GPS di titik yang sama, jarak antar-merchant
+yang berdekatan, dan korpus payload untuk R7. Tiap bagian membandingkan
+angka terukur dengan konstanta yang sedang dipakai, lalu menyebut mana
+yang perlu digeser.
+
+Diuji atas 33 pemindaian sintetis yang meniru berjalan kaki di satu
+jalan: alat kalibrasi yang belum pernah dijalankan atas data apa pun
+tidak berguna. Keluarannya menemukan satu usulan yang benar — sigma
+terukur berbeda dari yang diasumsikan `calibrate_anchor.py`.
+
+**Bagian R7 adalah yang paling berharga.** Sinyal sidik jari encoding
+(urutan tag, huruf CRC) selama ini bertanda UNCALIBRATED karena kami
+tidak punya payload QRIS dari penerbit sungguhan — hanya dari generator
+kami sendiri, yang tentu saja selalu kanonik. Begitu tim berjalan dan
+memindai 20+ stiker nyata dari beberapa PJP, tanda itu bisa dicabut —
+atau, kalau ternyata penerbit sungguhan memang menghasilkan pola yang
+kami tandai, sinyalnya dibuang seperti Keputusan 13.
+
+**Nada laporannya sengaja menahan diri.** Baris terakhirnya berbunyi
+"kalibrasi dari 30 pemindaian adalah kalibrasi dari 30 pemindaian, bukan
+dari data produksi". Godaan terbesar setelah punya data lapangan adalah
+menyebutnya lebih kuat daripada yang sebenarnya.
+
+---
+
 ## Hasil pengujian
 
 ```
