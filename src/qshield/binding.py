@@ -42,6 +42,35 @@ ANCHOR_MAX_DRIFT_M = 20
 # dan kedaluwarsa dalam hitungan menit sampai jam; 48 jam memberi ruang
 # untuk pemindaian yang tertunda tanpa menyimpan apa pun berlama-lama.
 DYNAMIC_QR_TTL_HOURS = 48
+
+# --- Pengetahuan wilayah -------------------------------------------
+#
+# Tag 60 (kota) dan 61 (kode pos) ditetapkan ACQUIRER saat menerbitkan
+# QR, dari alamat merchant yang terdaftar. Penipu memakai akun merchant
+# miliknya sendiri — terdaftar di alamatnya sendiri — lalu menempel
+# stikernya di tempat orang lain. Stiker bertuliskan JAKARTA yang
+# menempel di warung Bandung ketahuan pada pemindaian PERTAMA, tanpa
+# riwayat apa pun tentang merchant itu.
+#
+# Wilayahnya tidak ditanam sebagai tabel geografi — dipelajari dari
+# data. Presisi 5 (~4,9 km) kira-kira seukuran kecamatan besar.
+AREA_CITY_PRECISION = 5
+
+# Berapa NMID BERBEDA yang harus setuju sebelum sebuah wilayah dianggap
+# punya kota yang diketahui. Menghitung NMID, bukan pemindaian, supaya
+# seribu pemindaian dari satu stiker palsu tetap satu suara.
+AREA_CITY_MIN_NMIDS = 5
+
+# Bagian suara minimum agar dianggap dominan. Wilayah di perbatasan kota
+# akan terbelah, dan di situ sistem memang harus diam.
+AREA_CITY_MIN_SHARE = 0.75
+
+W_CITY_MISMATCH = 40
+
+# Satu NMID membawa dua nama merchant berbeda. Penipu yang memakai satu
+# akun untuk banyak korban harus mengganti tag 59 agar cocok dengan nama
+# toko tiap korban.
+W_NAME_INCONSISTENT = 45
 INDEX_PRECISION = 7         # presisi geohash untuk indeks query
 AREA_PRECISION = 6          # presisi untuk deteksi sebaran antar-area
 SCATTER_MIN_KM = 1.0        # jarak minimum agar dianggap area berbeda
@@ -170,6 +199,24 @@ def _action_for(score: int) -> str:
         if score <= limit:
             return action
     return COOLING_OFF
+
+
+def normalize_city(city: Optional[str]) -> str:
+    """Samakan bentuk penulisan nama kota sebelum dibandingkan.
+
+    Acquirer menulis kota dengan gaya berbeda-beda: "BANDUNG",
+    "KOTA BANDUNG", "Kab. Bandung". Membandingkan apa adanya membuat
+    merchant sah saling bertentangan tanpa sebab.
+    """
+    if not city:
+        return ""
+    k = " ".join(str(city).upper().split())
+    for awalan in ("KOTA ADM ", "KOTA ADMINISTRASI ", "KOTA ", "KAB. ",
+                   "KABUPATEN ", "KAB "):
+        if k.startswith(awalan):
+            k = k[len(awalan):]
+            break
+    return k.strip()
 
 
 def _floor_action(status: str, action: str) -> str:

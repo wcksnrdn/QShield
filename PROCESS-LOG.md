@@ -1297,6 +1297,75 @@ menyebutnya lebih kuat daripada yang sebenarnya.
 
 ---
 
+## Keputusan 37 — Deteksi pada pemindaian PERTAMA
+
+Dari lapangan: memindai QRIS tukang es buah yang sungguhan menghasilkan
+status belum-dikenal. Keluhannya wajar — kalau semua yang asli begitu,
+pengguna berhenti memperhatikan.
+
+**Yang harus dijernihkan lebih dulu.** Memastikan sebuah stiker ASLI
+pada pemindaian pertama itu mustahil secara prinsip: tidak ada sistem
+yang bisa memastikan sesuatu benar tanpa bukti apa pun. Yang bisa
+diperbaiki adalah sisi satunya — menangkap lebih banyak yang PALSU pada
+pemindaian pertama, sehingga status belum-dikenal berhenti berarti
+"kami tidak tahu apa-apa".
+
+**Dua sumber bukti yang selama ini kami buang.** Tiap stiker QRIS
+membawa tag 60 (kota) dan tag 61 (kode pos), ditetapkan acquirer dari
+alamat merchant yang terdaftar. Kami memparsingnya sejak fase 1 dan
+tidak pernah menilainya sama sekali.
+
+Penipu memakai akun merchant miliknya sendiri — terdaftar di alamatnya
+sendiri — lalu menempel stikernya di tempat orang lain. Stiker
+bertuliskan JAKARTA yang menempel di warung Bandung ketahuan pada
+pemindaian pertama, tanpa riwayat apa pun tentang merchant itu.
+
+**Geografinya dipelajari, bukan ditanam.** Menanam tabel kode pos
+berarti menaruh ratusan fakta yang tidak bisa kami verifikasi ke dalam
+kode. Sebagai gantinya sistem belajar dari data: kota apa yang
+dilaporkan merchant-merchant di sel geohash-5 (~4,9 km) ini.
+
+**Yang dihitung NMID BERBEDA, bukan jumlah pemindaian.** Ini yang
+membuatnya sulit diracuni: penipu punya segelintir NMID, wilayah
+sungguhan punya puluhan merchant. Diuji — 400 pemindaian dari satu
+stiker "JAKARTA" tidak menggeser pengetahuan wilayah sama sekali.
+
+**Wilayah yang belum dikenal membuat sistem DIAM.** Butuh minimal 5
+NMID setuju dengan bagian suara 75% sebelum sebuah kota dianggap
+diketahui. Wilayah di perbatasan kota akan terbelah, dan di situ sistem
+memang harus diam — ketiadaan pengetahuan bukan izin menuduh
+(invarian §2).
+
+**Sinyal kedua: satu NMID, dua nama merchant.** Merchant sah punya satu
+nama. Penipu yang memakai satu akun untuk banyak korban harus mengganti
+tag 59 agar cocok dengan nama toko tiap korban.
+
+Hasilnya pada pemindaian pertama sebuah stiker yang belum pernah
+dilihat:
+
+| Kasus | Sebelum | Sesudah |
+|---|---|---|
+| stiker luar kota | belum dikenal | **step_up**, dengan alasannya |
+| satu NMID dua nama | belum dikenal | **cooling_off** |
+| merchant sah baru | belum dikenal | belum dikenal (tidak berubah) |
+
+**Dua fixture test yang ceroboh ikut ketahuan.** Sinyal nama menemukan
+dua pemeriksaan lama yang menyemai binding bernama "TOKO SEBELAH" lalu
+memindai QR yang mengaku "WARUNG BU SRI" untuk NMID yang sama. Itu
+memang inkonsistensi nama, dan sinyalnya benar menandainya — fixture
+yang salah, bukan kodenya. Layak dicatat: sinyal baru yang bagus
+menemukan kesalahan di tempat yang tidak dicarinya.
+
+**Risiko positif palsu yang diakui.** Franchise dengan kantor pusat di
+kota lain, merchant yang pindah, atau acquirer yang mengubah ejaan nama
+akan menyalakan sinyal ini. Karena itu `fieldkit.py analyse` sekarang
+punya bagian yang memeriksanya langsung dari data lapangan: berapa
+merchant SAH yang menyebut kota berbeda dari wilayahnya. Kalau angkanya
+tidak nol, bobotnya turun — atau sinyalnya dibuang, seperti
+Keputusan 13.
+
+---
+
 ## Hasil pengujian
 
 ```

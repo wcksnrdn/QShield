@@ -254,9 +254,12 @@ def _k5b():
         last_seen=NOW - _td(hours=6))
     acct = _em.build_tlv({"00": "ID.CO.QRIS.WWW", "01": "936000149000000001",
                           "02": NMID, "03": "UMI"})
+    # Nama di payload HARUS sama dengan nama di binding yang diseed.
+    # Kalau berbeda, sinyal nmid_name_inconsistent menyala — dengan
+    # benar — dan pemeriksaan ini mengukur hal yang salah.
     payload = _em.build({"00": "01", "01": "11", "26": acct, "52": "5812",
-                         "53": "360", "58": "ID", "59": "W", "60": "B",
-                         "61": "40257"})
+                         "53": "360", "58": "ID", "59": "WARUNG BU SRI",
+                         "60": "BANDUNG", "61": "40257"})
     c = _TC(_api.app)
 
     def minta(dev, di=None):

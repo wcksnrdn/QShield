@@ -115,6 +115,20 @@ CREATE TABLE IF NOT EXISTS dynamic_qr (
     last_seen      TEXT    NOT NULL
 );
 
+-- Apa nama kota yang dilaporkan QRIS di suatu wilayah.
+--
+-- Yang dihitung adalah NMID BERBEDA, bukan jumlah pemindaian. Itu yang
+-- membuatnya sulit diracuni: penipu punya segelintir NMID, sedangkan
+-- wilayah sungguhan punya puluhan merchant. Seribu pemindaian dari satu
+-- stiker palsu tetap terhitung satu suara.
+CREATE TABLE IF NOT EXISTS area_city (
+    geohash_5  TEXT NOT NULL,
+    city       TEXT NOT NULL,
+    nmid       TEXT NOT NULL,
+    PRIMARY KEY (geohash_5, city, nmid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_areacity ON area_city(geohash_5);
 CREATE INDEX IF NOT EXISTS idx_dynqr_last ON dynamic_qr(last_seen);
 CREATE INDEX IF NOT EXISTS idx_reg_nmid ON registrations(nmid);
 CREATE INDEX IF NOT EXISTS idx_bindings_gh7  ON bindings(geohash_7);
@@ -629,6 +643,52 @@ class Store:
             cur = self.conn.execute(
                 "DELETE FROM dynamic_qr WHERE last_seen < ?", (batas,))
         return cur.rowcount
+
+    # --- pengetahuan wilayah ---------------------------------------
+
+    def learn_city(self, lat: float, lng: float, city: Optional[str],
+                   nmid: str) -> None:
+        """Catat bahwa satu merchant di wilayah ini menyebut kotanya begini.
+
+        Dipanggil HANYA untuk pemindaian yang tidak anomali, dengan
+        alasan yang sama seperti invarian §3: pemindaian yang ditolak
+        tidak boleh ikut membentuk pengetahuan sistem.
+        """
+        kota = bd.normalize_city(city)
+        if not kota:
+            return
+        gh5 = geo.encode(lat, lng, bd.AREA_CITY_PRECISION)
+        with self._lock:
+            self.conn.execute(
+                "INSERT OR IGNORE INTO area_city (geohash_5, city, nmid) "
+                "VALUES (?, ?, ?)", (gh5, kota, nmid))
+
+    def area_city(self, lat: float, lng: float):
+        """Kota dominan di wilayah ini, kalau buktinya cukup.
+
+        Mengembalikan (kota, jumlah_nmid_setuju, jumlah_nmid_total) atau
+        None kalau wilayahnya belum dikenal. Ketiadaan pengetahuan
+        dikembalikan sebagai ketiadaan — bukan sebagai izin.
+        """
+        gh5 = geo.encode(lat, lng, bd.AREA_CITY_PRECISION)
+        with self._lock:
+            baris = self.conn.execute(
+                "SELECT city, COUNT(DISTINCT nmid) n FROM area_city "
+                "WHERE geohash_5 = ? GROUP BY city ORDER BY n DESC", (gh5,)
+            ).fetchall()
+        if not baris:
+            return None
+        total = sum(r["n"] for r in baris)
+        return baris[0]["city"], baris[0]["n"], total
+
+    def names_for_nmid(self, nmid: str) -> list:
+        """Semua nama merchant yang pernah dipakai NMID ini."""
+        with self._lock:
+            baris = self.conn.execute(
+                "SELECT DISTINCT merchant_name FROM bindings "
+                "WHERE nmid = ? AND merchant_name IS NOT NULL", (nmid,)
+            ).fetchall()
+        return [r["merchant_name"] for r in baris]
 
     def note_anomaly(self, binding_id: int,
                      now: Optional[datetime] = None) -> None:

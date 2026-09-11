@@ -236,6 +236,51 @@ def _dynamic_qr_signals(parsed, riwayat) -> list:
     return out
 
 
+def _origin_signals(parsed, area, nama_lain) -> list:
+    """Sinyal yang bekerja tanpa riwayat merchant itu sendiri.
+
+    Keduanya memakai data yang sudah ada di dalam payload dan selama ini
+    tidak pernah dinilai — inilah yang membuat pemindaian PERTAMA sebuah
+    stiker palsu tetap bisa tertangkap.
+    """
+    from . import binding as bd
+
+    out = []
+
+    # --- Kota di stiker bertentangan dengan kota wilayahnya ---------
+    if area is not None:
+        kota_wilayah, setuju, total = area
+        kota_qr = bd.normalize_city(parsed.merchant_city)
+        cukup = (setuju >= bd.AREA_CITY_MIN_NMIDS
+                 and setuju / total >= bd.AREA_CITY_MIN_SHARE)
+        if cukup and kota_qr and kota_qr != kota_wilayah:
+            out.append(Signal(
+                name="city_mismatch",
+                weight=bd.W_CITY_MISMATCH,
+                reason=(
+                    f"Stiker ini terdaftar di {parsed.merchant_city}, "
+                    f"sedangkan {setuju} merchant lain di sekitar sini "
+                    f"terdaftar di {kota_wilayah}"
+                ),
+            ))
+
+    # --- Satu NMID, dua nama merchant -------------------------------
+    nama_qr = (parsed.merchant_name or "").strip().upper()
+    berbeda = [n for n in (nama_lain or [])
+               if n and n.strip().upper() != nama_qr]
+    if nama_qr and berbeda:
+        out.append(Signal(
+            name="nmid_name_inconsistent",
+            weight=bd.W_NAME_INCONSISTENT,
+            reason=(
+                f"Merchant ID ini sebelumnya tercatat sebagai "
+                f"{berbeda[0]}, sekarang mengaku {parsed.merchant_name}"
+            ),
+        ))
+
+    return out
+
+
 def _device_signals(integrity) -> list:
     """Sinyal dari laporan integritas perangkat.
 
@@ -390,6 +435,8 @@ def evaluate(
     has_coords: bool = False,
     integrity=None,
     dynamic_history=None,
+    area=None,
+    other_names=None,
 ) -> BehaviorResult:
     """Nilai perilaku satu pemindaian.
 
@@ -402,6 +449,8 @@ def evaluate(
     has_coords           True bila permintaan memang menyertakan koordinat
     integrity            laporan integritas dari klien native, kalau ada
     dynamic_history      jejak pemakaian QR dinamis ini, kalau ada
+    area                 (kota, nmid_setuju, nmid_total) wilayah ini
+    other_names          nama merchant lain yang pernah dipakai NMID ini
     """
     now = now or datetime.now(timezone.utc)
 
@@ -409,6 +458,7 @@ def evaluate(
                + _location_claim_signals(accuracy_m, has_coords)
                + _device_signals(integrity)
                + _dynamic_qr_signals(parsed, dynamic_history)
+               + _origin_signals(parsed, area, other_names)
                + _behavioral_signals(state, nmid_matches_anchor, now))
 
     # Sidik jari encoding dibatasi bersama-sama: sekumpulan sinyal lemah
