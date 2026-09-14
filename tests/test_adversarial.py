@@ -453,6 +453,37 @@ def _a19():
     return "dua nama -> cooling_off; nama konsisten tetap bersih"
 
 
+@serangan("Jejak serangan lama tidak menghukum merchant baru selamanya")
+def _a20():
+    from datetime import timedelta as _td
+
+    from qshield import behavior as _bh
+
+    # Jangkar pernah diserang, lalu penyerangnya pergi dan merchant sah
+    # membuka usaha di titik yang sama berbulan-bulan kemudian. Ia tidak
+    # boleh menanggung sejarah yang bukan miliknya.
+    baru = NOW
+    for hari, harus_ada in ((0, True), (7, True), (30, False), (90, False)):
+        st = _bh.AnchorState(anomaly_attempts=3,
+                             last_anomaly_at=baru - _td(days=hari))
+        sig = _bh._behavioral_signals(st, False, baru)
+        ada = any(x.name == "repeated_anomaly_at_anchor" for x in sig)
+        assert ada == harus_ada, (
+            f"{hari} hari setelah serangan: sinyal "
+            f"{'masih ada' if ada else 'hilang'}, seharusnya "
+            f"{'ada' if harus_ada else 'pudar'}")
+
+    # Bobotnya harus menurun monoton, bukan melompat.
+    bobot = []
+    for hari in (0, 1, 3, 7, 14):
+        st = _bh.AnchorState(anomaly_attempts=3,
+                             last_anomaly_at=baru - _td(days=hari))
+        sig = _bh._behavioral_signals(st, False, baru)
+        bobot.append(sig[0].weight if sig else 0)
+    assert bobot == sorted(bobot, reverse=True), f"bobot tidak menurun: {bobot}"
+    return f"bobot {bobot} pada hari 0/1/3/7/14, pudar penuh sebelum 30 hari"
+
+
 # ==================================================================
 # Batasan yang diakui — di sini yang diuji adalah KEJUJURAN sistem
 # ==================================================================
@@ -731,6 +762,37 @@ def _a19():
                   device="warga-0002")
     assert "nmid_name_inconsistent" not in bersih["signals"]
     return "dua nama -> cooling_off; nama konsisten tetap bersih"
+
+
+@serangan("Jejak serangan lama tidak menghukum merchant baru selamanya")
+def _a20():
+    from datetime import timedelta as _td
+
+    from qshield import behavior as _bh
+
+    # Jangkar pernah diserang, lalu penyerangnya pergi dan merchant sah
+    # membuka usaha di titik yang sama berbulan-bulan kemudian. Ia tidak
+    # boleh menanggung sejarah yang bukan miliknya.
+    baru = NOW
+    for hari, harus_ada in ((0, True), (7, True), (30, False), (90, False)):
+        st = _bh.AnchorState(anomaly_attempts=3,
+                             last_anomaly_at=baru - _td(days=hari))
+        sig = _bh._behavioral_signals(st, False, baru)
+        ada = any(x.name == "repeated_anomaly_at_anchor" for x in sig)
+        assert ada == harus_ada, (
+            f"{hari} hari setelah serangan: sinyal "
+            f"{'masih ada' if ada else 'hilang'}, seharusnya "
+            f"{'ada' if harus_ada else 'pudar'}")
+
+    # Bobotnya harus menurun monoton, bukan melompat.
+    bobot = []
+    for hari in (0, 1, 3, 7, 14):
+        st = _bh.AnchorState(anomaly_attempts=3,
+                             last_anomaly_at=baru - _td(days=hari))
+        sig = _bh._behavioral_signals(st, False, baru)
+        bobot.append(sig[0].weight if sig else 0)
+    assert bobot == sorted(bobot, reverse=True), f"bobot tidak menurun: {bobot}"
+    return f"bobot {bobot} pada hari 0/1/3/7/14, pudar penuh sebelum 30 hari"
 
 
 # ==================================================================

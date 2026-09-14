@@ -93,7 +93,9 @@ scripts/         skrip yang dijalankan langsung, bukan bagian dari package
   calibrate_layer2.py kalibrasi konstanta Layer 2
   calibrate_anchor.py kalibrasi penghalusan jangkar
   calibrate_dynamic.py kalibrasi deteksi QR dinamis dipakai ulang
+  calibrate_decay.py  kalibrasi peluruhan jejak serangan
   fieldkit.py         kumpulkan & analisis data lapangan
+  diagnose.py         bongkar kenapa satu pemindaian berakhir begitu
 tests/           test_*.py — dijalankan langsung (bukan lewat pytest)
 ```
 
@@ -185,6 +187,27 @@ audit. Penilaiannya tidak berubah sedikit pun, dan mode ini tidak bisa
 dipakai membobol invarian akurasi GPS (diuji di `test_hardening.py`).
 Sampaikan terus terang ke juri: menolak memberi putusan saat sinyal buruk
 memang fitur, bukan bug.
+
+## Kalau hasilnya tidak sesuai harapan
+
+```bash
+python scripts/diagnose.py PAYLOAD LAT LNG [AKURASI]   # bongkar satu pemindaian
+python scripts/diagnose.py --anchor LAT LNG            # apa isi jangkar di titik itu
+```
+
+Membongkar tiap sinyal beserta bobot dan alasannya, lalu menjelaskan
+kenapa putusannya bukan `proceed`.
+
+> **Kebersihan demo.** Jangan memindai prop palsu (`02-swap.png`) di
+> tempat yang sama dengan QRIS sungguhan. Pemindaian yang ditolak
+> mencatat percobaan anomali pada jangkar itu, dan tiap merchant baru di
+> titik itu ikut kena sampai jejaknya pudar. Pisahkan lokasinya, atau
+> reset dulu:
+>
+> ```bash
+> rm -f qshield.db*
+> python scripts/seed.py $(python scripts/venue_fixture.py coords)
+> ```
 
 ## Kalibrasi lapangan
 

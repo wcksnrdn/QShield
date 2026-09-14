@@ -1366,6 +1366,62 @@ Keputusan 13.
 
 ---
 
+## Keputusan 38 — Jejak serangan memudar, dan alat untuk bertanya "kenapa"
+
+Dari lapangan lagi: QRIS merchant sungguhan tetap tidak berakhir
+`proceed`, dan kali ini bukan cold start biasa.
+
+**Membongkarnya dengan basis data mereka sendiri** menunjukkan
+`repeated_anomaly_at_anchor` menyala dengan bobot 22. Sebabnya
+sederhana dan seluruhnya soal kebersihan demo: prop palsu
+(`02-swap.png`) dipindai di meja yang sama tempat QRIS sungguhan
+dipindai. Jangkar itu mencatat tiga percobaan anomali, dan tiap
+merchant baru di titik itu ikut menanggungnya.
+
+**Tapi menelusurinya membuka celah yang nyata.** `last_anomaly_at`
+disimpan sejak Keputusan 11 dan **tidak pernah dibaca sekali pun**.
+Artinya serangan tiga minggu lalu menghukum sekeras serangan satu jam
+lalu — dan merchant yang baru pindah ke lokasi itu menanggung sejarah
+yang bukan miliknya. Itu aset A4, kredibilitas, yang tergerus.
+
+Dikalibrasi di `calibrate_decay.py`, halflife 7 hari:
+
+| sejak serangan | bobot |
+|---|---|
+| 0 hari | 30 |
+| 3 hari | 22 |
+| 7 hari | 15 |
+| 14 hari | 8 |
+| 30 hari | pudar penuh |
+
+Dipilih dari dua sisi yang ditimbang: merchant sah yang muncul sebulan
+kemudian tidak lagi dihukum, sementara penyerang harus menunggu ~3
+minggu agar jejaknya pudar — dan selama menunggu itu stikernya tidak
+menghasilkan apa pun sedangkan binding korbannya terus menguat lewat
+rumus invarian §5.
+
+Di bawah bobot 3 sinyalnya dibuang sepenuhnya, supaya tidak menyisakan
+alasan yang menyebut serangan yang bobotnya sudah nol.
+
+**`scripts/diagnose.py`** dibangun supaya pertanyaan "kenapa hasilnya
+begini" tidak perlu lagi dilempar ke sesi ini. Ia membongkar satu
+pemindaian sampai ke tiap sinyal beserta bobot dan alasannya,
+menunjukkan isi jangkar yang memunculkannya, dan secara eksplisit
+memisahkan sinyal "belum cukup bukti" dari sinyal risiko sungguhan —
+pembedaan yang sama dengan Keputusan 29, kali ini untuk yang
+mendiagnosis, bukan untuk pengguna.
+
+Mode `--anchor` menunjukkan isi basis data di suatu titik: binding apa
+saja yang ada, berapa pengamatnya, berapa percobaan anomali dan berapa
+bobotnya yang tersisa setelah meluruh, serta apakah pengetahuan wilayah
+sudah cukup untuk dipakai menilai.
+
+**Catatan kebersihan demo** ditambahkan ke README: memindai prop palsu
+di tempat yang sama dengan QRIS sungguhan akan mencemari jangkarnya.
+Pisahkan lokasinya atau reset basis datanya.
+
+---
+
 ## Hasil pengujian
 
 ```
