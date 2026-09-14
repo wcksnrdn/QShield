@@ -54,6 +54,24 @@ SOFT_FINGERPRINT_CAP = 25
 W_ANOMALY_BASE = 12
 W_ANOMALY_CAP = 30
 
+# Jejak serangan memudar. `last_anomaly_at` disimpan sejak Keputusan 11
+# dan — sampai ditemukan lewat keluhan lapangan — tidak pernah dibaca,
+# sehingga serangan tiga minggu lalu menghukum sekeras serangan satu jam
+# lalu. Merchant yang baru pindah ke titik itu ikut menanggung sejarah
+# yang bukan miliknya.
+#
+# 7 hari dipilih dari calibrate_decay.py: merchant sah yang muncul
+# sebulan kemudian tidak lagi dihukum, sementara penyerang harus
+# menunggu ~3 minggu agar jejaknya pudar — dan selama menunggu itu
+# stikernya tidak menghasilkan apa pun sedangkan binding korbannya
+# terus menguat.
+ANOMALY_HALFLIFE_DAYS = 7.0
+
+# Di bawah ini sinyalnya tidak lagi berarti dan dibuang sepenuhnya,
+# supaya tidak menyisakan alasan yang membingungkan pengguna karena
+# menyebut serangan yang bobotnya sudah nol.
+ANOMALY_MIN_WEIGHT = 3
+
 # Sinyal "lonjakan pemindaian" pernah ada di sini dan sudah DIBUANG.
 # calibrate_layer2.py menunjukkan alasannya: membangun reputasi palsu
 # hanya butuh MIN_OBSERVERS=3 device dalam rentang MIN_AGE_HOURS=24 jam,
@@ -414,14 +432,22 @@ def _behavioral_signals(state: Optional[AnchorState], nmid_matches_anchor: bool,
     # penolakan layanan lewat counter kami sendiri.
     if state.anomaly_attempts > 0 and not nmid_matches_anchor:
         bobot = min(W_ANOMALY_CAP, W_ANOMALY_BASE * state.anomaly_attempts)
-        out.append(Signal(
-            name="repeated_anomaly_at_anchor",
-            weight=bobot,
-            reason=(
-                f"Lokasi ini sudah {state.anomaly_attempts} kali menjadi "
-                f"sasaran pemindaian yang ditolak"
-            ),
-        ))
+
+        # Peluruhan eksponensial sejak serangan terakhir.
+        if state.last_anomaly_at is not None:
+            hari = (now - state.last_anomaly_at).total_seconds() / 86400
+            if hari > 0:
+                bobot *= 0.5 ** (hari / ANOMALY_HALFLIFE_DAYS)
+
+        if bobot >= ANOMALY_MIN_WEIGHT:
+            out.append(Signal(
+                name="repeated_anomaly_at_anchor",
+                weight=int(round(bobot)),
+                reason=(
+                    f"Lokasi ini {state.anomaly_attempts} kali menjadi sasaran "
+                    f"pemindaian yang ditolak dalam waktu dekat"
+                ),
+            ))
 
     return out
 
