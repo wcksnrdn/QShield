@@ -128,6 +128,21 @@ CREATE TABLE IF NOT EXISTS area_city (
     PRIMARY KEY (geohash_5, city, nmid)
 );
 
+-- Dialek penerbit: bagaimana tiap PJP MENYUSUN payload-nya.
+--
+-- Dikunci pada prefiks PAN (8 digit awal = kode penyelenggara), bukan
+-- pada merchant. Yang dihitung NMID berbeda, dengan alasan yang sama
+-- seperti area_city: satu stiker yang dipindai seribu kali tetap satu
+-- suara.
+CREATE TABLE IF NOT EXISTS issuer_dialect (
+    pan_prefix  TEXT NOT NULL,
+    attribute   TEXT NOT NULL,
+    value       TEXT NOT NULL,
+    nmid        TEXT NOT NULL,
+    PRIMARY KEY (pan_prefix, attribute, value, nmid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_dialect ON issuer_dialect(pan_prefix, attribute);
 CREATE INDEX IF NOT EXISTS idx_areacity ON area_city(geohash_5);
 CREATE INDEX IF NOT EXISTS idx_dynqr_last ON dynamic_qr(last_seen);
 CREATE INDEX IF NOT EXISTS idx_reg_nmid ON registrations(nmid);
@@ -662,6 +677,43 @@ class Store:
             self.conn.execute(
                 "INSERT OR IGNORE INTO area_city (geohash_5, city, nmid) "
                 "VALUES (?, ?, ?)", (gh5, kota, nmid))
+
+    def learn_dialect(self, parsed, nmid: str) -> None:
+        """Catat gaya penyusunan payload ini atas nama penerbitnya."""
+        from . import emvco
+
+        acc = parsed.primary_account
+        if not acc or not acc.pan or len(acc.pan) < 8:
+            return
+        prefix = acc.pan[:8]
+        with self._lock:
+            for atribut, nilai in emvco.dialect(parsed).items():
+                self.conn.execute(
+                    "INSERT OR IGNORE INTO issuer_dialect "
+                    "(pan_prefix, attribute, value, nmid) VALUES (?, ?, ?, ?)",
+                    (prefix, atribut, nilai, nmid))
+
+    def dialect_profile(self, pan_prefix: str) -> dict:
+        """Dialek dominan penerbit ini, per atribut.
+
+        Mengembalikan {atribut: (nilai, setuju, total)}. Penyaringan
+        apakah buktinya cukup dilakukan di behavior.py, bukan di sini —
+        store hanya melaporkan apa adanya.
+        """
+        with self._lock:
+            baris = self.conn.execute(
+                "SELECT attribute, value, COUNT(DISTINCT nmid) n "
+                "FROM issuer_dialect WHERE pan_prefix = ? "
+                "GROUP BY attribute, value", (pan_prefix,)).fetchall()
+        per_atribut = {}
+        for r in baris:
+            per_atribut.setdefault(r["attribute"], []).append((r["value"], r["n"]))
+        keluar = {}
+        for atribut, nilai in per_atribut.items():
+            total = sum(n for _, n in nilai)
+            v, n = max(nilai, key=lambda x: x[1])
+            keluar[atribut] = (v, n, total)
+        return keluar
 
     def area_city(self, lat: float, lng: float):
         """Kota dominan di wilayah ini, kalau buktinya cukup.

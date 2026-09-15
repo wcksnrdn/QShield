@@ -484,6 +484,78 @@ def _a20():
     return f"bobot {bobot} pada hari 0/1/3/7/14, pudar penuh sebelum 30 hari"
 
 
+@serangan("QR dibangkitkan ulang oleh generator lain")
+def _a21():
+    s_, c = fresh_store()
+    PJP = "93600899"
+
+    def kanonik(nmid, nama):
+        acct = emvco.build_tlv({
+            "00": "ID.CO.QRIS.WWW", "01": PJP + "0000012345",
+            "02": nmid, "03": "UMI"})
+        return emvco.build({
+            "00": "01", "01": "11", "26": acct, "52": "5812", "53": "360",
+            "58": "ID", "59": nama, "60": "BANDUNG", "61": "40257"})
+
+    # Dialek penerbit dipelajari dari merchant-merchant sahnya.
+    for i in range(8):
+        scan(c, kanonik(f"ID10000000000{i:02d}", f"TOKO {i}"),
+             lat=LAT + 0.01 + i * 0.01, device=f"warga-{i:04d}")
+
+    # Penyerang menyusun ulang payload dengan generatornya sendiri:
+    # sub-tag beda urutan, CRC huruf kecil. PJP yang diakui sama.
+    acct = "".join(f"{t}{len(v):02d}{v}" for t, v in
+                   [("00", "ID.CO.QRIS.WWW"), ("02", "ID1000000000099"),
+                    ("01", PJP + "0000012345"), ("03", "UMI")])
+    body = "".join(f"{t}{len(v):02d}{v}" for t, v in
+                   [("00", "01"), ("01", "11"), ("26", acct), ("52", "5812"),
+                    ("53", "360"), ("58", "ID"), ("59", "ES BUAH"),
+                    ("60", "BANDUNG"), ("61", "40257")]) + "6304"
+    palsu = body + emvco.crc16_ccitt(body).lower()
+
+    d = scan(c, palsu, lat=LAT + 0.01, device="penyerang-0001")
+    assert "issuer_dialect_deviation" in d["signals"], (
+        f"QR dibangkitkan ulang lolos: {d['signals']}")
+    assert d["action"] == "cooling_off", f"friksi cuma {d['action']}"
+
+    # Merchant SAH baru dari penerbit yang sama tidak boleh kena.
+    bersih = scan(c, kanonik("ID1000000000088", "WARUNG BARU"),
+                  lat=LAT + 0.01, device="warga-8888")
+    assert "issuer_dialect_deviation" not in bersih["signals"], (
+        "merchant sah dari penerbit yang sama ikut tertuduh")
+    return "tertangkap pada scan pertama; merchant sah penerbit itu bersih"
+
+
+@serangan("Dialek penerbit TIDAK dipakai menuduh sticker-swap", ditahan=False)
+def _a22():
+    s_, c = fresh_store()
+    PJP = "93600899"
+
+    def kanonik(nmid, nama):
+        acct = emvco.build_tlv({
+            "00": "ID.CO.QRIS.WWW", "01": PJP + "0000012345",
+            "02": nmid, "03": "UMI"})
+        return emvco.build({
+            "00": "01", "01": "11", "26": acct, "52": "5812", "53": "360",
+            "58": "ID", "59": nama, "60": "BANDUNG", "61": "40257"})
+
+    for i in range(8):
+        scan(c, kanonik(f"ID10000000000{i:02d}", f"TOKO {i}"),
+             lat=LAT + 0.01 + i * 0.01, device=f"warga-{i:04d}")
+
+    # Penipu sticker-swap memakai akun merchant SUNGGUHAN dari penerbit
+    # yang sama. Payload-nya diterbitkan resmi, jadi dialeknya cocok
+    # sempurna — dan sinyal ini memang tidak boleh menangkapnya.
+    d = scan(c, kanonik("ID1000000000077", "WARUNG BU SRI"),
+             lat=LAT + 0.01, device="penipu-0001")
+    assert "issuer_dialect_deviation" not in d["signals"], (
+        "prasyarat berubah — dialek kini menandai payload yang sah "
+        "diterbitkan? Periksa ulang, itu positif palsu.")
+    return ("BUKAN KELEMAHAN: stiker-swap diterbitkan acquirer sungguhan "
+            "sehingga dialeknya cocok. Yang menangkapnya adalah jangkar "
+            "lokasi, bukan sinyal payload")
+
+
 # ==================================================================
 # Batasan yang diakui — di sini yang diuji adalah KEJUJURAN sistem
 # ==================================================================
@@ -793,6 +865,78 @@ def _a20():
         bobot.append(sig[0].weight if sig else 0)
     assert bobot == sorted(bobot, reverse=True), f"bobot tidak menurun: {bobot}"
     return f"bobot {bobot} pada hari 0/1/3/7/14, pudar penuh sebelum 30 hari"
+
+
+@serangan("QR dibangkitkan ulang oleh generator lain")
+def _a21():
+    s_, c = fresh_store()
+    PJP = "93600899"
+
+    def kanonik(nmid, nama):
+        acct = emvco.build_tlv({
+            "00": "ID.CO.QRIS.WWW", "01": PJP + "0000012345",
+            "02": nmid, "03": "UMI"})
+        return emvco.build({
+            "00": "01", "01": "11", "26": acct, "52": "5812", "53": "360",
+            "58": "ID", "59": nama, "60": "BANDUNG", "61": "40257"})
+
+    # Dialek penerbit dipelajari dari merchant-merchant sahnya.
+    for i in range(8):
+        scan(c, kanonik(f"ID10000000000{i:02d}", f"TOKO {i}"),
+             lat=LAT + 0.01 + i * 0.01, device=f"warga-{i:04d}")
+
+    # Penyerang menyusun ulang payload dengan generatornya sendiri:
+    # sub-tag beda urutan, CRC huruf kecil. PJP yang diakui sama.
+    acct = "".join(f"{t}{len(v):02d}{v}" for t, v in
+                   [("00", "ID.CO.QRIS.WWW"), ("02", "ID1000000000099"),
+                    ("01", PJP + "0000012345"), ("03", "UMI")])
+    body = "".join(f"{t}{len(v):02d}{v}" for t, v in
+                   [("00", "01"), ("01", "11"), ("26", acct), ("52", "5812"),
+                    ("53", "360"), ("58", "ID"), ("59", "ES BUAH"),
+                    ("60", "BANDUNG"), ("61", "40257")]) + "6304"
+    palsu = body + emvco.crc16_ccitt(body).lower()
+
+    d = scan(c, palsu, lat=LAT + 0.01, device="penyerang-0001")
+    assert "issuer_dialect_deviation" in d["signals"], (
+        f"QR dibangkitkan ulang lolos: {d['signals']}")
+    assert d["action"] == "cooling_off", f"friksi cuma {d['action']}"
+
+    # Merchant SAH baru dari penerbit yang sama tidak boleh kena.
+    bersih = scan(c, kanonik("ID1000000000088", "WARUNG BARU"),
+                  lat=LAT + 0.01, device="warga-8888")
+    assert "issuer_dialect_deviation" not in bersih["signals"], (
+        "merchant sah dari penerbit yang sama ikut tertuduh")
+    return "tertangkap pada scan pertama; merchant sah penerbit itu bersih"
+
+
+@serangan("Dialek penerbit TIDAK dipakai menuduh sticker-swap", ditahan=False)
+def _a22():
+    s_, c = fresh_store()
+    PJP = "93600899"
+
+    def kanonik(nmid, nama):
+        acct = emvco.build_tlv({
+            "00": "ID.CO.QRIS.WWW", "01": PJP + "0000012345",
+            "02": nmid, "03": "UMI"})
+        return emvco.build({
+            "00": "01", "01": "11", "26": acct, "52": "5812", "53": "360",
+            "58": "ID", "59": nama, "60": "BANDUNG", "61": "40257"})
+
+    for i in range(8):
+        scan(c, kanonik(f"ID10000000000{i:02d}", f"TOKO {i}"),
+             lat=LAT + 0.01 + i * 0.01, device=f"warga-{i:04d}")
+
+    # Penipu sticker-swap memakai akun merchant SUNGGUHAN dari penerbit
+    # yang sama. Payload-nya diterbitkan resmi, jadi dialeknya cocok
+    # sempurna — dan sinyal ini memang tidak boleh menangkapnya.
+    d = scan(c, kanonik("ID1000000000077", "WARUNG BU SRI"),
+             lat=LAT + 0.01, device="penipu-0001")
+    assert "issuer_dialect_deviation" not in d["signals"], (
+        "prasyarat berubah — dialek kini menandai payload yang sah "
+        "diterbitkan? Periksa ulang, itu positif palsu.")
+    return ("BUKAN KELEMAHAN: stiker-swap diterbitkan acquirer sungguhan "
+            "sehingga dialeknya cocok. Yang menangkapnya adalah jangkar "
+            "lokasi, bukan sinyal payload")
 
 
 # ==================================================================

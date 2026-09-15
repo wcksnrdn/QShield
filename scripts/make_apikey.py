@@ -10,7 +10,10 @@ Kunci mentah tidak pernah disimpan di mana pun oleh Q-Shield. Kalau
 hilang, terbitkan yang baru — jangan mencoba memulihkan yang lama.
 """
 
+import os
 import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 from qshield import auth
 

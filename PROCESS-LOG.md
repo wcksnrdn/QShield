@@ -1422,6 +1422,82 @@ Pisahkan lokasinya atau reset basis datanya.
 
 ---
 
+## Keputusan 39 — "Latih model menghafal pola QRIS asli": kenapa tidak, dan apa yang justru bekerja
+
+Usulan dari tim: latih model untuk menghafal pola QRIS asli supaya lebih
+lihai membedakan asli dari palsu. Diuji sebelum dijawab.
+
+**Enam belas fitur diekstrak dari payload asli dan payload
+sticker-swap** — panjang, jumlah tag, urutan tag, validitas CRC, gaya
+penulisan CRC, GUID, panjang PAN, prefiks PAN, format NMID, kriteria,
+MCC, mata uang, negara, statis/dinamis, ada nominal, panjang nama.
+
+**Nol dari 16 berbeda.**
+
+Itu bukan kelemahan ekstraksi fiturnya. Itu sifat serangannya: penipu
+sticker-swap **tidak memalsukan QR**. Ia mendaftar akun merchant
+sungguhan ke PJP sungguhan, menerima stiker yang diterbitkan resmi,
+lalu menempelkannya di atas stiker orang lain. Payload-nya memang asli.
+
+Model yang dilatih mengenali "pola QRIS asli" akan mengklasifikasikan
+stiker penipu sebagai asli — karena memang asli. Penipuannya tidak ada
+di dalam kode, melainkan di **penempatannya**, dan penempatan tidak
+terekam di payload. Ini kalimat pembuka catatan ini sendiri: *"stiker
+QRIS palsu adalah payload yang sah secara sintaksis."*
+
+Dua alasan tambahan: tidak ada satu pun sampel stiker penipu sungguhan
+yang terkonfirmasi untuk melatih kelas kedua, dan model tidak bisa
+menjawab pertanyaan "kenapa" yang pasti ditanyakan auditor.
+
+---
+
+**Tapi ada versi dari gagasan itu yang bekerja, dan justru menutup R7.**
+
+Yang tidak bisa dihafal: pola yang membedakan swap dari asli.
+Yang BISA dihafal: **cara tiap penerbit MENYUSUN payload-nya.**
+
+Generator QR tiap PJP deterministik — urutan tag, gaya penulisan CRC,
+panjang PAN, susunan sub-tag di dalam template merchant. Ciri itu sama
+untuk seluruh merchant yang diterbitkannya dan berbeda antar-penerbit.
+Payload yang mengaku dari PJP tertentu tapi tidak mengikuti dialeknya
+berarti **dibangkitkan ulang** oleh orang lain.
+
+Itu serangan yang berbeda dari sticker-swap, dan nyata: memodifikasi
+nominal, atau menyusun QR yang menunjuk rekening penipu sambil meniru
+nama merchant korban.
+
+Dikalibrasi di `calibrate_issuer.py`, `min_nmids=5` dan
+`min_share=0,90`:
+
+- penerbit yang generatornya konsisten (variasi <= 5%) profilnya
+  terbentuk hampir selalu
+- penerbit yang variasinya 20% profilnya **tidak** terbentuk — dan itu
+  benar, dialek yang tidak konsisten memang tidak ada yang bisa dihafal
+- positif palsu yang tersisa setara laju variasi sah penerbit itu
+  sendiri, karena itu bobotnya sedang (18 per atribut, dibatasi 45):
+  penyimpangan dialek adalah petunjuk, bukan bukti
+
+Diuji:
+
+| Kasus | Hasil |
+|---|---|
+| QR dibangkitkan ulang, PJP sama | **cooling_off** pada scan pertama |
+| merchant sah baru dari PJP itu | bersih |
+| sticker-swap dari PJP itu | **tidak tertangkap dialek** — dan itu benar |
+
+Kasus terakhir dikunci sebagai batasan yang diakui di
+`test_adversarial.py`, dengan penjelasan mengapa itu bukan kelemahan:
+stiker swap diterbitkan acquirer sungguhan sehingga dialeknya cocok
+sempurna. Yang menangkapnya adalah jangkar lokasi, bukan sinyal payload.
+
+Struktur yang sama dengan `area_city` dan dengan alasan yang sama: yang
+dihitung **NMID berbeda**, bukan jumlah pemindaian, supaya satu stiker
+yang dipindai seribu kali tetap satu suara. Dan dialeknya sengaja tidak
+memuat apa pun yang khas satu merchant — bukan NMID, bukan nama, bukan
+kota — hanya gaya penerbitnya.
+
+---
+
 ## Hasil pengujian
 
 ```

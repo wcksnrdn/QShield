@@ -239,6 +239,31 @@ def parse(payload: str) -> QrisPayload:
     )
 
 
+def dialect(payload: "QrisPayload") -> dict:
+    """Ciri cara sebuah payload DISUSUN, bukan apa isinya.
+
+    Generator QR tiap penerbit deterministik: urutan tag, gaya penulisan
+    CRC, panjang PAN, susunan sub-tag di dalam template merchant. Ciri
+    ini sama untuk seluruh merchant yang diterbitkan penerbit itu, dan
+    berbeda antar-penerbit.
+
+    Sengaja TIDAK memuat apa pun yang khas satu merchant — bukan NMID,
+    bukan nama, bukan kota. Yang dikumpulkan adalah gaya penerbitnya.
+    """
+    acc = payload.primary_account
+    sub = list(acc.raw) if acc else []
+    return {
+        "tag_order": ",".join(payload.tags),
+        "acct_tag": acc.tag if acc else "?",
+        "acct_subtag_order": ",".join(sub),
+        "crc_case": ("upper" if payload.crc_found
+                     and payload.crc_found == payload.crc_found.upper()
+                     else "lower"),
+        "pan_len": str(len(acc.pan or "")) if acc else "?",
+        "nmid_len": str(len(acc.nmid or "")) if acc else "?",
+    }
+
+
 def build(fields: dict) -> str:
     """Susun payload QRIS dari dict {tag: value}, CRC dihitung otomatis.
 

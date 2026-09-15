@@ -13,56 +13,78 @@ menggantikan, putusan Layer 1. Aturan komposisinya ada di
 
 ## Menjalankan
 
-### Demo dari HP — baca ini dulu
-
-Kamera (`getUserMedia`) dan GPS (`navigator.geolocation`) **menuntut
-secure context**. Membuka `http://192.168.x.x:8000` dari HP bukan secure
-context, jadi browser memblokir keduanya — tanpa bisa dinegosiasikan.
-`localhost` dikecualikan, tapi HP tidak bisa membuka localhost laptop.
-
-Artinya: **tanpa HTTPS, scanner tidak bisa memindai maupun tahu lokasi.**
+### 1. Persiapan Awal (Sekali Saja)
 
 ```bash
-python scripts/make_cert.py          # sertifikat lokal untuk IP LAN laptop
-uvicorn qshield.api:app --host 0.0.0.0 --port 8000     --ssl-certfile certs/cert.pem --ssl-keyfile certs/key.pem
+# Buat dan aktifkan virtual environment
+python3 -m venv .venv && source .venv/bin/activate
+
+# Install dependencies dan package qshield (editable)
+pip install -e .
+
+# (Opsional) Jika butuh membuat/mencetak prop QR fisik (OpenCV & QRCode):
+# pip install -e ".[props]"
 ```
 
-Lalu buka `https://<ip-laptop>:8000/` dari HP yang satu WiFi. HP akan
-memperingatkan sertifikatnya tidak dikenal — **terima peringatan itu
-sekarang, jangan di depan juri.** Setelah diterima, browser mengingatnya.
+### 2. Generate Sertifikat HTTPS Lokal & Seed Database
 
-Pindah WiFi berarti IP berubah; jalankan ulang `make_cert.py`.
-`scripts/preflight.py` memeriksa kecocokan ini.
+Kamera (`getUserMedia`) dan GPS (`navigator.geolocation`) **menuntut secure context (HTTPS)** agar browser di HP mengizinkan akses.
 
 ```bash
-python -m venv .venv && source .venv/bin/activate   # sekali saja
-pip install -e .                                     # install package qshield (editable)
-python scripts/seed.py                               # isi data demo, cetak QR asli & palsu
-uvicorn qshield.api:app --reload --host 0.0.0.0 --port 8000
+# Buat sertifikat SSL self-signed lokal untuk IP LAN laptop
+python3 scripts/make_cert.py
+
+# Seed database dengan koordinat demo/venue
+rm -f qshield.db
+python3 scripts/seed.py $(python3 scripts/venue_fixture.py coords)
 ```
 
-Scanner: http://localhost:8000/ — halaman mandiri, tanpa build step,
-tanpa npm, tanpa CDN. Disajikan dari proses yang sama dengan API, jadi
-tidak ada urusan CORS dan hanya ada satu proses yang bisa mati.
+### 3. Menjalankan Server
 
-Dokumentasi interaktif: http://localhost:8000/docs
+#### Mode Demo Lokal (Rekomendasi untuk Pengujian Cepat):
+Autentikasi dimatikan (`QSHIELD_AUTH=off`) sehingga scanner di HP dapat langsung memindai tanpa memasukkan API key:
+
+```bash
+QSHIELD_AUTH=off uvicorn qshield.api:app --host 0.0.0.0 --port 8000 \
+    --ssl-certfile certs/cert.pem \
+    --ssl-keyfile certs/key.pem
+```
+
+#### Mode Dengan Kunci API (PJP):
+```bash
+# Buat API key baru (hanya jika belum punya):
+# python3 scripts/make_apikey.py pjp-demo
+
+QSHIELD_API_KEYS="pjp-demo:4aaaac1c73f6e64bda1a431d945645367ee9aef1eab5929e6f4dde4e6fce45ba" \
+uvicorn qshield.api:app --host 0.0.0.0 --port 8000 \
+    --ssl-certfile certs/cert.pem \
+    --ssl-keyfile certs/key.pem
+```
+
+### 4. Akses Scanner & Dokumentasi
+
+- **Dari HP (satu WiFi dengan laptop)**: Buka `https://<ip-laptop>:8000/`. Terima peringatan sertifikat self-signed di browser HP.
+- **Dari Laptop**: Buka `https://localhost:8000/` (atau `http://localhost:8000/` jika dijalankan tanpa SSL).
+- **Dokumentasi Interaktif (Swagger UI)**: `https://localhost:8000/docs`
+
+Pindah WiFi berarti IP berubah; jalankan ulang `python3 scripts/make_cert.py`. `python3 scripts/preflight.py` memeriksa kesiapan sistem sebelum demo.
 
 ## Menguji
 
 ```bash
-python tests/test_emvco.py
-python tests/test_geo.py
-python tests/test_binding.py
-python tests/test_invariants.py               # kunci regresi kedelapan invarian
-python tests/test_adversarial.py              # 13 skenario dari sisi penyerang
-python tests/test_hardening.py                # input, auth, rate limit, audit, konkurensi
-python tests/test_contract.py                 # kunci bentuk API v1
-python tests/test_frontend.py                 # kecocokan halaman dengan API
-python tests/test_registration.py             # pendaftaran merchant + penyalahgunaannya
-PYTHONPATH=scripts python tests/test_api.py   # test_api.py mengimpor scripts/seed.py
+python3 tests/test_emvco.py
+python3 tests/test_geo.py
+python3 tests/test_binding.py
+python3 tests/test_invariants.py               # kunci regresi kedelapan invarian
+python3 tests/test_adversarial.py              # 13 skenario dari sisi penyerang
+python3 tests/test_hardening.py                # input, auth, rate limit, audit, konkurensi
+python3 tests/test_contract.py                 # kunci bentuk API v1
+python3 tests/test_frontend.py                 # kecocokan halaman dengan API
+python3 tests/test_registration.py             # pendaftaran merchant + penyalahgunaannya
+PYTHONPATH=scripts python3 tests/test_api.py   # test_api.py mengimpor scripts/seed.py
 
-python scripts/calibrate_geo.py               # kalibrasi presisi geohash
-python scripts/calibrate_layer2.py            # kalibrasi konstanta Layer 2
+python3 scripts/calibrate_geo.py               # kalibrasi presisi geohash
+python3 scripts/calibrate_layer2.py            # kalibrasi konstanta Layer 2
 ```
 
 `test_invariants.py` keluar dengan status bukan-nol kalau ada satu invarian
@@ -117,7 +139,7 @@ yang juga mengimpor `scripts/seed.py` secara langsung.
 ## Sebelum demo
 
 ```bash
-python scripts/preflight.py
+python3 scripts/preflight.py
 ```
 
 Memeriksa konfigurasi, basis data, kecocokan jangkar dengan koordinat
@@ -154,8 +176,8 @@ disinkron iCloud (mis. di luar `~/Documents`/`~/Desktop`).
 
 ```bash
 pip install -e '.[props]'                     # qrcode, pillow, opencv
-python scripts/make_qr.py -6.2088 106.8456    # koordinat SAMA dengan seed.py
-python scripts/make_qr.py --calibrate         # sapu ulang parameter cetak
+python3 scripts/make_qr.py -6.2088 106.8456    # koordinat SAMA dengan seed.py
+python3 scripts/make_qr.py --calibrate         # sapu ulang parameter cetak
 ```
 
 Mencetak empat skenario ke `props/` lalu memverifikasi tiap berkas lewat
@@ -170,15 +192,15 @@ rekamannya **sebelum** hari-H, jangan panik di lokasi.
 
 ```bash
 # PAGI, DI LUAR GEDUNG, berdiri persis di titik demo
-python scripts/venue_fixture.py record -6.9147 107.6098 --accuracy 8
+python3 scripts/venue_fixture.py record -6.9147 107.6098 --accuracy 8
 
 # seed dan prop pakai koordinat yang SAMA
-python scripts/seed.py    $(python scripts/venue_fixture.py coords)
-python scripts/make_qr.py $(python scripts/venue_fixture.py coords)
+python3 scripts/seed.py    $(python3 scripts/venue_fixture.py coords)
+python3 scripts/make_qr.py $(python3 scripts/venue_fixture.py coords)
 
 # gladi bersih / fallback saat GPS ruangan payah
-python scripts/venue_fixture.py replay
-python scripts/demo_lintas_pjp.py             # peragaan berbagi data antar-PJP
+python3 scripts/venue_fixture.py replay
+python3 scripts/demo_lintas_pjp.py             # peragaan berbagi data antar-PJP
 ```
 
 Yang diputar ulang ditandai eksplisit sebagai replay — di permintaan
@@ -191,8 +213,8 @@ memang fitur, bukan bug.
 ## Kalau hasilnya tidak sesuai harapan
 
 ```bash
-python scripts/diagnose.py PAYLOAD LAT LNG [AKURASI]   # bongkar satu pemindaian
-python scripts/diagnose.py --anchor LAT LNG            # apa isi jangkar di titik itu
+python3 scripts/diagnose.py PAYLOAD LAT LNG [AKURASI]   # bongkar satu pemindaian
+python3 scripts/diagnose.py --anchor LAT LNG            # apa isi jangkar di titik itu
 ```
 
 Membongkar tiap sinyal beserta bobot dan alasannya, lalu menjelaskan
@@ -206,7 +228,7 @@ kenapa putusannya bukan `proceed`.
 >
 > ```bash
 > rm -f qshield.db*
-> python scripts/seed.py $(python scripts/venue_fixture.py coords)
+> python3 scripts/seed.py $(python3 scripts/venue_fixture.py coords)
 > ```
 
 ## Kalibrasi lapangan
@@ -226,8 +248,8 @@ pemindaian berulang di merchant yang sama; label BERBEDA untuk merchant
 berbeda walau bersebelahan.
 
 ```bash
-python scripts/fieldkit.py status      # berapa data terkumpul, apa yang kurang
-python scripts/fieldkit.py analyse     # turunkan parameternya
+python3 scripts/fieldkit.py status      # berapa data terkumpul, apa yang kurang
+python3 scripts/fieldkit.py analyse     # turunkan parameternya
 ```
 
 > **Mode survei menyimpan payload mentah dan koordinat presisi** — persis
@@ -263,7 +285,7 @@ Klien Q-Shield adalah **PJP**, bukan orang. Satu kunci mewakili satu
 penyelenggara yang memanggil API sebelum PIN entry.
 
 ```bash
-python scripts/make_apikey.py pjp-alpha     # cetak kunci + baris env
+python3 scripts/make_apikey.py pjp-alpha     # cetak kunci + baris env
 export QSHIELD_API_KEYS="pjp-alpha:<sha256>"
 ```
 

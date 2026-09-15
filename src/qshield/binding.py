@@ -71,6 +71,35 @@ W_CITY_MISMATCH = 40
 # akun untuk banyak korban harus mengganti tag 59 agar cocok dengan nama
 # toko tiap korban.
 W_NAME_INCONSISTENT = 45
+
+# --- Dialek penerbit -----------------------------------------------
+#
+# Versi yang BEKERJA dari gagasan "hafalkan pola QRIS asli". Yang tidak
+# bisa dihafal: pola yang membedakan stiker-swap dari stiker asli —
+# penipu memakai akun merchant sungguhan, jadi payload-nya memang
+# diterbitkan acquirer betulan dan nol fitur berbeda.
+#
+# Yang bisa dihafal: cara tiap PJP MENYUSUN payload-nya. Generatornya
+# deterministik. Payload yang mengaku dari PJP tertentu tapi tidak
+# mengikuti dialeknya berarti dibangkitkan ulang oleh orang lain.
+#
+# Serangan yang ditangkap BERBEDA dari sticker-swap: memodifikasi
+# nominal, atau menyusun QR yang menunjuk rekening penipu sambil meniru
+# nama merchant korban.
+#
+# Dikalibrasi di calibrate_issuer.py. min_share 0,90 membuat profil
+# terbentuk untuk penerbit yang konsisten, dan TIDAK terbentuk untuk
+# yang variasinya tinggi — dan itu benar, dialek yang tidak konsisten
+# memang tidak ada yang bisa dihafal.
+ISSUER_MIN_NMIDS = 5
+ISSUER_MIN_SHARE = 0.90
+
+# Bobot SEDANG dengan sengaja: penyimpangan dialek adalah petunjuk,
+# bukan bukti. Positif palsu yang tersisa setara laju variasi sah
+# penerbit itu sendiri — generator diperbarui, merchant lama memakai
+# versi sebelumnya, integrator pihak ketiga.
+W_ISSUER_DEVIATION = 18
+ISSUER_DEVIATION_CAP = 45
 INDEX_PRECISION = 7         # presisi geohash untuk indeks query
 AREA_PRECISION = 6          # presisi untuk deteksi sebaran antar-area
 SCATTER_MIN_KM = 1.0        # jarak minimum agar dianggap area berbeda

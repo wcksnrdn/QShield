@@ -299,6 +299,52 @@ def _origin_signals(parsed, area, nama_lain) -> list:
     return out
 
 
+def _dialect_signals(parsed, profil) -> list:
+    """Payload mengaku dari penerbit X tapi tidak menyusun seperti X.
+
+    Tidak menangkap sticker-swap — stiker penipu diterbitkan acquirer
+    sungguhan, jadi dialeknya cocok sempurna. Yang ditangkap adalah QR
+    yang DIBANGKITKAN ULANG oleh orang lain.
+    """
+    from . import binding as bd
+    from . import emvco
+
+    if not profil:
+        return []
+
+    punya = emvco.dialect(parsed)
+    menyimpang = []
+    for atribut, (nilai, setuju, total) in profil.items():
+        cukup = (setuju >= bd.ISSUER_MIN_NMIDS
+                 and setuju / total >= bd.ISSUER_MIN_SHARE)
+        if cukup and punya.get(atribut) != nilai:
+            menyimpang.append(atribut)
+
+    if not menyimpang:
+        return []
+
+    bobot = min(bd.ISSUER_DEVIATION_CAP,
+                bd.W_ISSUER_DEVIATION * len(menyimpang))
+    LABEL = {
+        "tag_order": "urutan field",
+        "acct_tag": "nomor template merchant",
+        "acct_subtag_order": "susunan data merchant",
+        "crc_case": "penulisan checksum",
+        "pan_len": "panjang nomor akun",
+        "nmid_len": "panjang Merchant ID",
+    }
+    rinci = ", ".join(LABEL.get(a, a) for a in menyimpang)
+    return [Signal(
+        name="issuer_dialect_deviation",
+        weight=bobot,
+        reason=(
+            f"Kode ini mengaku diterbitkan penyelenggara yang sama dengan "
+            f"merchant lain, tapi cara penyusunannya berbeda ({rinci}) — "
+            f"pola khas kode yang dibangkitkan ulang"
+        ),
+    )]
+
+
 def _device_signals(integrity) -> list:
     """Sinyal dari laporan integritas perangkat.
 
@@ -463,6 +509,7 @@ def evaluate(
     dynamic_history=None,
     area=None,
     other_names=None,
+    issuer_profile=None,
 ) -> BehaviorResult:
     """Nilai perilaku satu pemindaian.
 
@@ -477,6 +524,7 @@ def evaluate(
     dynamic_history      jejak pemakaian QR dinamis ini, kalau ada
     area                 (kota, nmid_setuju, nmid_total) wilayah ini
     other_names          nama merchant lain yang pernah dipakai NMID ini
+    issuer_profile       dialek dominan penerbit payload ini
     """
     now = now or datetime.now(timezone.utc)
 
@@ -485,6 +533,7 @@ def evaluate(
                + _device_signals(integrity)
                + _dynamic_qr_signals(parsed, dynamic_history)
                + _origin_signals(parsed, area, other_names)
+               + _dialect_signals(parsed, issuer_profile)
                + _behavioral_signals(state, nmid_matches_anchor, now))
 
     # Sidik jari encoding dibatasi bersama-sama: sekumpulan sinyal lemah
