@@ -597,6 +597,9 @@ def verify(req: VerifyRequest, request: Request):
     elsewhere = store.by_nmid(nmid)
     wilayah = store.area_city(req.lat, req.lng)
     nama_lain = store.names_for_nmid(nmid)
+    akun = parsed.primary_account
+    dialek = (store.dialect_profile(akun.pan[:8])
+              if akun and akun.pan and len(akun.pan) >= 8 else None)
     anchor_id, anchor_nmid, anchor_state = store.anchor_state(req.lat, req.lng)
 
     # Layer 1 — ikatan merchant-lokasi.
@@ -628,6 +631,7 @@ def verify(req: VerifyRequest, request: Request):
         dynamic_history=riwayat_dinamis,
         area=wilayah,
         other_names=nama_lain,
+        issuer_profile=dialek,
     )
 
     verdict = _tandai_replay(bd.compose(lokasi, perilaku), req)
@@ -645,6 +649,7 @@ def verify(req: VerifyRequest, request: Request):
         # Pengetahuan wilayah dibangun HANYA dari pemindaian yang tidak
         # ditolak — alasan yang sama dengan invarian §3.
         store.learn_city(req.lat, req.lng, parsed.merchant_city, nmid)
+        store.learn_dialect(parsed, nmid)
     elif anchor_id is not None:
         # Jangkar ini jadi sasaran. Dicatat sebagai PERCOBAAN, bukan
         # pengamatan: observer_count tidak disentuh, jadi invarian §3
