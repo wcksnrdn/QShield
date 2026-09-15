@@ -1498,6 +1498,47 @@ kota — hanya gaya penerbitnya.
 
 ---
 
+## Keputusan 40 — Jejak dokumentasi Layer 2 ditutup
+
+Layer 2 selesai sejak Keputusan 10, tapi `Q-Shield-Overview.pdf` masih
+menyebutnya "masih berupa rancangan, belum diimplementasikan". Selama
+itu dibiarkan, bagian terkuat sistem ini terlihat belum ada — dan
+pitch-nya bertentangan dengan dokumennya sendiri.
+
+Berkas sumber PDF tidak ada di repo, jadi tidak bisa ditambal dari
+sini. `PDF-UPDATE.md` menggantikannya: tujuh kalimat lama dikutip apa
+adanya beserta teks penggantinya, siap tempel ke dokumen sumber mana
+pun yang dipakai.
+
+Angkanya diukur ulang, bukan disalin dari ingatan:
+
+| Klaim | Lama | Sekarang |
+|---|---|---|
+| berkas pengujian | 4 | 10 |
+| skenario adversarial | (tidak disebut) | 37 |
+| latensi p50 | 2,8 ms | 2,8 ms — tidak berubah |
+| latensi maks | 22,4 ms | 7,5 ms |
+
+**Butir Layer 2 dipecah jadi dua.** Dokumen fase 1 memakai satu istilah
+untuk dua sistem berbeda, dan itu merugikan dua arah: yang sudah selesai
+terlihat belum, sementara yang di luar jangkauan terlihat seperti utang
+yang belum dibayar.
+
+Sekarang jalur QR disebut selesai apa adanya, dan penilaian transfer
+bank manual disebut dengan namanya sendiri beserta alasan arsitektural
+kenapa ia berada di luar jangkauan lapisan pra-pembayaran — bukan
+"belum sempat", melainkan "tidak ada artefak yang bisa diperiksa
+sebelum korban menekan kirim".
+
+**Satu butir sengaja TIDAK disiapkan penggantinya.** Kalimat "perlu
+dikalibrasi ulang dari data lapangan" masih benar sampai tim
+benar-benar berjalan memindai. Teks penggantinya disediakan tapi diberi
+peringatan eksplisit agar tidak dipakai sebelum surveinya jalan —
+mengklaim kalibrasi yang belum dilakukan adalah kesalahan yang paling
+mudah ketahuan begitu juri menanyakan ukuran sampelnya.
+
+---
+
 ## Hasil pengujian
 
 ```
@@ -1559,9 +1600,12 @@ Dicatat terbuka; sebagian menjadi isi *Pathway*.
    Perlu jalur konfirmasi merchant.
 5. **Merchant keliling.** Belum ditangani. Perlu penandaan khusus saat
    pendaftaran.
-6. **Scoring transfer manual belum ada.** Layer 2 jalur QR sudah jalan
-   (Keputusan 9-11); modus rekayasa sosial lewat transfer bank manual
-   masih berupa rancangan dan kini disebut dengan namanya sendiri.
+6. **Penilaian transfer bank manual di luar jangkauan.** Layer 2 jalur
+   QR sudah jalan (Keputusan 9-11, 14 sinyal). Modus rekayasa sosial
+   lewat transfer bank manual bukan sekadar belum dikerjakan — pada
+   transfer manual tidak ada artefak yang bisa diperiksa sebelum korban
+   menekan kirim, dan menilai rekening tujuan adalah pekerjaan PJP
+   dengan data yang tidak kami pegang.
 
 7. **Replay QR dinamis.** Tidak ada pelacakan nonce per transaksi;
    mendeteksinya butuh keterlibatan PJP dan berada di luar jangkauan

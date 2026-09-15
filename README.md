@@ -135,6 +135,7 @@ yang juga mengimpor `scripts/seed.py` secara langsung.
 | `API.md` | kontrak API v1 dan kebijakan versinya |
 | `DEPLOY.md` | rencana migrasi Postgres, secrets, container |
 | `INTEGRATION.md` | panduan integrasi untuk PJP, termasuk slot integritas perangkat |
+| `PDF-UPDATE.md` | teks pengganti untuk Q-Shield-Overview.pdf yang sudah basi |
 
 ## Sebelum demo
 
