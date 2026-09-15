@@ -126,6 +126,17 @@ W_IMPLAUSIBLE_ACCURACY = 45
 DYNAMIC_REUSE_THRESHOLD = 4
 DYNAMIC_SPREAD_M = 150
 
+# Nominal berubah untuk nomor tagihan yang sama. Serius — korban
+# membayar jumlah yang bukan seharusnya — tapi TIDAK dijadikan
+# kontradiksi keras, karena ada kasus sah: pesanan ditambah di restoran,
+# kasir menerbitkan ulang QR untuk tagihan yang sama dengan nominal
+# lebih tinggi.
+#
+# Yang membuat sinyal ini tetap berguna meski begitu: alasannya
+# menyebutkan KEDUA nominalnya. Pengguna tinggal melihat layar kasir dan
+# memutuskan sendiri — pemeriksaan yang tidak bergantung pada data kami.
+W_BILL_AMOUNT_CHANGED = 35
+
 W_DYNAMIC_REUSED = 30
 W_DYNAMIC_SPREAD = 55
 
@@ -221,12 +232,34 @@ def _location_claim_signals(accuracy_m, has_coords: bool) -> list:
     return out
 
 
-def _dynamic_qr_signals(parsed, riwayat) -> list:
+def _dynamic_qr_signals(parsed, riwayat, nominal_lain=None) -> list:
     """Sinyal dari jejak pemakaian satu QR dinamis."""
-    if riwayat is None or parsed.is_static:
+    from . import binding as bd
+
+    if parsed.is_static:
         return []
 
     out = []
+
+    # --- Nominal berubah untuk tagihan yang sama --------------------
+    #
+    # Penipu yang mencegat QR dinamis lalu mengubah nominalnya
+    # menghasilkan hash payload berbeda, sehingga lolos dari deteksi
+    # pemakaian ulang. Nomor tagihannya tetap — dan itu yang menangkapnya.
+    if nominal_lain:
+        sebelumnya = nominal_lain[0].get("amount")
+        out.append(Signal(
+            name="bill_amount_changed",
+            weight=W_BILL_AMOUNT_CHANGED,
+            reason=(
+                f"Nomor tagihan yang sama sebelumnya menunjukkan "
+                f"Rp{sebelumnya}, sekarang Rp{parsed.amount} — "
+                f"cocokkan dengan jumlah di layar kasir"
+            ),
+        ))
+
+    if riwayat is None:
+        return out
     sebar = riwayat.get("max_spread_m", 0.0)
     kali = riwayat.get("times_seen", 1)
 
@@ -507,6 +540,7 @@ def evaluate(
     has_coords: bool = False,
     integrity=None,
     dynamic_history=None,
+    bill_history=None,
     area=None,
     other_names=None,
     issuer_profile=None,
@@ -522,6 +556,7 @@ def evaluate(
     has_coords           True bila permintaan memang menyertakan koordinat
     integrity            laporan integritas dari klien native, kalau ada
     dynamic_history      jejak pemakaian QR dinamis ini, kalau ada
+    bill_history         nominal lain untuk nomor tagihan yang sama
     area                 (kota, nmid_setuju, nmid_total) wilayah ini
     other_names          nama merchant lain yang pernah dipakai NMID ini
     issuer_profile       dialek dominan penerbit payload ini
@@ -531,7 +566,7 @@ def evaluate(
     signals = (_structural_signals(parsed)
                + _location_claim_signals(accuracy_m, has_coords)
                + _device_signals(integrity)
-               + _dynamic_qr_signals(parsed, dynamic_history)
+               + _dynamic_qr_signals(parsed, dynamic_history, bill_history)
                + _origin_signals(parsed, area, other_names)
                + _dialect_signals(parsed, issuer_profile)
                + _behavioral_signals(state, nmid_matches_anchor, now))
