@@ -129,6 +129,22 @@ class QrisPayload:
         return acc.nmid if acc else None
 
     @property
+    def bill_ref(self) -> Optional[str]:
+        """Nomor tagihan pada tag 62 sub-tag 01.
+
+        Diisi mesin kasir untuk menandai satu transaksi. Dipakai
+        mendeteksi nominal yang diubah: tagihan yang sama seharusnya
+        tidak berganti nominal.
+        """
+        blok = self.tags.get("62")
+        if not blok:
+            return None
+        try:
+            return parse_tlv(blok).get("01")
+        except ParseError:
+            return None
+
+    @property
     def criteria_label(self) -> Optional[str]:
         acc = self.primary_account
         if acc and acc.criteria:

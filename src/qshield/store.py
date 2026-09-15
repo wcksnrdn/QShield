@@ -144,6 +144,23 @@ CREATE TABLE IF NOT EXISTS issuer_dialect (
 
 CREATE INDEX IF NOT EXISTS idx_dialect ON issuer_dialect(pan_prefix, attribute);
 CREATE INDEX IF NOT EXISTS idx_areacity ON area_city(geohash_5);
+-- Nominal yang pernah muncul untuk satu nomor tagihan.
+--
+-- Tagihan yang sama seharusnya tidak berganti nominal. Penipu yang
+-- mencegat QR dinamis lalu mengubah nominalnya menghasilkan hash
+-- payload berbeda — sehingga lolos dari deteksi pemakaian ulang — tapi
+-- nomor tagihannya tetap.
+CREATE TABLE IF NOT EXISTS dynamic_bill (
+    nmid        TEXT NOT NULL,
+    bill_ref    TEXT NOT NULL,
+    amount      TEXT NOT NULL,
+    lat         REAL NOT NULL,
+    lng         REAL NOT NULL,
+    seen_at     TEXT NOT NULL,
+    PRIMARY KEY (nmid, bill_ref, amount)
+);
+
+CREATE INDEX IF NOT EXISTS idx_bill_seen ON dynamic_bill(seen_at);
 CREATE INDEX IF NOT EXISTS idx_dynqr_last ON dynamic_qr(last_seen);
 CREATE INDEX IF NOT EXISTS idx_reg_nmid ON registrations(nmid);
 CREATE INDEX IF NOT EXISTS idx_bindings_gh7  ON bindings(geohash_7);
@@ -650,6 +667,33 @@ class Store:
                 raise
         return hasil
 
+    def note_bill(self, nmid: str, bill_ref: str, amount: str,
+                  lat: float, lng: float,
+                  now: Optional[datetime] = None) -> list:
+        """Catat nominal untuk satu tagihan, kembalikan nominal lain
+        yang pernah muncul untuk tagihan yang sama.
+
+        Dibatasi masa hidup yang sama dengan jejak QR dinamis: sebagian
+        mesin kasir mengulang penomoran tagihan tiap hari, jadi tagihan
+        yang sama minggu depan bukan tagihan yang sama.
+        """
+        now = now or datetime.now(timezone.utc)
+        batas = _iso(now - timedelta(hours=bd.DYNAMIC_QR_TTL_HOURS))
+        with self._lock:
+            lama = self.conn.execute(
+                "SELECT amount, lat, lng FROM dynamic_bill "
+                "WHERE nmid = ? AND bill_ref = ? AND amount != ? "
+                "AND seen_at >= ?",
+                (nmid, bill_ref, amount, batas)).fetchall()
+            self.conn.execute(
+                "INSERT INTO dynamic_bill "
+                "(nmid, bill_ref, amount, lat, lng, seen_at) "
+                "VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT (nmid, bill_ref, amount) DO UPDATE SET "
+                "seen_at = excluded.seen_at",
+                (nmid, bill_ref, amount, lat, lng, _iso(now)))
+        return [dict(r) for r in lama]
+
     def prune_dynamic_qr(self, now: Optional[datetime] = None) -> int:
         """Buang jejak QR dinamis yang sudah lewat masa hidupnya."""
         now = now or datetime.now(timezone.utc)
@@ -657,6 +701,8 @@ class Store:
         with self._lock:
             cur = self.conn.execute(
                 "DELETE FROM dynamic_qr WHERE last_seen < ?", (batas,))
+            self.conn.execute(
+                "DELETE FROM dynamic_bill WHERE seen_at < ?", (batas,))
         return cur.rowcount
 
     # --- pengetahuan wilayah ---------------------------------------

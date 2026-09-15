@@ -556,6 +556,54 @@ def _a22():
             "lokasi, bukan sinyal payload")
 
 
+@serangan("Nominal QR dinamis diubah, nomor tagihan tetap")
+def _a23():
+    _, c = fresh_store()
+
+    def dinamis(nominal, tagihan="INV-0042"):
+        acct = emvco.build_tlv({
+            "00": "ID.CO.QRIS.WWW", "01": "936008990000012345",
+            "02": "ID1098765432109", "03": "UMI"})
+        return emvco.build({
+            "00": "01", "01": "12", "26": acct, "52": "5812", "53": "360",
+            "54": nominal, "58": "ID", "59": "TOKO ONLINE", "60": "BANDUNG",
+            "62": emvco.build_tlv({"01": tagihan})})
+
+    # Pelanggan memindai QR sah dari kasir.
+    sah = scan(c, dinamis("50000.00"), device="pembeli-0001")
+    assert "bill_amount_changed" not in sah["signals"]
+
+    # Penipu mencegat, mengubah nominal saja. Hash payload berubah —
+    # jadi deteksi pemakaian ulang melewatkannya — tapi nomor
+    # tagihannya tetap, dan itu yang menangkapnya.
+    d = scan(c, dinamis("500000.00"), device="korban-0001")
+    assert "bill_amount_changed" in d["signals"], (
+        f"perubahan nominal lolos: {d['signals']}")
+    # Alasannya harus menyebut KEDUA nominalnya — itu yang membuat
+    # pengguna bisa memeriksanya sendiri ke layar kasir.
+    alasan = " ".join(d["reasons"])
+    assert "50000.00" in alasan and "500000.00" in alasan, (
+        "alasan tidak menyebut kedua nominalnya")
+
+    # Tagihan berbeda dengan nominal berbeda adalah hal normal.
+    normal = scan(c, dinamis("75000.00", "INV-0043"), device="pembeli-0002")
+    assert "bill_amount_changed" not in normal["signals"], (
+        "tagihan berbeda ikut tertuduh")
+    return "perubahan nominal tertangkap; tagihan berbeda tetap bersih"
+
+
+@serangan("Sinyal tagihan tidak menyentuh stiker statis")
+def _a24():
+    _, c = fresh_store()
+    # Stiker statis tidak punya nomor tagihan maupun nominal.
+    p = qr(KORBAN, pan="936000149000000001", nama="WARUNG BU SRI")
+    for i in range(5):
+        d = scan(c, p, device=f"pelanggan-{i:04d}")
+    assert "bill_amount_changed" not in d["signals"]
+    assert "dynamic_qr_reused" not in d["signals"]
+    return "5 pemindaian stiker statis, nol sinyal jalur dinamis"
+
+
 # ==================================================================
 # Batasan yang diakui — di sini yang diuji adalah KEJUJURAN sistem
 # ==================================================================
@@ -937,6 +985,54 @@ def _a22():
     return ("BUKAN KELEMAHAN: stiker-swap diterbitkan acquirer sungguhan "
             "sehingga dialeknya cocok. Yang menangkapnya adalah jangkar "
             "lokasi, bukan sinyal payload")
+
+
+@serangan("Nominal QR dinamis diubah, nomor tagihan tetap")
+def _a23():
+    _, c = fresh_store()
+
+    def dinamis(nominal, tagihan="INV-0042"):
+        acct = emvco.build_tlv({
+            "00": "ID.CO.QRIS.WWW", "01": "936008990000012345",
+            "02": "ID1098765432109", "03": "UMI"})
+        return emvco.build({
+            "00": "01", "01": "12", "26": acct, "52": "5812", "53": "360",
+            "54": nominal, "58": "ID", "59": "TOKO ONLINE", "60": "BANDUNG",
+            "62": emvco.build_tlv({"01": tagihan})})
+
+    # Pelanggan memindai QR sah dari kasir.
+    sah = scan(c, dinamis("50000.00"), device="pembeli-0001")
+    assert "bill_amount_changed" not in sah["signals"]
+
+    # Penipu mencegat, mengubah nominal saja. Hash payload berubah —
+    # jadi deteksi pemakaian ulang melewatkannya — tapi nomor
+    # tagihannya tetap, dan itu yang menangkapnya.
+    d = scan(c, dinamis("500000.00"), device="korban-0001")
+    assert "bill_amount_changed" in d["signals"], (
+        f"perubahan nominal lolos: {d['signals']}")
+    # Alasannya harus menyebut KEDUA nominalnya — itu yang membuat
+    # pengguna bisa memeriksanya sendiri ke layar kasir.
+    alasan = " ".join(d["reasons"])
+    assert "50000.00" in alasan and "500000.00" in alasan, (
+        "alasan tidak menyebut kedua nominalnya")
+
+    # Tagihan berbeda dengan nominal berbeda adalah hal normal.
+    normal = scan(c, dinamis("75000.00", "INV-0043"), device="pembeli-0002")
+    assert "bill_amount_changed" not in normal["signals"], (
+        "tagihan berbeda ikut tertuduh")
+    return "perubahan nominal tertangkap; tagihan berbeda tetap bersih"
+
+
+@serangan("Sinyal tagihan tidak menyentuh stiker statis")
+def _a24():
+    _, c = fresh_store()
+    # Stiker statis tidak punya nomor tagihan maupun nominal.
+    p = qr(KORBAN, pan="936000149000000001", nama="WARUNG BU SRI")
+    for i in range(5):
+        d = scan(c, p, device=f"pelanggan-{i:04d}")
+    assert "bill_amount_changed" not in d["signals"]
+    assert "dynamic_qr_reused" not in d["signals"]
+    return "5 pemindaian stiker statis, nol sinyal jalur dinamis"
 
 
 # ==================================================================

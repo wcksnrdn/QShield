@@ -1539,6 +1539,73 @@ mudah ketahuan begitu juri menanyakan ukuran sampelnya.
 
 ---
 
+## Keputusan 41 — Batas yang menunggu PJP, dan yang ternyata tidak
+
+Pertanyaan dari tim: kenapa R1 dan R2 menunggu PJP?
+
+**Jawabannya bukan soal kemampuan, melainkan soal di mana datanya
+berada.**
+
+*R1 (GPS palsu).* Untuk tahu lokasi itu palsu, seseorang harus bertanya
+ke sistem operasi: `Location.isMock()`, Play Integrity, App Attest.
+Browser **sengaja** tidak membocorkan itu ke halaman web — keputusan
+desain browser demi privasi penggunanya, bukan celah yang bisa diakali.
+Yang punya aplikasi native di jalur ini adalah PJP, bukan kami. Kalau
+kami membangun aplikasi sendiri, kami sedang membuat e-wallet
+tandingan, dan tidak ada yang mau memasang aplikasi terpisah hanya
+untuk memindai QR sebelum membayar di aplikasi lain.
+
+*R2 (replay QR dinamis).* Proteksi replay sungguhan butuh nonce sekali
+pakai yang diterbitkan lalu diverifikasi penerbitnya. Untuk tahu "QR ini
+sudah pernah dibayar", seseorang harus tahu transaksi mana yang sudah
+settle — dan itu ada di sistem PJP. Q-Shield duduk sebelum pembayaran
+dan tidak pernah melihat settlement; memang tidak boleh.
+
+Ketergantungan ini bukan kelemahan desain. Itu konsekuensi Q-Shield
+menjadi **lapisan**, bukan aplikasi berdiri sendiri — dan itu memang
+arsitektur yang benar.
+
+---
+
+**Tapi pertanyaannya memunculkan pemeriksaan yang berguna: apa yang
+masih bisa dikerjakan tanpa PJP?** Ternyata ada satu, dan sudah
+terlewat.
+
+QR dinamis membawa nomor tagihan di tag 62. Penipu yang mencegat QR
+dinamis lalu **mengubah nominalnya** menghasilkan hash payload berbeda —
+sehingga lolos dari deteksi pemakaian ulang yang mengunci pada hash —
+tapi nomor tagihannya tetap.
+
+```
+asli    nominal  50000.00   tagihan INV-0042   hash 32ce23b0...
+diubah  nominal 500000.00   tagihan INV-0042   hash 8f0aa4c5...
+```
+
+Sekarang nominal per nomor tagihan dilacak, dengan masa hidup yang sama
+seperti jejak QR dinamis (48 jam) — sebagian mesin kasir mengulang
+penomoran tagihan tiap hari, jadi tagihan yang sama minggu depan bukan
+tagihan yang sama.
+
+**Positif palsu yang diakui:** pesanan ditambah di restoran, kasir
+menerbitkan ulang QR untuk tagihan yang sama dengan nominal lebih
+tinggi. Karena itu bobotnya sedang (35), bukan kontradiksi keras.
+
+Yang membuat sinyal ini tetap berguna meski begitu: **alasannya
+menyebut kedua nominalnya.** "Nomor tagihan yang sama sebelumnya
+menunjukkan Rp50.000, sekarang Rp500.000 — cocokkan dengan jumlah di
+layar kasir." Pengguna tidak perlu memercayai penilaian kami; mereka
+punya fakta yang bisa diperiksa sendiri dalam dua detik.
+
+**Bug yang ditemukan saat mengerjakannya, dan layak dicatat.**
+Konstanta `W_BILL_AMOUNT_CHANGED` sempat ditaruh di `binding.py`,
+padahal konstanta `W_DYNAMIC_*` lain berada di `behavior.py`.
+Penggantinya memakai `str.replace()` yang **gagal diam-diam** ketika
+anchor-nya tidak ketemu — tidak ada galat, tidak ada peringatan, dan
+bugnya baru muncul sebagai `AttributeError` di tengah permintaan HTTP.
+Sejak itu setiap penggantian diverifikasi dengan assertion lebih dulu.
+
+---
+
 ## Hasil pengujian
 
 ```

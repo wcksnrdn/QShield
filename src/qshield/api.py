@@ -588,10 +588,13 @@ def verify(req: VerifyRequest, request: Request):
     # Jejak QR dinamis dicatat lebih dulu supaya pemindaian ini sendiri
     # ikut terhitung — kalau tidak, korban pertama sebuah QR yang disebar
     # tidak pernah melihat angka apa pun.
-    riwayat_dinamis = None
+    riwayat_dinamis = riwayat_tagihan = None
     if not parsed.is_static:
         riwayat_dinamis = store.note_dynamic_qr(
             req.payload, nmid, req.lat, req.lng)
+        if parsed.bill_ref and parsed.amount:
+            riwayat_tagihan = store.note_bill(
+                nmid, parsed.bill_ref, parsed.amount, req.lat, req.lng)
 
     nearby = store.nearby(req.lat, req.lng)
     elsewhere = store.by_nmid(nmid)
@@ -629,6 +632,7 @@ def verify(req: VerifyRequest, request: Request):
         has_coords=True,
         integrity=di,
         dynamic_history=riwayat_dinamis,
+        bill_history=riwayat_tagihan,
         area=wilayah,
         other_names=nama_lain,
         issuer_profile=dialek,
