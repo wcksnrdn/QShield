@@ -717,6 +717,7 @@ def verify(req: VerifyRequest, request: Request):
     wilayah = store.area_city(req.lat, req.lng)
     nama_lain = store.names_for_nmid(nmid)
     akun = parsed.primary_account
+    korpus = store.feature_corpus()
     dialek = (store.dialect_profile(akun.pan[:8])
               if akun and akun.pan and len(akun.pan) >= 8 else None)
     anchor_id, anchor_nmid, anchor_state = store.anchor_state(req.lat, req.lng)
@@ -752,6 +753,7 @@ def verify(req: VerifyRequest, request: Request):
         area=wilayah,
         other_names=nama_lain,
         issuer_profile=dialek,
+        feature_corpus=korpus,
     )
 
     verdict = _tandai_replay(bd.compose(lokasi, perilaku), req)
@@ -770,6 +772,7 @@ def verify(req: VerifyRequest, request: Request):
         # ditolak — alasan yang sama dengan invarian §3.
         store.learn_city(req.lat, req.lng, parsed.merchant_city, nmid)
         store.learn_dialect(parsed, nmid)
+        store.learn_features(parsed, nmid)
     elif anchor_id is not None:
         # Jangkar ini jadi sasaran. Dicatat sebagai PERCOBAAN, bukan
         # pengamatan: observer_count tidak disentuh, jadi invarian §3

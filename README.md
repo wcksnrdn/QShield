@@ -100,6 +100,7 @@ src/qshield/     package utama — import sebagai `qshield` setelah `pip install
   binding.py       Layer 1 — konsensus lokasi, plus aturan komposisi
   behavior.py      Layer 2 — sinyal struktural & perilaku artefak QR
   transfer.py      Layer 2 jalur transfer manual
+  profile.py       model kelangkaan tak-terawasi (unsupervised)
   store.py         persistensi SQLite
   auth.py          autentikasi klien PJP (kunci disimpan sebagai hash)
   limits.py        pembatasan laju (memori, tanpa menyimpan IP)
@@ -117,6 +118,8 @@ scripts/         skrip yang dijalankan langsung, bukan bagian dari package
   calibrate_layer2.py kalibrasi konstanta Layer 2
   calibrate_anchor.py kalibrasi penghalusan jangkar
   calibrate_dynamic.py kalibrasi deteksi QR dinamis dipakai ulang
+  calibrate_transfer.py kalibrasi bobot transfer manual
+  calibrate_rarity.py  kalibrasi model kelangkaan
   calibrate_decay.py  kalibrasi peluruhan jejak serangan
   fieldkit.py         kumpulkan & analisis data lapangan
   diagnose.py         bongkar kenapa satu pemindaian berakhir begitu
