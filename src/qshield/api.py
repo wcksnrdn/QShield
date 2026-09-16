@@ -222,6 +222,27 @@ class DeviceIntegrity(BaseModel):
     platform: Optional[Literal["android", "ios", "web", "other"]] = None
 
 
+class PrintedLabel(BaseModel):
+    """Teks yang TERCETAK di stiker fisik, di samping kodenya.
+
+    Stiker QRIS resmi mencetak nama merchant dan NMID dalam huruf yang
+    bisa dibaca manusia. Penipu jarang mencetak ulang seluruh standee —
+    yang paling sering adalah menempel stiker QR kecil menutupi area
+    kodenya saja, meninggalkan teks asli tetap terlihat.
+
+    Diisi dari yang diketik pengguna, atau dari OCR bila klien punya.
+    Ketiadaannya tidak dihukum: stiker yang teksnya tidak terbaca bukan
+    kesalahan siapa pun.
+    """
+
+    nmid: Optional[str] = Field(
+        None, max_length=32, pattern=r"^[A-Za-z0-9]*$",
+        description="NMID yang tercetak di stiker")
+    merchant_name: Optional[str] = Field(
+        None, max_length=99,
+        description="nama merchant yang tercetak di stiker")
+
+
 class VerifyRequest(BaseModel):
     """Seluruh field divalidasi di batas sistem, bukan di dalam logika.
 
@@ -267,6 +288,9 @@ class VerifyRequest(BaseModel):
 
     device_integrity: Optional[DeviceIntegrity] = Field(
         None, description="diisi klien native; klien web mengosongkannya")
+
+    printed_label: Optional[PrintedLabel] = Field(
+        None, description="teks yang terbaca di stiker fisik")
 
 
 class MerchantOut(BaseModel):
@@ -748,6 +772,7 @@ def verify(req: VerifyRequest, request: Request):
         accuracy_m=req.accuracy_m,
         has_coords=True,
         integrity=di,
+        printed=req.printed_label,
         dynamic_history=riwayat_dinamis,
         bill_history=riwayat_tagihan,
         area=wilayah,

@@ -604,6 +604,62 @@ def _a24():
     return "5 pemindaian stiker statis, nol sinyal jalur dinamis"
 
 
+@serangan("Stiker QR ditempel menutupi standee, teks asli tertinggal")
+def _a25():
+    s_, c = fresh_store()
+
+    def minta(nmid, printed, dev, lat=LAT):
+        body = {"payload": qr(nmid, pan="936000149000000002",
+                              nama="WARUNG BU SRI"),
+                "lat": lat, "lng": LNG, "device_anon_id": dev,
+                "accuracy_m": 12.0}
+        if printed:
+            body["printed_label"] = printed
+        return c.post("/api/v1/verify", json=body).json()
+
+    # Ini modus yang paling sering terjadi: mencetak ulang seluruh
+    # standee mahal dan mencolok, jadi penipu menempel stiker QR kecil
+    # menutupi kodenya saja. Teks tercetak yang asli tetap terlihat.
+    d = minta(PENYERANG, {"nmid": KORBAN}, "korban-0001")
+    assert "printed_nmid_mismatch" in d["signals"], (
+        f"ketidakcocokan teks tercetak lolos: {d['signals']}")
+    assert d["action"] == "cooling_off"
+
+    # Yang paling penting: bekerja di lokasi yang BELUM DIKENAL, pada
+    # pemindaian pertama, tanpa riwayat apa pun tentang merchant itu.
+    baru = minta(PENYERANG, {"nmid": KORBAN}, "korban-0002", lat=-8.6500)
+    assert "printed_nmid_mismatch" in baru["signals"]
+    assert baru["action"] == "cooling_off", (
+        f"di lokasi baru cuma {baru['action']} — cold start belum tertutup")
+    assert "tercetak" in baru["reasons"][0], (
+        "alasan terkuat bukan di baris pertama")
+    return "tertangkap pada scan pertama di lokasi yang belum dikenal"
+
+
+@serangan("Teks tercetak yang cocok tidak menimbulkan tuduhan")
+def _a26():
+    s_, c = fresh_store()
+
+    def minta(printed, dev):
+        body = {"payload": qr(KORBAN, pan="936000149000000001",
+                              nama="WARUNG BU SRI"),
+                "lat": LAT, "lng": LNG, "device_anon_id": dev,
+                "accuracy_m": 12.0}
+        if printed:
+            body["printed_label"] = printed
+        return c.post("/api/v1/verify", json=body).json()
+
+    for label, printed in (
+            ("cocok persis", {"nmid": KORBAN, "merchant_name": "WARUNG BU SRI"}),
+            ("tanpa awalan ID", {"nmid": KORBAN[2:]}),
+            ("nama beda kapital", {"merchant_name": "warung  bu sri"}),
+            ("tidak diisi", None)):
+        d = minta(printed, f"warga-{abs(hash(label)) % 9999:04d}")
+        salah = [x for x in d["signals"] if "printed" in x]
+        assert not salah, f"{label}: tertuduh padahal cocok — {salah}"
+    return "cocok persis, tanpa awalan ID, beda kapital, kosong — semua bersih"
+
+
 # ==================================================================
 # Batasan yang diakui — di sini yang diuji adalah KEJUJURAN sistem
 # ==================================================================

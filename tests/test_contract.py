@@ -41,9 +41,12 @@ PERMINTAAN_OPSIONAL = {
     # klien web tidak akan pernah bisa mengisinya, dan menjadikannya
     # wajib berarti mengunci seluruh klien web keluar.
     "device_integrity",
+    # Ditambahkan 16 Sep 2026 — teks yang tercetak di stiker fisik.
+    "printed_label",
 }
 PERMINTAAN_TIPE = {
     "device_integrity": "object",
+    "printed_label": "object",
     "payload": "string",
     "lat": "number",
     "lng": "number",
@@ -293,6 +296,50 @@ def _k5b():
     assert "mock_location_reported" in palsu["signals"]
     assert palsu["device_integrity"] == "failed"
     return "web tidak dihukum; attested lolos; mock GPS menolak putusan lokasi"
+
+
+@cek("Alasan diurutkan dari yang paling menentukan")
+def _k5c():
+    import tempfile as _tf
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+
+    from fastapi.testclient import TestClient as _TC
+
+    from qshield import api as _api, auth as _auth, emvco as _em
+    from qshield.limits import RateLimiter as _RL
+    from qshield.store import Store as _St
+
+    _api.store = _St(os.path.join(_tf.mkdtemp(), "urut.db"))
+    _api.clients = _auth.ClientRegistry(spec="", auth_setting="off")
+    _api.limiter = _RL(max_requests=10_000, window_seconds=60)
+    c = _TC(_api.app)
+    LAT, LNG = -6.914744, 107.609810
+
+    def minta(nmid, dev, extra=None):
+        acct = _em.build_tlv({"00": "ID.CO.QRIS.WWW",
+                              "01": "936008990000012345",
+                              "02": nmid, "03": "UMI"})
+        f = {"00": "01", "01": "11", "26": acct, "52": "5812", "53": "360",
+             "58": "ID", "59": "TOKO", "60": "BANDUNG", "61": "40257"}
+        f.update(extra or {})
+        return c.post("/api/v1/verify", json={
+            "payload": _em.build(f), "lat": LAT, "lng": LNG,
+            "device_anon_id": dev, "accuracy_m": 12.0}).json()
+
+    # Pengguna membaca dari atas dan sering berhenti di baris pertama.
+    # Alasan yang menentukan harus di sana, bukan cold start yang lemah.
+    d = minta("ID99", "urut-nmid-0001")
+    assert d["action"] == "cooling_off"
+    assert "Merchant ID" in d["reasons"][0], (
+        f"alasan terkuat bukan di atas: {d['reasons'][0][:60]!r}")
+    assert any("belum pernah tercatat" in r for r in d["reasons"][1:]), (
+        "cold start hilang, bukan sekadar turun urutan")
+
+    # Kontradiksi struktural juga harus mendahului cold start.
+    d2 = minta("ID1098765432109", "urut-nominal-01", {"54": "250000.00"})
+    assert "nominal" in d2["reasons"][0].lower(), (
+        f"alasan terkuat bukan di atas: {d2['reasons'][0][:60]!r}")
+    return "alasan terkuat selalu di baris pertama"
 
 
 @cek("Tanggapan sungguhan cocok dengan kontraknya")
