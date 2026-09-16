@@ -92,10 +92,6 @@ def scan(client, payload, lat=LAT, lng=LNG, device="penyerang-0001",
     return client.post("/api/v1/verify", json=body).json()
 
 
-# ==================================================================
-# Serangan yang harus ditahan
-# ==================================================================
-
 @serangan("Sticker swap di jangkar mapan")
 def _a1():
     _, c = fresh_store()
@@ -453,6 +449,59 @@ def _a19():
     return "dua nama -> cooling_off; nama konsisten tetap bersih"
 
 
+@serangan("Cacat payload tidak menandai LOKASI sebagai diserang")
+def _a27():
+    s_, c = fresh_store()
+
+    # Memindai QR yang cacat payload-nya di suatu titik tidak boleh
+    # membuat titik itu tercatat sebagai sasaran serangan — cacat
+    # payload tidak mengatakan apa pun tentang tempatnya.
+    #
+    # Ditemukan dari lapangan: tujuh merchant sungguhan di satu meja,
+    # dan satu QR scam bercacat membuat keenam merchant sah lainnya
+    # berakhir "butuh verifikasi".
+    JAUH = (-8.6500, 115.2167)
+    for i in range(4):
+        cacat = qr(f"ID{i}", pan="936000149000000009")   # NMID cacat bentuk
+        d = scan(c, cacat, lat=JAUH[0], lng=JAUH[1], device=f"scam-{i:04d}")
+        assert d["verdict"] == "anomaly", f"QR cacat lolos: {d['signals']}"
+
+    baris = s_.conn.execute(
+        "SELECT COALESCE(SUM(anomaly_attempts), 0) n FROM bindings").fetchone()
+    assert baris["n"] == 0, (
+        f"{baris['n']} percobaan tercatat dari cacat payload — merchant sah "
+        f"di titik itu akan ikut tertuduh")
+
+    # Merchant sungguhan di titik yang sama harus bersih. NMID-nya
+    # dibuat baru — memakai KORBAN akan memicu nmid_second_location
+    # karena ia sudah diseed di tempat lain, dan itu mengaburkan apa
+    # yang sedang diukur di sini.
+    sah = scan(c, qr("ID1055500000001", pan="936000149000000007",
+                     nama="ES KELAPA"),
+               lat=JAUH[0], lng=JAUH[1], device="warga-jauh-01")
+    assert "repeated_anomaly_at_anchor" not in sah["signals"], (
+        f"merchant sah mewarisi kecurigaan dari cacat payload: "
+        f"{sah['signals']}")
+    assert sah["action"] == "warn", f"-> {sah['action']}, bukan warn biasa"
+    assert sah["signals"] == ["first_observation"], (
+        f"sinyal tak terduga: {sah['signals']}")
+    return "4 QR cacat, nol percobaan tercatat, merchant sah bersih"
+
+
+@serangan("Percobaan pertukaran TETAP menandai lokasinya")
+def _a28():
+    s_, c = fresh_store()
+    # Yang benar-benar berkaitan dengan lokasi harus tetap tercatat.
+    for i in range(3):
+        d = scan(c, qr(PENYERANG), device=f"penyerang-{i:04d}")
+        assert "nmid_changed_at_anchor" in d["signals"]
+
+    baris = s_.conn.execute(
+        "SELECT SUM(anomaly_attempts) n FROM bindings").fetchone()
+    assert baris["n"] == 3, f"{baris['n']} tercatat, harusnya 3"
+    return "3 percobaan pertukaran tercatat di jangkarnya"
+
+
 @serangan("Jejak serangan lama tidak menghukum merchant baru selamanya")
 def _a20():
     from datetime import timedelta as _td
@@ -466,7 +515,9 @@ def _a20():
     for hari, harus_ada in ((0, True), (7, True), (30, False), (90, False)):
         st = _bh.AnchorState(anomaly_attempts=3,
                              last_anomaly_at=baru - _td(days=hari))
-        sig = _bh._behavioral_signals(st, False, baru)
+        # anchor_has_owner=True: pemeriksaan ini tentang PELURUHAN, dan
+        # sinyalnya memang hanya berlaku di jangkar yang sudah bertuan.
+        sig = _bh._behavioral_signals(st, False, baru, True)
         ada = any(x.name == "repeated_anomaly_at_anchor" for x in sig)
         assert ada == harus_ada, (
             f"{hari} hari setelah serangan: sinyal "
@@ -478,7 +529,7 @@ def _a20():
     for hari in (0, 1, 3, 7, 14):
         st = _bh.AnchorState(anomaly_attempts=3,
                              last_anomaly_at=baru - _td(days=hari))
-        sig = _bh._behavioral_signals(st, False, baru)
+        sig = _bh._behavioral_signals(st, False, baru, True)
         bobot.append(sig[0].weight if sig else 0)
     assert bobot == sorted(bobot, reverse=True), f"bobot tidak menurun: {bobot}"
     return f"bobot {bobot} pada hari 0/1/3/7/14, pudar penuh sebelum 30 hari"
@@ -524,36 +575,6 @@ def _a21():
     assert "issuer_dialect_deviation" not in bersih["signals"], (
         "merchant sah dari penerbit yang sama ikut tertuduh")
     return "tertangkap pada scan pertama; merchant sah penerbit itu bersih"
-
-
-@serangan("Dialek penerbit TIDAK dipakai menuduh sticker-swap", ditahan=False)
-def _a22():
-    s_, c = fresh_store()
-    PJP = "93600899"
-
-    def kanonik(nmid, nama):
-        acct = emvco.build_tlv({
-            "00": "ID.CO.QRIS.WWW", "01": PJP + "0000012345",
-            "02": nmid, "03": "UMI"})
-        return emvco.build({
-            "00": "01", "01": "11", "26": acct, "52": "5812", "53": "360",
-            "58": "ID", "59": nama, "60": "BANDUNG", "61": "40257"})
-
-    for i in range(8):
-        scan(c, kanonik(f"ID10000000000{i:02d}", f"TOKO {i}"),
-             lat=LAT + 0.01 + i * 0.01, device=f"warga-{i:04d}")
-
-    # Penipu sticker-swap memakai akun merchant SUNGGUHAN dari penerbit
-    # yang sama. Payload-nya diterbitkan resmi, jadi dialeknya cocok
-    # sempurna — dan sinyal ini memang tidak boleh menangkapnya.
-    d = scan(c, kanonik("ID1000000000077", "WARUNG BU SRI"),
-             lat=LAT + 0.01, device="penipu-0001")
-    assert "issuer_dialect_deviation" not in d["signals"], (
-        "prasyarat berubah — dialek kini menandai payload yang sah "
-        "diterbitkan? Periksa ulang, itu positif palsu.")
-    return ("BUKAN KELEMAHAN: stiker-swap diterbitkan acquirer sungguhan "
-            "sehingga dialeknya cocok. Yang menangkapnya adalah jangkar "
-            "lokasi, bukan sinyal payload")
 
 
 @serangan("Nominal QR dinamis diubah, nomor tagihan tetap")
@@ -660,9 +681,74 @@ def _a26():
     return "cocok persis, tanpa awalan ID, beda kapital, kosong — semua bersih"
 
 
+@serangan("Menang balapan cold start dengan modal murah (R10)")
+def _a11():
+    s, c = fresh_store()
+
+    # Jangkar yang korbannya sudah mapan tidak bisa dibajak lewat API:
+    # tiap pemindaian jadi anomaly, dan anomaly tidak pernah dicatat.
+    for i in range(10):
+        scan(c, qr(PENYERANG), device=f"penyerang-{i:04d}")
+    milik_penyerang = s.conn.execute(
+        "SELECT COUNT(*) c FROM bindings WHERE nmid = ?", (PENYERANG,)
+    ).fetchone()["c"]
+    assert milik_penyerang == 0, (
+        f"penyerang berhasil membuat {milik_penyerang} binding lewat API"
+    )
+
+    # Skenario R10 yang murah: penyerang menang balapan cold start dan
+    # memupuk binding sampai mapan dengan modal seminimal mungkin.
+    s.seed_binding(
+        nmid=PENYERANG, lat=LAT, lng=LNG, merchant_name="WARUNG BU SRI",
+        observer_count=bd.MIN_OBSERVERS,
+        first_seen=NOW - timedelta(days=90), last_seen=NOW - timedelta(hours=1),
+    )
+    d = scan(c, qr(PENYERANG), device="penyerang-9999")
+    assert d["verdict"] == "anomaly", (
+        f"basis {bd.MIN_OBSERVERS} vs 47 lolos sebagai {d['verdict']} — "
+        f"ADJACENT_MIN_RATIO tidak bekerja"
+    )
+    assert "adjacent_merchant" not in d["signals"], (
+        "penyerang modal minimum masih dapat pengecualian koeksistensi"
+    )
+    return (f"basis {bd.MIN_OBSERVERS} vs 47 tidak lagi lolos sebagai "
+            f"merchant bersebelahan (rasio {bd.ADJACENT_MIN_RATIO})")
+
+
+
 # ==================================================================
 # Batasan yang diakui — di sini yang diuji adalah KEJUJURAN sistem
 # ==================================================================
+
+@serangan("Dialek penerbit TIDAK dipakai menuduh sticker-swap", ditahan=False)
+def _a22():
+    s_, c = fresh_store()
+    PJP = "93600899"
+
+    def kanonik(nmid, nama):
+        acct = emvco.build_tlv({
+            "00": "ID.CO.QRIS.WWW", "01": PJP + "0000012345",
+            "02": nmid, "03": "UMI"})
+        return emvco.build({
+            "00": "01", "01": "11", "26": acct, "52": "5812", "53": "360",
+            "58": "ID", "59": nama, "60": "BANDUNG", "61": "40257"})
+
+    for i in range(8):
+        scan(c, kanonik(f"ID10000000000{i:02d}", f"TOKO {i}"),
+             lat=LAT + 0.01 + i * 0.01, device=f"warga-{i:04d}")
+
+    # Penipu sticker-swap memakai akun merchant SUNGGUHAN dari penerbit
+    # yang sama. Payload-nya diterbitkan resmi, jadi dialeknya cocok
+    # sempurna — dan sinyal ini memang tidak boleh menangkapnya.
+    d = scan(c, kanonik("ID1000000000077", "WARUNG BU SRI"),
+             lat=LAT + 0.01, device="penipu-0001")
+    assert "issuer_dialect_deviation" not in d["signals"], (
+        "prasyarat berubah — dialek kini menandai payload yang sah "
+        "diterbitkan? Periksa ulang, itu positif palsu.")
+    return ("BUKAN KELEMAHAN: stiker-swap diterbitkan acquirer sungguhan "
+            "sehingga dialeknya cocok. Yang menangkapnya adalah jangkar "
+            "lokasi, bukan sinyal payload")
+
 
 @serangan("Koordinat GPS dipalsukan (mock location)", ditahan=False)
 def _b1():
@@ -710,391 +796,6 @@ def _b3():
             f"perlu jalur konfirmasi merchant")
 
 
-@serangan("Menang balapan cold start dengan modal murah (R10)")
-def _a11():
-    s, c = fresh_store()
-
-    # Jangkar yang korbannya sudah mapan tidak bisa dibajak lewat API:
-    # tiap pemindaian jadi anomaly, dan anomaly tidak pernah dicatat.
-    for i in range(10):
-        scan(c, qr(PENYERANG), device=f"penyerang-{i:04d}")
-    milik_penyerang = s.conn.execute(
-        "SELECT COUNT(*) c FROM bindings WHERE nmid = ?", (PENYERANG,)
-    ).fetchone()["c"]
-    assert milik_penyerang == 0, (
-        f"penyerang berhasil membuat {milik_penyerang} binding lewat API"
-    )
-
-    # Skenario R10 yang murah: penyerang menang balapan cold start dan
-    # memupuk binding sampai mapan dengan modal seminimal mungkin.
-    s.seed_binding(
-        nmid=PENYERANG, lat=LAT, lng=LNG, merchant_name="WARUNG BU SRI",
-        observer_count=bd.MIN_OBSERVERS,
-        first_seen=NOW - timedelta(days=90), last_seen=NOW - timedelta(hours=1),
-    )
-    d = scan(c, qr(PENYERANG), device="penyerang-9999")
-    assert d["verdict"] == "anomaly", (
-        f"basis {bd.MIN_OBSERVERS} vs 47 lolos sebagai {d['verdict']} — "
-        f"ADJACENT_MIN_RATIO tidak bekerja"
-    )
-    assert "adjacent_merchant" not in d["signals"], (
-        "penyerang modal minimum masih dapat pengecualian koeksistensi"
-    )
-    return (f"basis {bd.MIN_OBSERVERS} vs 47 tidak lagi lolos sebagai "
-            f"merchant bersebelahan (rasio {bd.ADJACENT_MIN_RATIO})")
-
-
-@serangan("Akurasi GPS dikarang di bawah batas fisik perangkat")
-def _a12():
-    _, c = fresh_store()
-    # Pemalsu yang mengarang angka sering lupa bahwa angkanya harus
-    # mungkin. GNSS ponsel tidak pernah melaporkan radius di bawah 1 m.
-    for acc in (0, 0.1, 0.5, 0.99):
-        d = scan(c, qr(KORBAN, pan="936000149000000001"),
-                 device="pemalsu-akurasi", acc=acc)
-        assert "implausible_accuracy" in d["signals"], (
-            f"akurasi {acc} m lolos tanpa sinyal"
-        )
-        assert d["verdict"] != "verified", f"akurasi {acc} m tetap verified"
-
-    # Akurasi yang wajar tidak boleh ikut tertandai.
-    for acc in (1.0, 3, 8, 25, 99):
-        d = scan(c, qr(KORBAN, pan="936000149000000001"),
-                 device="pengguna-jujur", acc=acc)
-        assert "implausible_accuracy" not in d["signals"], (
-            f"akurasi wajar {acc} m ditandai palsu"
-        )
-    return "0-0,99 m ditandai; 1-99 m lolos bersih"
-
-
-@serangan("Akurasi dihilangkan untuk melewati invarian akurasi GPS")
-def _a13():
-    _, c = fresh_store()
-    # Kalau accuracy_m opsional, penyerang yang fix-nya buruk tinggal
-    # tidak mengirimkannya dan pemeriksaan ">100 m" tidak pernah jalan.
-    r = c.post("/api/v1/verify", json={
-        "payload": qr(KORBAN, pan="936000149000000001"),
-        "lat": LAT, "lng": LNG, "device_anon_id": "penyembunyi-01"})
-    assert r.status_code == 422, (
-        f"permintaan tanpa accuracy_m diterima (HTTP {r.status_code}) — "
-        f"pintu keluar dari invarian §6 terbuka"
-    )
-    return "permintaan tanpa accuracy_m ditolak 422 di batas sistem"
-
-
-@serangan("Satu QR dinamis disebar ke banyak korban")
-def _a14():
-    _, c = fresh_store()
-
-    def dinamis(tagihan, nominal="250000.00"):
-        acct = emvco.build_tlv({
-            "00": "ID.CO.QRIS.WWW", "01": "936000149000000002",
-            "02": PENYERANG, "03": "UMI"})
-        return emvco.build({
-            "00": "01", "01": "12", "26": acct, "52": "5812", "53": "360",
-            "54": nominal, "58": "ID", "59": "TOKO ONLINE", "60": "BANDUNG",
-            "62": emvco.build_tlv({"01": tagihan})})
-
-    p = dinamis("INV-9999")
-    lokasi = [(LAT, LNG), (-6.9200, 107.6150), (-6.9350, 107.6300),
-              (-6.9000, 107.5900), (-6.8900, 107.6500)]
-    hasil = [scan(c, p, lat=la, lng=ln, device=f"korban-{i:04d}")
-             for i, (la, ln) in enumerate(lokasi)]
-
-    # Korban PERTAMA tidak bisa dilindungi — QR itu belum punya riwayat
-    # apa pun. Itu batasan yang sama dengan cold start, dan diakui.
-    assert all(h["action"] == "cooling_off" for h in hasil[1:]), (
-        f"korban berikutnya lolos: {[h['action'] for h in hasil[1:]]}")
-    assert "dynamic_qr_spread" in hasil[1]["signals"]
-    return (f"korban ke-1 lolos (tanpa riwayat), korban ke-2 dst "
-            f"dihentikan — {len(lokasi) - 1} dari {len(lokasi)}")
-
-
-@serangan("Stiker statis tidak ikut tertuduh dipakai ulang")
-def _a15():
-    _, c = fresh_store()
-    # Stiker statis MEMANG dipindai ribuan kali. Kalau sinyal pemakaian
-    # ulang bocor ke jalur statis, seluruh merchant sah tertuduh.
-    p = qr(KORBAN, pan="936000149000000001")
-    for i in range(40):
-        d = scan(c, p, device=f"pelanggan-{i:04d}")
-    dinamis = [s for s in d["signals"] if "dynamic" in s]
-    assert not dinamis, f"stiker statis kena sinyal dinamis: {dinamis}"
-    assert d["action"] == "proceed", f"40 pemindaian sah -> {d['action']}"
-    return "40 pemindaian stiker statis, nol sinyal pemakaian ulang"
-
-
-@serangan("QR dinamis sah yang dipindai ulang di kasir yang sama")
-def _a16():
-    _, c = fresh_store()
-    acct = emvco.build_tlv({
-        "00": "ID.CO.QRIS.WWW", "01": "936000149000000001",
-        "02": KORBAN, "03": "UMI"})
-    p = emvco.build({
-        "00": "01", "01": "12", "26": acct, "52": "5812", "53": "360",
-        "54": "50000.00", "58": "ID", "59": "WARUNG BU SRI", "60": "BANDUNG",
-        "62": emvco.build_tlv({"01": "INV-0042"})})
-
-    # Tiga percobaan di kasir yang sama: kamera gagal fokus, dibatalkan,
-    # lalu berhasil. Galat GPS-nya belasan meter, bukan kilometer.
-    for i in range(3):
-        d = scan(c, p, lat=LAT + 0.00008 * i, device="pembeli-0001")
-        assert d["action"] == "proceed", (
-            f"percobaan ke-{i + 1} di kasir yang sama -> {d['action']}")
-    return "3 percobaan di satu kasir tetap proceed"
-
-
-@serangan("Stiker luar kota ditempel di warung — PEMINDAIAN PERTAMA")
-def _a17():
-    s_, c = fresh_store()
-
-    def q(nmid, nama, kota):
-        acct = emvco.build_tlv({
-            "00": "ID.CO.QRIS.WWW", "01": "93600899" + nmid[-10:],
-            "02": nmid, "03": "UMI"})
-        return emvco.build({
-            "00": "01", "01": "11", "26": acct, "52": "5812", "53": "360",
-            "58": "ID", "59": nama, "60": kota, "61": "40257"})
-
-    # Wilayah harus dikenal dulu. Sebelum itu sistem WAJIB diam —
-    # ketiadaan pengetahuan bukan izin menuduh (invarian §2).
-    d = scan(c, q("ID1000000000001", "ES BUAH", "JAKARTA"),
-             lat=LAT + 0.03, device="warga-0001")
-    assert "city_mismatch" not in d["signals"], (
-        "menuduh padahal wilayahnya belum dikenal")
-
-    for i in range(2, 10):
-        scan(c, q(f"ID10000000000{i:02d}", f"TOKO {i}", "BANDUNG"),
-             lat=LAT + 0.03 + i * 2e-4, device=f"warga-{i:04d}")
-
-    # Sekarang: stiker luar kota, pemindaian PERTAMA, tanpa riwayat
-    # apa pun tentang merchant itu.
-    d = scan(c, q("ID1000000000099", "ES BUAH PAK ASEP", "JAKARTA"),
-             lat=LAT + 0.03, device="warga-9999")
-    assert "city_mismatch" in d["signals"], (
-        f"stiker luar kota lolos pada scan pertama: {d['signals']}")
-    assert d["action"] in ("step_up", "cooling_off"), (
-        f"friksi cuma {d['action']}")
-
-    # Merchant Bandung yang benar-benar baru TIDAK boleh ikut kena.
-    bersih = scan(c, q("ID1000000000088", "WARUNG BARU", "BANDUNG"),
-                  lat=LAT + 0.03, device="warga-8888")
-    assert "city_mismatch" not in bersih["signals"], (
-        "merchant sah yang baru ikut tertuduh")
-    return f"tertangkap pada scan pertama -> {d['action']}; merchant sah bersih"
-
-
-@serangan("Meracuni pengetahuan wilayah dengan pemindaian berulang")
-def _a18():
-    s_, c = fresh_store()
-
-    def q(nmid, kota):
-        acct = emvco.build_tlv({
-            "00": "ID.CO.QRIS.WWW", "01": "93600899" + nmid[-10:],
-            "02": nmid, "03": "UMI"})
-        return emvco.build({
-            "00": "01", "01": "11", "26": acct, "52": "5812", "53": "360",
-            "58": "ID", "59": "X", "60": kota, "61": "40257"})
-
-    for i in range(2, 10):
-        scan(c, q(f"ID10000000000{i:02d}", "BANDUNG"),
-             lat=LAT + 0.03 + i * 2e-4, device=f"warga-{i:04d}")
-
-    # Penyerang membanjiri wilayah dengan satu stiker "JAKARTA".
-    for i in range(400):
-        scan(c, q("ID1000000000099", "JAKARTA"), lat=LAT + 0.03,
-             device=f"racun-{i:05d}")
-
-    kota, setuju, total = s_.area_city(LAT + 0.03, LNG)
-    assert kota == "BANDUNG", (
-        f"pengetahuan wilayah berhasil diracuni jadi {kota}")
-    return (f"400 pemindaian racun, wilayah tetap {kota} "
-            f"({setuju}/{total} NMID) — yang dihitung NMID, bukan pemindaian")
-
-
-@serangan("Satu NMID dipakai untuk banyak korban dengan nama berbeda")
-def _a19():
-    s_, c = fresh_store()
-
-    def q(nmid, nama):
-        acct = emvco.build_tlv({
-            "00": "ID.CO.QRIS.WWW", "01": "93600899" + nmid[-10:],
-            "02": nmid, "03": "UMI"})
-        return emvco.build({
-            "00": "01", "01": "11", "26": acct, "52": "5812", "53": "360",
-            "58": "ID", "59": nama, "60": "BANDUNG", "61": "40257"})
-
-    N = "ID1000000000077"
-    scan(c, q(N, "LAUNDRY KILAT"), lat=LAT + 0.02, device="korban-0001")
-    d = scan(c, q(N, "ES BUAH PAK ASEP"), lat=LAT + 0.05, device="korban-0002")
-    assert "nmid_name_inconsistent" in d["signals"], (
-        f"satu NMID dua nama lolos: {d['signals']}")
-    assert d["action"] == "cooling_off"
-
-    # Merchant sah yang namanya konsisten tidak boleh kena.
-    scan(c, q("ID1000000000066", "TOKO KONSISTEN"), lat=LAT + 0.07,
-         device="warga-0001")
-    bersih = scan(c, q("ID1000000000066", "TOKO KONSISTEN"), lat=LAT + 0.07,
-                  device="warga-0002")
-    assert "nmid_name_inconsistent" not in bersih["signals"]
-    return "dua nama -> cooling_off; nama konsisten tetap bersih"
-
-
-@serangan("Jejak serangan lama tidak menghukum merchant baru selamanya")
-def _a20():
-    from datetime import timedelta as _td
-
-    from qshield import behavior as _bh
-
-    # Jangkar pernah diserang, lalu penyerangnya pergi dan merchant sah
-    # membuka usaha di titik yang sama berbulan-bulan kemudian. Ia tidak
-    # boleh menanggung sejarah yang bukan miliknya.
-    baru = NOW
-    for hari, harus_ada in ((0, True), (7, True), (30, False), (90, False)):
-        st = _bh.AnchorState(anomaly_attempts=3,
-                             last_anomaly_at=baru - _td(days=hari))
-        sig = _bh._behavioral_signals(st, False, baru)
-        ada = any(x.name == "repeated_anomaly_at_anchor" for x in sig)
-        assert ada == harus_ada, (
-            f"{hari} hari setelah serangan: sinyal "
-            f"{'masih ada' if ada else 'hilang'}, seharusnya "
-            f"{'ada' if harus_ada else 'pudar'}")
-
-    # Bobotnya harus menurun monoton, bukan melompat.
-    bobot = []
-    for hari in (0, 1, 3, 7, 14):
-        st = _bh.AnchorState(anomaly_attempts=3,
-                             last_anomaly_at=baru - _td(days=hari))
-        sig = _bh._behavioral_signals(st, False, baru)
-        bobot.append(sig[0].weight if sig else 0)
-    assert bobot == sorted(bobot, reverse=True), f"bobot tidak menurun: {bobot}"
-    return f"bobot {bobot} pada hari 0/1/3/7/14, pudar penuh sebelum 30 hari"
-
-
-@serangan("QR dibangkitkan ulang oleh generator lain")
-def _a21():
-    s_, c = fresh_store()
-    PJP = "93600899"
-
-    def kanonik(nmid, nama):
-        acct = emvco.build_tlv({
-            "00": "ID.CO.QRIS.WWW", "01": PJP + "0000012345",
-            "02": nmid, "03": "UMI"})
-        return emvco.build({
-            "00": "01", "01": "11", "26": acct, "52": "5812", "53": "360",
-            "58": "ID", "59": nama, "60": "BANDUNG", "61": "40257"})
-
-    # Dialek penerbit dipelajari dari merchant-merchant sahnya.
-    for i in range(8):
-        scan(c, kanonik(f"ID10000000000{i:02d}", f"TOKO {i}"),
-             lat=LAT + 0.01 + i * 0.01, device=f"warga-{i:04d}")
-
-    # Penyerang menyusun ulang payload dengan generatornya sendiri:
-    # sub-tag beda urutan, CRC huruf kecil. PJP yang diakui sama.
-    acct = "".join(f"{t}{len(v):02d}{v}" for t, v in
-                   [("00", "ID.CO.QRIS.WWW"), ("02", "ID1000000000099"),
-                    ("01", PJP + "0000012345"), ("03", "UMI")])
-    body = "".join(f"{t}{len(v):02d}{v}" for t, v in
-                   [("00", "01"), ("01", "11"), ("26", acct), ("52", "5812"),
-                    ("53", "360"), ("58", "ID"), ("59", "ES BUAH"),
-                    ("60", "BANDUNG"), ("61", "40257")]) + "6304"
-    palsu = body + emvco.crc16_ccitt(body).lower()
-
-    d = scan(c, palsu, lat=LAT + 0.01, device="penyerang-0001")
-    assert "issuer_dialect_deviation" in d["signals"], (
-        f"QR dibangkitkan ulang lolos: {d['signals']}")
-    assert d["action"] == "cooling_off", f"friksi cuma {d['action']}"
-
-    # Merchant SAH baru dari penerbit yang sama tidak boleh kena.
-    bersih = scan(c, kanonik("ID1000000000088", "WARUNG BARU"),
-                  lat=LAT + 0.01, device="warga-8888")
-    assert "issuer_dialect_deviation" not in bersih["signals"], (
-        "merchant sah dari penerbit yang sama ikut tertuduh")
-    return "tertangkap pada scan pertama; merchant sah penerbit itu bersih"
-
-
-@serangan("Dialek penerbit TIDAK dipakai menuduh sticker-swap", ditahan=False)
-def _a22():
-    s_, c = fresh_store()
-    PJP = "93600899"
-
-    def kanonik(nmid, nama):
-        acct = emvco.build_tlv({
-            "00": "ID.CO.QRIS.WWW", "01": PJP + "0000012345",
-            "02": nmid, "03": "UMI"})
-        return emvco.build({
-            "00": "01", "01": "11", "26": acct, "52": "5812", "53": "360",
-            "58": "ID", "59": nama, "60": "BANDUNG", "61": "40257"})
-
-    for i in range(8):
-        scan(c, kanonik(f"ID10000000000{i:02d}", f"TOKO {i}"),
-             lat=LAT + 0.01 + i * 0.01, device=f"warga-{i:04d}")
-
-    # Penipu sticker-swap memakai akun merchant SUNGGUHAN dari penerbit
-    # yang sama. Payload-nya diterbitkan resmi, jadi dialeknya cocok
-    # sempurna — dan sinyal ini memang tidak boleh menangkapnya.
-    d = scan(c, kanonik("ID1000000000077", "WARUNG BU SRI"),
-             lat=LAT + 0.01, device="penipu-0001")
-    assert "issuer_dialect_deviation" not in d["signals"], (
-        "prasyarat berubah — dialek kini menandai payload yang sah "
-        "diterbitkan? Periksa ulang, itu positif palsu.")
-    return ("BUKAN KELEMAHAN: stiker-swap diterbitkan acquirer sungguhan "
-            "sehingga dialeknya cocok. Yang menangkapnya adalah jangkar "
-            "lokasi, bukan sinyal payload")
-
-
-@serangan("Nominal QR dinamis diubah, nomor tagihan tetap")
-def _a23():
-    _, c = fresh_store()
-
-    def dinamis(nominal, tagihan="INV-0042"):
-        acct = emvco.build_tlv({
-            "00": "ID.CO.QRIS.WWW", "01": "936008990000012345",
-            "02": "ID1098765432109", "03": "UMI"})
-        return emvco.build({
-            "00": "01", "01": "12", "26": acct, "52": "5812", "53": "360",
-            "54": nominal, "58": "ID", "59": "TOKO ONLINE", "60": "BANDUNG",
-            "62": emvco.build_tlv({"01": tagihan})})
-
-    # Pelanggan memindai QR sah dari kasir.
-    sah = scan(c, dinamis("50000.00"), device="pembeli-0001")
-    assert "bill_amount_changed" not in sah["signals"]
-
-    # Penipu mencegat, mengubah nominal saja. Hash payload berubah —
-    # jadi deteksi pemakaian ulang melewatkannya — tapi nomor
-    # tagihannya tetap, dan itu yang menangkapnya.
-    d = scan(c, dinamis("500000.00"), device="korban-0001")
-    assert "bill_amount_changed" in d["signals"], (
-        f"perubahan nominal lolos: {d['signals']}")
-    # Alasannya harus menyebut KEDUA nominalnya — itu yang membuat
-    # pengguna bisa memeriksanya sendiri ke layar kasir.
-    alasan = " ".join(d["reasons"])
-    assert "50000.00" in alasan and "500000.00" in alasan, (
-        "alasan tidak menyebut kedua nominalnya")
-
-    # Tagihan berbeda dengan nominal berbeda adalah hal normal.
-    normal = scan(c, dinamis("75000.00", "INV-0043"), device="pembeli-0002")
-    assert "bill_amount_changed" not in normal["signals"], (
-        "tagihan berbeda ikut tertuduh")
-    return "perubahan nominal tertangkap; tagihan berbeda tetap bersih"
-
-
-@serangan("Sinyal tagihan tidak menyentuh stiker statis")
-def _a24():
-    _, c = fresh_store()
-    # Stiker statis tidak punya nomor tagihan maupun nominal.
-    p = qr(KORBAN, pan="936000149000000001", nama="WARUNG BU SRI")
-    for i in range(5):
-        d = scan(c, p, device=f"pelanggan-{i:04d}")
-    assert "bill_amount_changed" not in d["signals"]
-    assert "dynamic_qr_reused" not in d["signals"]
-    return "5 pemindaian stiker statis, nol sinyal jalur dinamis"
-
-
-# ==================================================================
-# Batasan yang diakui — di sini yang diuji adalah KEJUJURAN sistem
-# ==================================================================
-
 @serangan("Cold start dengan modal besar (sisa R10)", ditahan=False)
 def _b4():
     s, c = fresh_store()
@@ -1120,10 +821,6 @@ def _b4():
             f"(naik dari {bd.MIN_OBSERVERS}); penutupan sungguhan menuntut "
             f"deteksi integritas perangkat")
 
-
-# ==================================================================
-# Laporan
-# ==================================================================
 
 print("=" * 72)
 print("SUITE ADVERSARIAL")

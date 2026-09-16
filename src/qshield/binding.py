@@ -120,6 +120,25 @@ MIN_AGE_HOURS = 24          # rentang minimal pengamatan pertama ke terakhir
 SCATTER_MIN_AREAS = 2       # jumlah area lain yang memicu alarm sebaran
 STALE_DAYS = 90             # binding tak terlihat selama ini dianggap usang
 
+# Sinyal yang berarti "seseorang membawa stiker ke SINI yang bukan
+# miliknya". Hanya ini yang boleh menaikkan anomaly_attempts jangkar.
+#
+# Sebelumnya anomali APA PUN menaikkannya — termasuk cacat payload yang
+# tidak ada hubungannya dengan lokasi. Akibatnya memindai satu QR scam
+# bercacat di meja kerja menandai MEJA ITU sebagai diserang, dan tiap
+# merchant sah yang dipindai di situ mewarisi kecurigaannya.
+#
+# Ditemukan dari lapangan: tujuh merchant sungguhan di satu titik, tidak
+# satu pun mapan, tapi jangkarnya punya empat percobaan anomali — semua
+# berasal dari QR scam yang cacat payload-nya, bukan dari percobaan
+# pertukaran stiker.
+ANOMALI_LOKASI = frozenset({
+    "nmid_changed_at_anchor",
+    "nmid_changed_at_registered_anchor",
+    "nmid_scatter",
+    "printed_nmid_mismatch",
+})
+
 VERIFIED = "verified"
 UNKNOWN = "unknown"
 ANOMALY = "anomaly"
