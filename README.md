@@ -81,6 +81,7 @@ python3 tests/test_hardening.py                # input, auth, rate limit, audit,
 python3 tests/test_contract.py                 # kunci bentuk API v1
 python3 tests/test_frontend.py                 # kecocokan halaman dengan API
 python3 tests/test_registration.py             # pendaftaran merchant + penyalahgunaannya
+python3 tests/test_transfer.py                 # Layer 2 jalur transfer manual
 PYTHONPATH=scripts python3 tests/test_api.py   # test_api.py mengimpor scripts/seed.py
 
 python3 scripts/calibrate_geo.py               # kalibrasi presisi geohash

@@ -1734,6 +1734,63 @@ fakta yang lebih sederhana, karena fakta bisa diperagakan.
 
 ---
 
+## Keputusan 45 — Layer 2 jalur transfer manual dibangun
+
+Tim memutuskan menyesuaikan sistem dengan naskah pitch, bukan
+sebaliknya. Dari delapan klaim yang tidak ada (Keputusan 44), tujuh
+bisa dibangun. Ini yang terbesar.
+
+Keputusan 9 dulu menempatkan scoring transfer manual di luar jangkauan
+dengan alasan: pada transfer manual tidak ada artefak yang bisa
+diperiksa sebelum korban menekan kirim. Alasan itu masih benar — yang
+keliru adalah menyimpulkan bahwa karena itu tidak ada yang bisa dinilai.
+
+**Yang bisa dinilai adalah BENTUK transaksinya**, dan itu justru pola
+rekayasa sosial: korban dituntun lewat telepon, diburu-buru, mengirim ke
+rekening yang belum pernah ditujunya, yang baru dibuka beberapa hari
+lalu.
+
+**Telemetrinya datang dari PJP, bukan dikumpulkan sendiri.** PJP tahu
+umur rekening, riwayat penerima, dan laju transaksi. Kami tidak, dan
+memang tidak seharusnya — meminta data itu langsung berarti meminta
+identitas pengguna, yang dilarang invarian §8. Pola yang sama dengan
+`device_integrity`: klien yang tidak bisa mengisinya tidak dihukum,
+ketiadaannya diungkapkan.
+
+**Kesulitan kalibrasi yang menarik: `call_active`.** Pola penipuan
+memang korban sedang ditelepon pelaku — tapi menelepon ORANG YANG
+DIBAYAR sambil mentransfer adalah hal yang sangat wajar. Dari sisi
+sistem keduanya identik.
+
+Karena itu dikalibrasi supaya **tidak ada sinyal tunggal yang mencapai
+`step_up`**. Diuji dan dikunci:
+
+| Beban | Hasil |
+|---|---|
+| transfer sah kena friksi berat | 1,4% |
+| pola penipuan tertangkap | 89,6% |
+| sinyal tunggal mencapai step_up | nol |
+
+**Lapisan bersamanya bekerja sama seperti pada jalur QRIS.** Rekening
+penampung tidak berhenti di batas satu penyelenggara, persis seperti
+stiker penipu. Diuji: transfer tanpa satu pun tanda lain — rekening
+berumur 200 hari, tidak sedang menelepon, tidak ada lonjakan — tetap
+naik ke `step_up` karena tiga penyelenggara lain sudah melaporkan
+rekening itu.
+
+Satu perbedaan disengaja dari jangkar lokasi: **satu pelapor sudah
+cukup** menaikkan ke `step_up`. Laporan penipuan dibuat penyelenggara
+setelah investigasi, bukan oleh pemindai anonim — bobot buktinya tidak
+sama.
+
+**Privasi.** Nomor rekening disimpan sebagai hash, tidak pernah apa
+adanya, dan tidak pernah masuk jejak audit. Identitas pembayar tidak
+diminta dan diuji tidak pernah mendarat di basis data. Yang dinilai
+adalah penerima uang — pihak yang dalam skenario penipuan adalah
+pelakunya, bukan korbannya.
+
+---
+
 ## Hasil pengujian
 
 ```
