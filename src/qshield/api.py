@@ -24,6 +24,7 @@ from . import behavior as bh
 from . import binding as bd
 from . import emvco
 from . import geo
+from . import transfer as tf
 from .limits import RateLimiter
 from .store import Store
 
@@ -398,6 +399,121 @@ def survei(sample: FieldSample, request: Request, response: Response):
 
     jumlah = sum(1 for _ in open(FIELD_FILE))
     return {"ok": True, "tersimpan": jumlah, "label": sample.label}
+
+
+class TransferTelemetryIn(BaseModel):
+    """Telemetri yang hanya PJP bisa isi.
+
+    Seluruhnya opsional, dan ketiadaannya TIDAK dihukum — pola yang sama
+    dengan device_integrity, dan alasan yang sama. Yang dilakukan
+    sebagai gantinya: ketiadaannya diungkapkan di tanggapan.
+    """
+
+    first_time_beneficiary: Optional[bool] = Field(
+        None, description="pembayar belum pernah mengirim ke rekening ini")
+    beneficiary_account_age_days: Optional[int] = Field(
+        None, ge=0, le=36500, description="umur rekening tujuan, hari")
+    call_active: Optional[bool] = Field(
+        None, description="pembayar sedang menelepon saat transfer")
+    transfers_last_hour: Optional[int] = Field(
+        None, ge=0, le=10000, description="transfer dalam 60 menit terakhir")
+
+
+class AssessTransferRequest(BaseModel):
+    """Rencana transfer bank manual yang hendak dinilai.
+
+    Tidak ada payload, tidak ada koordinat — transfer manual tidak punya
+    artefak fisik yang bisa diperiksa. Yang dinilai adalah bentuk
+    transaksinya dan reputasi rekening tujuannya.
+
+    Identitas PEMBAYAR tidak diminta dan tidak akan diterima.
+    """
+
+    beneficiary_account: str = Field(
+        ..., min_length=4, max_length=34, pattern=r"^[A-Za-z0-9]+$",
+        description="nomor rekening tujuan; disimpan sebagai hash saja")
+    amount: Optional[float] = Field(None, ge=0)
+    telemetry: Optional[TransferTelemetryIn] = None
+
+
+class AssessTransferResponse(BaseModel):
+    action: str
+    risk_score: int
+    reasons: list
+    signals: list
+    telemetry: str
+    processing_ms: float
+
+
+@app.post("/api/v1/assess-transfer", response_model=AssessTransferResponse)
+def nilai_transfer(req: AssessTransferRequest, request: Request):
+    """Layer 2 pada jalur transfer manual.
+
+    Jalur QRIS punya artefak yang bisa diperiksa. Jalur ini tidak —
+    korban mengetik nomor rekening yang didiktekan seseorang di telepon.
+    Yang tersisa untuk dinilai adalah bentuk transaksinya, dan apa yang
+    diketahui lapisan bersama tentang rekening tujuannya.
+    """
+    started = time.perf_counter()
+    client_id = getattr(request.state, "client_id", None)
+
+    t = req.telemetry
+    telemetri = tf.TransferTelemetry(
+        first_time_beneficiary=t.first_time_beneficiary if t else None,
+        beneficiary_account_age_days=(
+            t.beneficiary_account_age_days if t else None),
+        call_active=t.call_active if t else None,
+        transfers_last_hour=t.transfers_last_hour if t else None,
+    )
+    riwayat = store.beneficiary_history(req.beneficiary_account)
+    v = tf.evaluate(telemetri, riwayat)
+
+    elapsed = round((time.perf_counter() - started) * 1000, 2)
+    audit.get_logger().info(json.dumps({
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "event": "assess_transfer",
+        "client": client_id,
+        # Nomor rekeningnya TIDAK dicatat — hanya hash-nya, dan itu pun
+        # dipotong. Cukup untuk menelusuri putusan, tidak cukup untuk
+        # memulihkan nomornya.
+        "beneficiary": store.account_hash(req.beneficiary_account)[:16],
+        "action": v.action,
+        "risk_score": v.risk_score,
+        "signals": v.signals,
+        "telemetry": v.telemetry_status,
+        "processing_ms": elapsed,
+    }, ensure_ascii=False))
+
+    return AssessTransferResponse(
+        action=v.action, risk_score=v.risk_score, reasons=v.reasons,
+        signals=v.signals, telemetry=v.telemetry_status,
+        processing_ms=elapsed)
+
+
+class ReportBeneficiaryRequest(BaseModel):
+    beneficiary_account: str = Field(
+        ..., min_length=4, max_length=34, pattern=r"^[A-Za-z0-9]+$")
+
+
+@app.post("/api/v1/beneficiary-reports", status_code=201)
+def laporkan_rekening(req: ReportBeneficiaryRequest, request: Request):
+    """Laporkan rekening tujuan sebagai penerima penipuan.
+
+    Idempoten per penyelenggara: satu PJP yang melapor seratus kali
+    tetap satu suara. Bobotnya berskala dengan jumlah PENYELENGGARA yang
+    melapor, bukan jumlah laporan — pola yang sama dengan invarian §5.
+    """
+    client_id = getattr(request.state, "client_id", None) or "anonymous"
+    hasil = store.report_beneficiary(req.beneficiary_account, client_id)
+
+    audit.get_logger().info(json.dumps({
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "event": "beneficiary_reported",
+        "reporter": client_id,
+        "beneficiary": store.account_hash(req.beneficiary_account)[:16],
+        "distinct_reporters": hasil["reporters"],
+    }, ensure_ascii=False))
+    return {"ok": True, "reporters": hasil["reporters"]}
 
 
 class RegisterRequest(BaseModel):

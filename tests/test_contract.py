@@ -87,6 +87,9 @@ JALUR = {
     "/api/v1/merchants/{nmid}",
     # Ditambahkan 11 Sep 2026. Mati kecuali QSHIELD_FIELD_MODE=on.
     "/api/v1/field",
+    # Ditambahkan 16 Sep 2026 — Layer 2 jalur transfer manual. ADITIF.
+    "/api/v1/assess-transfer",
+    "/api/v1/beneficiary-reports",
 }
 
 _hasil = []

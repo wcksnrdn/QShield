@@ -142,6 +142,27 @@ CREATE TABLE IF NOT EXISTS issuer_dialect (
     PRIMARY KEY (pan_prefix, attribute, value, nmid)
 );
 
+-- Reputasi rekening tujuan transfer manual.
+--
+-- Inilah lapisan bersama untuk jalur non-QRIS: rekening penampung tidak
+-- berhenti di batas satu penyelenggara, persis seperti stiker penipu
+-- tidak berhenti di batas satu penyelenggara.
+--
+-- Yang disimpan adalah HASH nomor rekening, bukan nomornya. Cukup untuk
+-- mengenali rekening yang sama dilaporkan lagi, tidak cukup untuk
+-- memulihkan daftar nomor rekening dari basis data yang bocor.
+--
+-- Yang dinilai adalah PENERIMA uang — pihak yang dalam skenario
+-- penipuan adalah pelakunya. Identitas PEMBAYAR tidak pernah masuk ke
+-- sini, sama seperti invarian §8 pada jalur QRIS.
+CREATE TABLE IF NOT EXISTS beneficiary_report (
+    account_hash  TEXT NOT NULL,
+    reporter      TEXT NOT NULL,
+    reported_at   TEXT NOT NULL,
+    PRIMARY KEY (account_hash, reporter)
+);
+
+CREATE INDEX IF NOT EXISTS idx_benef ON beneficiary_report(account_hash);
 CREATE INDEX IF NOT EXISTS idx_dialect ON issuer_dialect(pan_prefix, attribute);
 CREATE INDEX IF NOT EXISTS idx_areacity ON area_city(geohash_5);
 -- Nominal yang pernah muncul untuk satu nomor tagihan.
@@ -738,6 +759,50 @@ class Store:
                     "INSERT OR IGNORE INTO issuer_dialect "
                     "(pan_prefix, attribute, value, nmid) VALUES (?, ?, ?, ?)",
                     (prefix, atribut, nilai, nmid))
+
+    def account_hash(self, account: str) -> str:
+        """Hash nomor rekening. Nomornya sendiri tidak pernah disimpan."""
+        bahan = f"{self._salt}|benef|{account.strip()}".encode("utf-8")
+        return hashlib.sha256(bahan).hexdigest()
+
+    def report_beneficiary(self, account: str, reporter: str,
+                           now: Optional[datetime] = None) -> dict:
+        """Laporkan rekening tujuan sebagai penerima penipuan.
+
+        Idempoten per (rekening, pelapor): satu penyelenggara yang
+        melapor seratus kali tetap satu suara — pola yang sama dengan
+        invarian §5.
+        """
+        now = now or datetime.now(timezone.utc)
+        h = self.account_hash(account)
+        with self._lock:
+            self.conn.execute(
+                "INSERT INTO beneficiary_report "
+                "(account_hash, reporter, reported_at) VALUES (?, ?, ?) "
+                "ON CONFLICT (account_hash, reporter) DO UPDATE SET "
+                "reported_at = excluded.reported_at",
+                (h, reporter, _iso(now)))
+            n = self.conn.execute(
+                "SELECT COUNT(DISTINCT reporter) n FROM beneficiary_report "
+                "WHERE account_hash = ?", (h,)).fetchone()["n"]
+        return {"ok": True, "reporters": n}
+
+    def beneficiary_history(self, account: str):
+        """Riwayat laporan untuk rekening ini, atau None."""
+        from . import transfer as tf
+
+        h = self.account_hash(account)
+        with self._lock:
+            baris = self.conn.execute(
+                "SELECT COUNT(*) total, COUNT(DISTINCT reporter) pelapor, "
+                "MAX(reported_at) terakhir FROM beneficiary_report "
+                "WHERE account_hash = ?", (h,)).fetchone()
+        if not baris or not baris["total"]:
+            return None
+        return tf.BeneficiaryHistory(
+            reports=baris["total"],
+            distinct_reporters=baris["pelapor"],
+            last_report_at=_parse(baris["terakhir"]))
 
     def dialect_profile(self, pan_prefix: str) -> dict:
         """Dialek dominan penerbit ini, per atribut.

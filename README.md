@@ -98,6 +98,7 @@ src/qshield/     package utama — import sebagai `qshield` setelah `pip install
   geo.py           geohash encode/decode, tetangga, haversine
   binding.py       Layer 1 — konsensus lokasi, plus aturan komposisi
   behavior.py      Layer 2 — sinyal struktural & perilaku artefak QR
+  transfer.py      Layer 2 jalur transfer manual
   store.py         persistensi SQLite
   auth.py          autentikasi klien PJP (kunci disimpan sebagai hash)
   limits.py        pembatasan laju (memori, tanpa menyimpan IP)

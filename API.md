@@ -38,6 +38,7 @@ membuat mereka tidak tahu harus menampilkan apa.
 | 10 Sep 2026 | **`accuracy_m` jadi wajib** | **memecah klien** |
 | 10 Sep 2026 | `X-API-Key` jadi syarat pada `/verify` | **memecah klien** |
 | 11 Sep 2026 | `POST/DELETE /api/v1/merchants` ditambahkan | aditif |
+| 16 Sep 2026 | `POST /assess-transfer`, `POST /beneficiary-reports` | aditif |
 | 11 Sep 2026 | sinyal `registered_merchant`, `nmid_changed_at_registered_anchor`, `mobile_merchant` | aditif — `signals` memang daftar terbuka |
 
 Dua yang terakhir terjadi sebelum ada klien eksternal, jadi versinya
@@ -197,6 +198,51 @@ bisa dibatalkan: tiap pendaftaran mencatat pendaftarnya, dan sinyal
 `registered_merchant` selalu berbeda dari `established_binding`
 sehingga auditor tahu sebuah verdict `verified` datang dari pernyataan
 atau dari konsensus.
+
+## `POST /api/v1/assess-transfer`
+
+Layer 2 pada jalur transfer bank manual. Tidak ada payload dan tidak ada
+koordinat — transfer manual tidak punya artefak fisik yang bisa
+diperiksa.
+
+| Field | Tipe | Wajib | Catatan |
+|---|---|---|---|
+| `beneficiary_account` | string | ya | 4–34 alfanumerik; **disimpan sebagai hash saja** |
+| `amount` | number | tidak | |
+| `telemetry` | object | tidak | lihat di bawah |
+
+`telemetry` — seluruhnya opsional, diisi PJP:
+
+| Field | Tipe | Dari mana |
+|---|---|---|
+| `first_time_beneficiary` | boolean | riwayat transfer pengguna di sisi Anda |
+| `beneficiary_account_age_days` | integer | umur rekening tujuan |
+| `call_active` | boolean | status panggilan — **aplikasi native Anda** |
+| `transfers_last_hour` | integer | laju transaksi di sisi Anda |
+
+**Identitas pembayar tidak diminta dan tidak akan diterima.** Yang
+dinilai adalah rekening penerima — pihak yang dalam skenario penipuan
+adalah pelakunya.
+
+Tanggapan memakai empat tier yang sama, plus `telemetry`:
+`provided` atau `not_provided`. Ketiadaan telemetri **tidak diberi
+skor**, tapi juga tidak menghasilkan `proceed` — tanpa telemetri kami
+memang tidak menilai apa pun.
+
+## `POST /api/v1/beneficiary-reports`
+
+Laporkan rekening tujuan sebagai penerima penipuan.
+
+```json
+{ "beneficiary_account": "8801234567" }
+```
+
+Idempoten per penyelenggara: satu PJP yang melapor seratus kali tetap
+satu suara. Bobotnya berskala dengan jumlah **penyelenggara** yang
+melapor, bukan jumlah laporan.
+
+Inilah lapisan bersama untuk jalur non-QRIS — rekening penampung tidak
+berhenti di batas satu penyelenggara.
 
 ## `GET /api/v1/health`
 
