@@ -1935,6 +1935,56 @@ sadar, bukan efek samping.
 
 ---
 
+## Keputusan 48 — Cacat payload tidak lagi menandai LOKASI sebagai diserang
+
+Dari lapangan, untuk kedua kalinya: QRIS tukang es kelapa yang
+sungguh-sungguh miliknya menghasilkan "butuh verifikasi". Kali ini
+bukan kebersihan demo — ini cacat desain.
+
+**Apa yang terjadi.** Tujuh merchant sungguhan dipindai di satu titik
+yang sama, tidak satu pun mapan, tapi jangkarnya mencatat empat
+percobaan anomali. Tiap merchant sah mewarisi bobot 30, sehingga
+`35 + 30 = 65` — tepat di tier `step_up`.
+
+**Akar masalahnya:** `note_anomaly()` dipanggil untuk anomali APA PUN.
+Termasuk cacat payload yang sama sekali tidak berkaitan dengan lokasi —
+NMID salah bentuk, QR statis bernominal, QR dinamis dipakai ulang.
+
+Jadi memindai satu QR scam bercacat di sebuah meja menandai **meja itu**
+sebagai diserang, dan setiap merchant sah yang dipindai di situ ikut
+tertuduh.
+
+Itu keliru secara konsep. Cacat payload mengatakan sesuatu tentang
+KODENYA, bukan tentang TEMPATNYA.
+
+**Dua perbaikan:**
+
+1. Hanya anomali yang berkaitan dengan lokasi yang dicatat —
+   `nmid_changed_at_anchor`, `nmid_changed_at_registered_anchor`,
+   `nmid_scatter`, dan `printed_nmid_mismatch`. Keempatnya berarti
+   "seseorang membawa stiker ke SINI yang bukan miliknya".
+2. Sinyalnya hanya berlaku bila jangkar punya pemilik yang **mapan**.
+   Kalau belum ada yang mapan di sana, kita tidak tahu tempat itu milik
+   siapa — dan percobaan masa lalu tidak mengatakan apa pun tentang
+   merchant yang baru muncul.
+
+Sesudahnya, empat merchant sungguhan mereka yang tadinya `step_up`
+kembali ke `warn` skor 15, tampil netral biru. Percobaan pertukaran
+yang sesungguhnya tetap tercatat — diuji terpisah.
+
+**Temuan sampingan: 13 skenario adversarial terduplikasi.** Beberapa
+penyuntingan saya memakai `str.replace()` tanpa batas hitungan, dan
+teks penanda bagian ikut terbawa di tiap sisipan — sehingga penggantian
+berikutnya mengenai semua salinannya. Berkasnya menyusut dari 1.211
+menjadi 853 baris, dari 45 blok menjadi 32 skenario unik.
+
+Duplikatnya tidak mengubah hasil, tapi sempat menyesatkan: perbaikan
+pada satu salinan tampak tidak berpengaruh karena salinan lain masih
+gagal. Pelajaran yang sama dengan Keputusan 41 — penyuntingan yang
+tidak diverifikasi menghabiskan waktu untuk bug yang tidak ada.
+
+---
+
 ## Hasil pengujian
 
 ```

@@ -584,7 +584,7 @@ def _structural_signals(parsed) -> list:
 
 
 def _behavioral_signals(state: Optional[AnchorState], nmid_matches_anchor: bool,
-                        now: datetime) -> list:
+                        now: datetime, anchor_has_owner: bool = False) -> list:
     """Sinyal dari agregat jangkar."""
     if state is None:
         return []
@@ -596,7 +596,12 @@ def _behavioral_signals(state: Optional[AnchorState], nmid_matches_anchor: bool,
     # jangkar. Tanpa syarat itu, penyerang bisa menaikkan risiko merchant
     # jujur cukup dengan menempel stiker palsu berkali-kali di depannya —
     # penolakan layanan lewat counter kami sendiri.
-    if state.anomaly_attempts > 0 and not nmid_matches_anchor:
+    # Hanya berlaku bila jangkar ini punya pemilik yang MAPAN. Kalau
+    # belum ada yang mapan di sini, kita tidak tahu tempat ini milik
+    # siapa — dan percobaan anomali masa lalu tidak mengatakan apa pun
+    # tentang merchant yang baru muncul.
+    if (state.anomaly_attempts > 0 and not nmid_matches_anchor
+            and anchor_has_owner):
         bobot = min(W_ANOMALY_CAP, W_ANOMALY_BASE * state.anomaly_attempts)
 
         # Peluruhan eksponensial sejak serangan terakhir.
@@ -622,6 +627,7 @@ def evaluate(
     parsed,
     state: Optional[AnchorState] = None,
     nmid_matches_anchor: bool = False,
+    anchor_has_owner: bool = False,
     now: Optional[datetime] = None,
     accuracy_m: Optional[float] = None,
     has_coords: bool = False,
@@ -661,7 +667,8 @@ def evaluate(
                + _origin_signals(parsed, area, other_names)
                + _dialect_signals(parsed, issuer_profile)
                + _rarity_signals(parsed, feature_corpus)
-               + _behavioral_signals(state, nmid_matches_anchor, now))
+               + _behavioral_signals(state, nmid_matches_anchor, now,
+                                     anchor_has_owner))
 
     # Sidik jari encoding dibatasi bersama-sama: sekumpulan sinyal lemah
     # tidak boleh menumpuk sampai setara satu bukti kuat.

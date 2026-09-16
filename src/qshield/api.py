@@ -745,6 +745,7 @@ def verify(req: VerifyRequest, request: Request):
     dialek = (store.dialect_profile(akun.pan[:8])
               if akun and akun.pan and len(akun.pan) >= 8 else None)
     anchor_id, anchor_nmid, anchor_state = store.anchor_state(req.lat, req.lng)
+    jangkar_bertuan = getattr(store, "_anchor_has_owner", False)
 
     # Layer 1 — ikatan merchant-lokasi.
     lokasi = bd.evaluate(
@@ -769,6 +770,7 @@ def verify(req: VerifyRequest, request: Request):
         parsed,
         state=anchor_state,
         nmid_matches_anchor=pemilik_sah,
+        anchor_has_owner=jangkar_bertuan,
         accuracy_m=req.accuracy_m,
         has_coords=True,
         integrity=di,
@@ -798,10 +800,17 @@ def verify(req: VerifyRequest, request: Request):
         store.learn_city(req.lat, req.lng, parsed.merchant_city, nmid)
         store.learn_dialect(parsed, nmid)
         store.learn_features(parsed, nmid)
-    elif anchor_id is not None:
+    elif anchor_id is not None and (
+            set(verdict.signals) & bd.ANOMALI_LOKASI):
         # Jangkar ini jadi sasaran. Dicatat sebagai PERCOBAAN, bukan
         # pengamatan: observer_count tidak disentuh, jadi invarian §3
         # tetap utuh — reputasi palsu tidak bisa dibangun dari sini.
+        #
+        # Hanya anomali yang BERKAITAN DENGAN LOKASI yang dicatat.
+        # Cacat payload — NMID salah bentuk, QR statis bernominal, QR
+        # dinamis dipakai ulang — tidak mengatakan apa pun tentang
+        # tempat ini, dan mencatatnya membuat merchant sah di sekitar
+        # ikut tertuduh.
         store.note_anomaly(anchor_id)
 
     elapsed = round((time.perf_counter() - started) * 1000, 2)

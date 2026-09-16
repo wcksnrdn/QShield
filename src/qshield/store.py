@@ -436,6 +436,7 @@ class Store:
 
         mapan = [r for r in di_jangkar if _row_to_binding(r).is_established]
         dipilih = max(mapan or di_jangkar, key=lambda r: r["observer_count"])
+        self._anchor_has_owner = bool(mapan)
 
         return dipilih["id"], dipilih["nmid"], bh.AnchorState(
             anomaly_attempts=dipilih["anomaly_attempts"],
