@@ -1606,6 +1606,47 @@ Sejak itu setiap penggantian diverifikasi dengan assertion lebih dulu.
 
 ---
 
+## Keputusan 42 — Alasan bisnis untuk PJP, ditulis untuk pembaca yang berbeda
+
+`INTEGRATION.md` menjelaskan **cara** memasang Q-Shield, dan
+pembacanya tim engineering. Yang belum ada: **kenapa** sebuah
+penyelenggara mau memasangnya sama sekali — dan itu pembaca yang
+berbeda, dengan pertanyaan yang berbeda.
+
+`PITCH-PJP.md` mengisinya. Tiga keputusan penulisan yang disengaja:
+
+**Membuka dengan "kami tim mahasiswa dan belum punya pelanggan".**
+Menyembunyikannya hanya menunda penemuan, dan ditemukan sendiri jauh
+lebih merusak daripada disebut di depan. Kredibilitas tim tanpa rekam
+jejak datang dari tidak melebih-lebihkan, bukan dari terdengar mapan.
+
+**Argumen utamanya adalah adopsi yang tidak merata.** Penyelenggara
+besar terlindungi oleh datanya sendiri di dunia mana pun. Yang berubah
+nasibnya adalah penyelenggara kecil: tanpa lapisan bersama ia tidak
+punya dasar apa pun untuk menghentikan stiker yang sudah terdeteksi di
+tempat lain. **Semakin kecil pangsa pasarnya, semakin besar
+keuntungannya** — dan itu konsekuensi matematis, bukan retorika
+penjualan. Kebetulan itu juga yang membuat penyelenggara kecil lebih
+mudah diajak bicara.
+
+**Permintaannya kecil dan bertahap.** Keberatan paling wajar dari
+penyelenggara mana pun adalah "mengapa kami mengirim data pemindaian ke
+server tim mahasiswa". Jawabannya: tidak perlu. Tahap satu dijalankan
+penuh di infrastruktur mereka sendiri, tanpa hubungan apa pun dengan
+kami. Keuntungan lintas-penyelenggara adalah keputusan terpisah yang
+bisa diambil bertahun-tahun kemudian.
+
+Lampirannya berisi ciri penyelenggara yang lebih mudah didekati (bukan
+nama perusahaan — kami tidak punya pengetahuan orang dalam soal itu),
+contoh pesan pertama, dan tiga hal yang tidak boleh dilakukan: menyebut
+angka kerugian fraud tanpa sumber, menyebut sistem ini "pakai AI", dan
+mengklaim kalibrasi lapangan yang belum dijalankan.
+
+Ketiganya kesalahan yang mengakhiri percakapan lebih cepat daripada
+tidak punya jawaban sama sekali.
+
+---
+
 ## Hasil pengujian
 
 ```
