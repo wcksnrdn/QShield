@@ -1647,6 +1647,45 @@ tidak punya jawaban sama sekali.
 
 ---
 
+## Keputusan 43 — Koreksi istilah "machine learning"
+
+Terungkap dari percakapan tim: materi POC menyebut Q-Shield memakai
+machine learning. Sistemnya tidak, dan tidak pernah.
+
+**Kenapa ini harus diselesaikan sebelum 3 Oktober.** Juri Kaspersky
+yang mendengar klaim ML akan menanyakan lanjutannya — arsitekturnya,
+dataset-nya, akurasinya, validasinya. Tidak ada jawabannya. Dan sekali
+satu klaim terbukti dilebihkan, seluruh klaim lain ikut diragukan,
+termasuk yang benar-benar kuat.
+
+**Tapi ini bukan kebohongan, melainkan istilah yang dipakai longgar.**
+Enam komponen sistem ini memang belajar dari data dan bukan nilai
+tetap: konsensus pengamat, penghalusan jangkar, pengetahuan wilayah,
+dialek penerbit, jejak percobaan serangan, dan jejak QR dinamis.
+Istilah yang tepat adalah *statistical learning dari pengamatan*.
+Yang tidak ada hanyalah classifier terlatih.
+
+`KLARIFIKASI-ML.md` berisi surat koreksinya, versi pendek untuk lisan,
+dan — ini yang penting — **panduan kapan surat itu TIDAK perlu
+dikirim.** Kalau materi POC hanya menulis "sistem adaptif" atau
+"behavioral scoring", semuanya masih akurat, dan mengirim koreksi
+formal untuk sesuatu yang tidak keliru justru menciptakan masalah yang
+tadinya tidak ada.
+
+**Nada suratnya sengaja tidak meminta maaf berlebihan.** Isinya
+menjelaskan bahwa jalur ML diuji lalu ditolak dengan alasan: enam belas
+ciri payload, nol yang berbeda antara stiker asli dan stiker penipu,
+karena stiker penipu memang diterbitkan penyelenggara sungguhan. Itu
+bukan pengakuan kekurangan — itu salah satu temuan terkuat proyek ini,
+dan justru yang mendasari seluruh arsitekturnya.
+
+Satu instruksi yang ditulis tebal untuk tim: sepakati satu istilah
+bertiga. Satu orang menyebut ML sementara yang lain menyebut
+deterministik di sesi yang sama lebih merusak daripada kesalahan
+istilahnya sendiri.
+
+---
+
 ## Hasil pengujian
 
 ```
