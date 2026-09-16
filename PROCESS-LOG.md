@@ -1686,6 +1686,54 @@ istilahnya sendiri.
 
 ---
 
+## Keputusan 44 — Audit naskah pitch, dan delapan klaim yang tidak ada
+
+Naskah pitch 15 Agustus diperiksa kalimat per kalimat ke kode. Hasilnya
+lebih besar daripada persoalan istilah ML yang memunculkannya.
+
+| | Jumlah |
+|---|---|
+| akurat | 8 |
+| perlu diperhalus | 2 |
+| **tidak ada di sistem** | **8** |
+
+Yang delapan terakhir bukan soal peristilahan. Semuanya menyebut
+kemampuan yang tidak pernah ada:
+
+*WiFi BSSID fingerprinting.* Nol kemunculan `bssid`/`ssid` di seluruh
+kode — dan **tidak mungkin ada** pada PoC berbasis web, karena browser
+tidak menyediakan API pemindaian WiFi dan tidak akan pernah. Catatan
+fase 1 kami sendiri mencatatnya sebagai kebutuhan MASA DEPAN yang
+justru menjadi alasan MVP memerlukan SDK native.
+
+*"Tetap andal di dalam ruangan".* Berlawanan dengan perilaku
+sebenarnya: invarian §6 justru menolak memberi putusan ketika akurasi
+di atas 100 m, persis kondisi dalam ruangan.
+
+*Transaction velocity.* Pernah ada, lalu dibuang setelah dikalibrasi
+(Keputusan 13) karena menandai 100% warung laris sambil menangkap 0%
+serangan. Menyebutnya berarti mengklaim sesuatu yang kami **sengaja
+tolak dengan data**.
+
+*Account age, first-time beneficiaries, active call telemetry,
+unsupervised ML, cakupan transfer manual.* Tidak ada satu pun.
+
+**Kenapa ini lebih berbahaya daripada kelihatannya.** Risikonya bukan
+satu klaim gugur. Sekali satu kemampuan terbukti tidak ada di track
+keamanan dengan juri Kaspersky, seluruh klaim lain akan diuji ulang —
+termasuk delapan yang benar-benar akurat dan kuat.
+
+`PITCH-AUDIT.md` memuat auditnya beserta **naskah pengganti** dengan
+panjang dan struktur setara, dan tiap kalimatnya punya perintah demo
+yang bisa dijalankan. Yang menarik: naskah yang akurat justru lebih
+kuat, karena angkanya spesifik dan bisa ditunjukkan — 81,9%, 2,8 ms,
+jangkar 7 m menjadi 1 m, dan "16 ciri payload, nol yang berbeda".
+
+Aspirasi yang disampaikan sebagai fakta selalu lebih lemah daripada
+fakta yang lebih sederhana, karena fakta bisa diperagakan.
+
+---
+
 ## Hasil pengujian
 
 ```
