@@ -137,6 +137,7 @@ yang juga mengimpor `scripts/seed.py` secara langsung.
 | `INTEGRATION.md` | panduan integrasi untuk PJP, termasuk slot integritas perangkat |
 | `PDF-UPDATE.md` | teks pengganti untuk Q-Shield-Overview.pdf yang sudah basi |
 | `PITCH-PJP.md` | alasan bisnis untuk PJP + panduan pendekatan dari nol |
+| `KLARIFIKASI-ML.md` | koreksi istilah ML untuk panitia, plus panduan kapan perlu dikirim |
 
 ## Sebelum demo
 
