@@ -111,6 +111,24 @@ button{font-family:inherit}
   font-variant-numeric:tabular-nums;line-height:1.1}
 .cool-timer small{color:#F5A9AB;font-size:12px}
 
+/* Pencocokan teks tercetak. Stiker QRIS resmi mencetak NMID dalam
+   huruf yang bisa dibaca; penipu jarang mencetak ulang seluruh
+   standee, jadi teks aslinya sering tertinggal di bawah stiker QR
+   yang ditempel. Dua detik usaha pengguna, keyakinan tinggi. */
+.cocok{margin:0 18px 16px;padding:14px;border-radius:12px;
+  background:var(--bg2);border:1px solid var(--line)}
+.cocok h4{margin:0 0 4px;font-size:13px;font-weight:700}
+.cocok p{margin:0 0 10px;font-size:12px;color:var(--ink2)}
+.nmidbig{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-size:19px;font-weight:700;letter-spacing:.5px;text-align:center;
+  padding:11px;border-radius:10px;background:var(--card);
+  border:1px solid var(--line);margin-bottom:10px;word-break:break-all}
+.nmidbig b{color:var(--brand)}
+.cocok .row2{display:flex;gap:8px}
+.cocok input{flex:1}
+.cocok button{flex:none;padding:0 16px;border-radius:11px;border:0;
+  background:var(--brand2);color:#fff;font-weight:700;font-size:13px;cursor:pointer}
+
 /* --- alur bayar tiruan --------------------------------------------
    Ini SIMULASI, dan penandanya sengaja tidak bisa disembunyikan dari
    UI. Halaman yang meniru layar bayar sungguhan tanpa penanda adalah
@@ -205,6 +223,7 @@ textarea{min-height:78px;resize:vertical;
       <div><h2 id="title"></h2><p id="sub"></p></div>
     </div>
     <div class="newbie" id="newbie" style="display:none"></div>
+    <div class="cocok" id="cocok" style="display:none"></div>
     <div class="replay" id="replay" style="display:none"></div>
     <div class="cool-timer" id="cool" style="display:none">
       <div class="n" id="coolN">30</div>
@@ -480,8 +499,11 @@ async function lokasi(){
 
 let hitungMundur = null;
 
-async function verifikasi(payload){
+let terakhirPayload = null;
+
+async function verifikasi(payload, printed){
   bersihkanCatatan();
+  terakhirPayload = payload;
 
   // Diurai di perangkat lebih dulu. Kode yang bukan QRIS sama sekali
   // ditolak di sini dan TIDAK PERNAH dikirim ke mana pun — payload
@@ -516,6 +538,7 @@ async function verifikasi(payload){
     return;
   }
   const body = Object.assign({payload, device_anon_id: dev}, loc);
+  if (printed) body.printed_label = printed;
   const head = {"Content-Type":"application/json"};
   const key = $("apikey").value.trim();
   if (key) head["X-API-Key"] = key;
@@ -621,6 +644,32 @@ function tampilkan(d){
       if (sisa <= 0) clearInterval(hitungMundur);
     }, 1000);
   } else cool.style.display = "none";
+
+  // Pencocokan dengan yang TERCETAK di stiker. Penipu jarang mencetak
+  // ulang seluruh standee — yang paling sering adalah menempel stiker
+  // QR kecil menutupi kodenya saja, meninggalkan NMID asli terlihat.
+  // Ketidakcocokan itu bukti pertukaran yang langsung, dan bekerja pada
+  // pemindaian pertama tanpa riwayat apa pun.
+  const ck = $("cocok");
+  const nm = (d.merchant || {}).nmid || "";
+  if (nm && !(d.signals || []).includes("printed_nmid_mismatch")) {
+    ck.style.display = "";
+    ck.innerHTML =
+      "<h4>Cocokkan dengan stiker</h4>" +
+      "<p>Stiker QRIS resmi mencetak Merchant ID-nya. Kalau yang " +
+      "tercetak berbeda dari ini, kodenya kemungkinan ditempel " +
+      "menutupi stiker aslinya.</p>" +
+      '<div class="nmidbig">' + esc(nm.slice(0, -4)) +
+      "<b>" + esc(nm.slice(-4)) + "</b></div>" +
+      '<div class="row2"><input id="printedNmid" inputmode="latin" ' +
+      'placeholder="ketik yang tercetak, kalau berbeda" autocomplete="off">' +
+      '<button id="cekPrinted">Periksa</button></div>';
+    $("cekPrinted").onclick = () => {
+      const t = $("printedNmid").value.trim();
+      if (!t) return;
+      terakhirPayload && verifikasi(terakhirPayload, {nmid: t});
+    };
+  } else ck.style.display = "none";
 
   $("result").classList.add("show");
   $("result").scrollIntoView({behavior:"smooth", block:"nearest"});

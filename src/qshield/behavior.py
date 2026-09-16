@@ -140,6 +140,24 @@ W_BILL_AMOUNT_CHANGED = 35
 W_DYNAMIC_REUSED = 30
 W_DYNAMIC_SPREAD = 55
 
+# --- Yang TERCETAK di stiker vs yang ada di dalam QR ---------------
+#
+# Stiker QRIS resmi mencetak nama merchant dan NMID dalam huruf yang
+# bisa dibaca manusia, di samping kodenya.
+#
+# Penipu jarang mencetak ulang seluruh standee — mahal dan mencolok.
+# Yang paling sering: menempel stiker QR kecil menutupi area kodenya
+# saja, meninggalkan teks tercetak yang asli tetap terlihat.
+#
+# Akibatnya NMID tercetak tidak lagi cocok dengan NMID di dalam QR —
+# dan itu bukti pertukaran yang langsung, tanpa perlu riwayat apa pun
+# tentang merchant itu. Bekerja pada pemindaian PERTAMA.
+#
+# Bobotnya tinggi karena tidak ada penjelasan wajar untuk stiker resmi
+# yang teksnya bertentangan dengan kodenya sendiri.
+W_PRINTED_NMID_MISMATCH = 75
+W_PRINTED_NAME_MISMATCH = 45
+
 # --- Integritas perangkat ------------------------------------------
 #
 # Diisi klien NATIVE; klien web tidak akan pernah bisa mengisinya karena
@@ -197,6 +215,9 @@ class BehaviorResult:
     score: int = 0
     signals: list = field(default_factory=list)
     reasons: list = field(default_factory=list)
+    # Bobot tiap alasan, sejajar dengan reasons. Dipakai compose()
+    # untuk mengurutkan apa yang dibaca pengguna lebih dulu.
+    weights: list = field(default_factory=list)
     hard_violation: bool = False
 
     def to_dict(self) -> dict:
@@ -392,6 +413,58 @@ def _rarity_signals(parsed, corpus) -> list:
     )]
 
 
+def _printed_signals(parsed, printed) -> list:
+    """Bandingkan teks tercetak di stiker dengan isi QR-nya.
+
+    `printed` berisi apa yang dibaca dari stiker fisik — diketik
+    pengguna, atau hasil OCR klien. Ketiadaannya tidak dihukum: stiker
+    yang teksnya tidak terbaca bukan kesalahan siapa pun.
+    """
+    if not printed:
+        return []
+
+    out = []
+
+    tercetak_nmid = (getattr(printed, "nmid", None) or "").strip().upper()
+    if tercetak_nmid:
+        qr_nmid = (parsed.nmid or "").strip().upper()
+        # Sebagian stiker mencetak NMID tanpa awalan "ID".
+        cocok = (tercetak_nmid == qr_nmid
+                 or tercetak_nmid == qr_nmid.removeprefix("ID")
+                 or "ID" + tercetak_nmid == qr_nmid)
+        if not cocok:
+            out.append(Signal(
+                name="printed_nmid_mismatch",
+                weight=W_PRINTED_NMID_MISMATCH,
+                hard=True,
+                reason=(
+                    f"Merchant ID yang tercetak di stiker ({tercetak_nmid}) "
+                    f"berbeda dari yang ada di dalam kode QR "
+                    f"({parsed.nmid}) — kode ini kemungkinan ditempel "
+                    f"menutupi stiker aslinya"
+                ),
+            ))
+
+    tercetak_nama = (getattr(printed, "merchant_name", None) or "").strip()
+    if tercetak_nama:
+        qr_nama = (parsed.merchant_name or "").strip()
+        # Dibandingkan longgar: stiker sering memakai huruf besar semua,
+        # dan spasi ganda lazim terjadi pada cetakan.
+        def rapikan(x):
+            return " ".join(x.upper().split())
+        if rapikan(tercetak_nama) != rapikan(qr_nama):
+            out.append(Signal(
+                name="printed_name_mismatch",
+                weight=W_PRINTED_NAME_MISMATCH,
+                reason=(
+                    f"Nama yang tercetak di stiker ({tercetak_nama}) "
+                    f"berbeda dari nama di dalam kode QR ({qr_nama})"
+                ),
+            ))
+
+    return out
+
+
 def _device_signals(integrity) -> list:
     """Sinyal dari laporan integritas perangkat.
 
@@ -555,6 +628,7 @@ def evaluate(
     integrity=None,
     dynamic_history=None,
     bill_history=None,
+    printed=None,
     area=None,
     other_names=None,
     issuer_profile=None,
@@ -569,6 +643,7 @@ def evaluate(
                          disalahgunakan untuk menyerang merchant jujur)
     accuracy_m           akurasi yang DIKLAIM klien, tidak dipercaya
     has_coords           True bila permintaan memang menyertakan koordinat
+    printed              teks yang terbaca di stiker fisik, kalau ada
     integrity            laporan integritas dari klien native, kalau ada
     dynamic_history      jejak pemakaian QR dinamis ini, kalau ada
     bill_history         nominal lain untuk nomor tagihan yang sama
@@ -580,6 +655,7 @@ def evaluate(
 
     signals = (_structural_signals(parsed)
                + _location_claim_signals(accuracy_m, has_coords)
+               + _printed_signals(parsed, printed)
                + _device_signals(integrity)
                + _dynamic_qr_signals(parsed, dynamic_history, bill_history)
                + _origin_signals(parsed, area, other_names)
@@ -600,5 +676,6 @@ def evaluate(
         score=score,
         signals=[s.name for s in signals],
         reasons=[s.reason for s in signals],
+        weights=[s.weight for s in signals],
         hard_violation=any(s.hard for s in signals),
     )

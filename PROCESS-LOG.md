@@ -1854,6 +1854,87 @@ tidak punya arti kalau datanya sedikit.
 
 ---
 
+## Keputusan 47 — Urutan alasan, dan teks yang tercetak di stiker
+
+Dua perbaikan dari masukan reviewer. Empat saran lain sudah ada atau
+ditolak dengan alasan — lihat catatan di akhir keputusan ini.
+
+### Alasan diurutkan menurut bobot
+
+Reviewer mengusulkan menukar penomoran Layer 1 dan Layer 2, dengan
+alasan Layer 1 punya celah cold start. Alasannya benar, tapi
+penomorannya bukan obatnya — menukar nama tidak menghapus cold start.
+
+Yang benar-benar rusak adalah **urutan alasan yang dibaca pengguna:**
+
+```
+NMID cacat bentuk di lokasi baru -> anomaly/cooling_off
+  1. Lokasi ini belum pernah tercatat sebelumnya      (+35, paling lemah)
+  2. Format Merchant ID tidak sesuai standar QRIS     (+70, yang menentukan)
+```
+
+Alasan disusun menurut urutan kode dijalankan, bukan menurut bobot.
+Pengguna membaca dari atas dan sering berhenti di baris pertama — jadi
+yang pertama dibaca justru paling tidak penting, dan yang menuduh
+tersembunyi.
+
+Sekarang tiap alasan membawa bobotnya, dan `compose()` mengurutkan
+alasan kedua layer bersama-sama. Percobaan pertama memperkirakan bobot
+Layer 1 dari posisinya; itu tidak cukup, karena alasan Layer 2 bisa
+lebih menentukan daripada alasan Layer 1 mana pun. Bobot sebenarnya
+harus ikut dibawa keluar `evaluate()`.
+
+Dikunci di `test_contract.py`: alasan terkuat selalu di baris pertama.
+
+### Teks yang tercetak di stiker
+
+Ini saran terkuat reviewer, dan belum pernah terpikirkan.
+
+Stiker QRIS resmi mencetak nama merchant dan NMID dalam huruf yang bisa
+dibaca manusia. **Penipu jarang mencetak ulang seluruh standee** —
+mahal dan mencolok. Yang paling sering: menempel stiker QR kecil
+menutupi area kodenya saja, meninggalkan teks tercetak yang asli tetap
+terlihat.
+
+Akibatnya NMID tercetak tidak lagi cocok dengan NMID di dalam QR. Itu
+bukti pertukaran yang langsung, dan **bekerja pada pemindaian pertama
+tanpa riwayat apa pun** — yang justru menjawab keluhan cold start yang
+memunculkan saran penukaran layer tadi.
+
+Diuji di lokasi yang belum dikenal sama sekali: `cooling_off` pada scan
+pertama, dengan alasan tercetak di baris teratas.
+
+Versi paling sederhananya tidak butuh OCR: halaman menampilkan NMID
+dari QR secara mencolok dengan empat digit terakhir disorot, lalu
+meminta pengguna mencocokkan dengan yang tercetak. Dua detik usaha,
+keyakinan tinggi. API juga menerima `printed_label` untuk klien yang
+punya OCR.
+
+Pencocokannya longgar pada hal yang memang bervariasi: sebagian stiker
+mencetak NMID tanpa awalan "ID", dan cetakan sering memakai huruf besar
+semua dengan spasi ganda. Diuji agar tidak ada satu pun dari itu yang
+menimbulkan tuduhan.
+
+### Saran lain
+
+**Sudah ada:** penolakan QR phishing/non-EMVCo (semua ditolak `422`
+sebelum penilaian), dan keharusan NMID (`malformed_nmid` sejak
+Keputusan 10).
+
+**Ditolak: NER untuk mendeteksi nama pribadi.** Latar belakang yang
+reviewer kirim sendiri menyebut 93,16% merchant QRIS adalah UMKM — dan
+UMKM Indonesia lazim memakai nama orang: Warung Bu Sri, Es Buah Pak
+Asep, Bakso Pak Kumis. NER akan menandai sebagian besar merchant sah.
+Itu aset A4, dan biayanya jauh melebihi manfaatnya.
+
+**Ditunda: penukaran penomoran layer.** Perbaiki urutan alasannya dulu,
+lalu nilai lagi apakah masih perlu. Perlu dicatat juga bahwa ikatan
+merchant-lokasi adalah kebaruan proyek ini — menyebutnya "Layer 2"
+tidak menurunkan nilainya secara teknis, tapi itu harus jadi keputusan
+sadar, bukan efek samping.
+
+---
+
 ## Hasil pengujian
 
 ```

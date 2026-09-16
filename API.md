@@ -77,6 +77,7 @@ Untuk demo lokal, jalankan dengan `QSHIELD_AUTH=off`.
 | `device_anon_id` | string | ya | 8–64 char, `[A-Za-z0-9_-]` | pengenal acak per perangkat, **bukan** identitas pengguna |
 | `accuracy_m` | number | ya | 0…100000 | radius keyakinan GPS dalam meter |
 | `location_source` | string | tidak | `live` \| `replay` | bawaan `live` |
+| `printed_label` | object | tidak | teks yang TERCETAK di stiker: `nmid`, `merchant_name` |
 
 `accuracy_m` wajib dengan sengaja. Tanpa tahu seberapa bagus fix-nya,
 jangkar tidak bisa dinilai — dan kalau field ini opsional, penyerang

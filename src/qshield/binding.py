@@ -206,6 +206,11 @@ class Verdict:
     risk_score: int
     reasons: list = field(default_factory=list)
     signals: list = field(default_factory=list)
+    # Bobot tiap alasan, sejajar dengan reasons. Dibawa keluar supaya
+    # compose() bisa mengurutkan alasan kedua layer bersama-sama —
+    # memperkirakannya dari posisi tidak cukup, karena alasan Layer 2
+    # bisa lebih menentukan daripada alasan Layer 1 mana pun.
+    reason_weights: list = field(default_factory=list)
     matched_binding: Optional[Binding] = None
 
     def to_dict(self) -> dict:
@@ -262,6 +267,29 @@ def _floor_action(status: str, action: str) -> str:
     if status == UNKNOWN and action == PROCEED:
         return WARN
     return action
+
+
+# Bobot semu untuk alasan yang bukan penilaian risiko, dipakai
+# mengurutkan apa yang dibaca pengguna lebih dulu.
+#
+# Pengguna membaca dari atas dan sering berhenti di baris pertama.
+# Sebelum ini, alasan disusun menurut urutan kode dijalankan — sehingga
+# "lokasi ini belum pernah tercatat" (+35, paling lemah) muncul di atas
+# "format Merchant ID tidak sesuai standar" (+70, yang menentukan).
+# Yang paling tidak penting dibaca duluan, yang menuduh tersembunyi.
+PRIORITAS_PENGUNGKAPAN = 1000   # penanda replay dan sejenisnya
+PRIORITAS_INFORMASI = -1        # konteks yang menenangkan, bukan risiko
+
+
+def urutkan_alasan(berbobot: list) -> tuple:
+    """Susun alasan dari yang paling menentukan ke yang paling lemah.
+
+    Menerima daftar (bobot, alasan), mengembalikan (alasan, bobot)
+    yang sudah terurut. Pengurutannya stabil: alasan berbobot sama
+    tetap pada urutan aslinya.
+    """
+    urut = sorted(enumerate(berbobot), key=lambda x: (-x[1][0], x[0]))
+    return ([a for _, (_, a) in urut], [b for _, (b, _) in urut])
 
 
 def _distinct_areas(bindings: list, lat: float, lng: float) -> list:
@@ -326,14 +354,15 @@ def evaluate(
     kandidat = ([current] if current else []) + list(same_nmid_elsewhere)
     keliling = next((b for b in kandidat if b.is_registered and b.is_mobile), None)
     if keliling is not None:
-        reasons.append(
+        reasons.append((PRIORITAS_INFORMASI,
             f"Terdaftar sebagai merchant keliling"
-            + (f" — {keliling.merchant_name}" if keliling.merchant_name else "")
-        )
+            + (f" — {keliling.merchant_name}" if keliling.merchant_name else "")))
         signals.append("mobile_merchant")
+        alasan, bobot = urutkan_alasan(reasons)
         return Verdict(
             status=VERIFIED, action=PROCEED, risk_score=0,
-            reasons=reasons, signals=signals, matched_binding=current,
+            reasons=alasan, reason_weights=bobot, signals=signals,
+            matched_binding=current,
         )
 
     # --- Sinyal 1: NMID berubah di jangkar yang sudah mapan ---------
@@ -400,32 +429,28 @@ def evaluate(
         if coexisting:
             score += 20
             signals.append("adjacent_merchant")
-            reasons.append(
+            reasons.append((20,
                 f"Terdapat merchant lain dalam radius "
                 f"{strongest.distance_m(lat, lng):.0f} m yang juga aktif "
-                f"— kemungkinan lokasi bersebelahan"
-            )
+                f"— kemungkinan lokasi bersebelahan"))
         elif strongest.is_registered:
             # Sinyal TERPISAH, bukan rumus konsensus yang diubah —
             # invarian §5 mengunci rumus itu apa adanya.
             score += W_REGISTERED_CONFLICT
             signals.append("nmid_changed_at_registered_anchor")
-            reasons.append(
+            reasons.append((W_REGISTERED_CONFLICT,
                 "Lokasi ini terdaftar resmi atas merchant lain oleh "
-                "penyelenggara pembayaran"
-            )
+                "penyelenggara pembayaran"))
         else:
             score += 60 + confidence
             signals.append("nmid_changed_at_anchor")
-            reasons.append(
+            reasons.append((60 + confidence,
                 f"Merchant ID berbeda dari {strongest.observer_count} pengamatan "
-                f"sebelumnya di lokasi ini"
-            )
+                f"sebelumnya di lokasi ini"))
             if strongest.merchant_name:
-                reasons.append(
+                reasons.append((PRIORITAS_INFORMASI,
                     f"Lokasi ini konsisten terdaftar sebagai "
-                    f"{strongest.merchant_name}"
-                )
+                    f"{strongest.merchant_name}"))
 
     # --- Sinyal 2: satu NMID tersebar di banyak area ----------------
     elsewhere = [
@@ -437,18 +462,16 @@ def evaluate(
         score += 60
         signals.append("nmid_scatter")
         farthest = max(areas, key=lambda b: b.distance_m(lat, lng))
-        reasons.append(
+        reasons.append((60,
             f"Merchant ID yang sama terdeteksi di {len(areas) + 1} area berbeda, "
             f"terjauh {farthest.distance_m(lat, lng) / 1000:.0f} km — "
-            f"pola khas stiker yang disebar"
-        )
+            f"pola khas stiker yang disebar"))
     elif len(areas) == 1:
         score += 25
         signals.append("nmid_second_location")
-        reasons.append(
+        reasons.append((25,
             f"Merchant ID ini juga tercatat di lokasi lain berjarak "
-            f"{areas[0].distance_m(lat, lng) / 1000:.1f} km"
-        )
+            f"{areas[0].distance_m(lat, lng) / 1000:.1f} km"))
 
     # --- Riwayat jangkar ini sendiri --------------------------------
     if current and current.is_registered:
@@ -458,29 +481,27 @@ def evaluate(
         if not conflicting and not areas:
             score = max(0, score - 20)
         signals.append("registered_merchant")
-        reasons.append(
+        reasons.append((PRIORITAS_INFORMASI,
             "Terdaftar resmi di lokasi ini oleh penyelenggara pembayaran"
-            + (f" sebagai {current.merchant_name}" if current.merchant_name else "")
-        )
+            + (f" sebagai {current.merchant_name}"
+               if current.merchant_name else "")))
     elif current and current.is_established:
         if not conflicting and not areas:
             score = max(0, score - 20)
         signals.append("established_binding")
-        reasons.append(
+        reasons.append((PRIORITAS_INFORMASI,
             f"Konsisten dengan {current.observer_count} pengamatan sebelumnya "
-            f"di lokasi ini"
-        )
+            f"di lokasi ini"))
     elif current:
         score += 15
         signals.append("young_binding")
-        reasons.append(
+        reasons.append((15,
             f"Binding baru — baru {current.observer_count} pengamatan, "
-            f"belum cukup untuk diverifikasi"
-        )
+            f"belum cukup untuk diverifikasi"))
     elif not conflicting:
         score += 35
         signals.append("first_observation")
-        reasons.append("Lokasi ini belum pernah tercatat sebelumnya")
+        reasons.append((35, "Lokasi ini belum pernah tercatat sebelumnya"))
 
     score = max(0, min(100, score))
 
@@ -494,13 +515,17 @@ def evaluate(
         status = UNKNOWN
 
     if not reasons:
-        reasons.append("Belum ada cukup data untuk memverifikasi lokasi ini")
+        reasons.append(
+            (PRIORITAS_INFORMASI,
+             "Belum ada cukup data untuk memverifikasi lokasi ini"))
 
+    alasan, bobot = urutkan_alasan(reasons)
     return Verdict(
         status=status,
         action=_floor_action(status, _action_for(score)),
         risk_score=score,
-        reasons=reasons,
+        reasons=alasan,
+        reason_weights=bobot,
         signals=signals,
         matched_binding=current,
     )
@@ -545,11 +570,22 @@ def compose(verdict: "Verdict", behavior) -> "Verdict":
     else:
         status = verdict.status
 
+    # Alasan dari kedua layer digabung lalu diurutkan ulang menurut
+    # bobot SEBENARNYA. Tanpa ini, seluruh alasan Layer 1 selalu
+    # mendahului Layer 2 — termasuk ketika yang menentukan justru ada
+    # di Layer 2, seperti NMID cacat bentuk (+70) yang kalah posisi
+    # dari cold start (+35).
+    bobot_l1 = verdict.reason_weights or [0] * len(verdict.reasons)
+    berbobot = list(zip(bobot_l1, verdict.reasons))
+    berbobot += list(zip(behavior.weights, behavior.reasons))
+    alasan, bobot = urutkan_alasan(berbobot)
+
     return Verdict(
         status=status,
         action=_floor_action(status, _action_for(score)),
         risk_score=score,
-        reasons=verdict.reasons + behavior.reasons,
+        reasons=alasan,
+        reason_weights=bobot,
         signals=verdict.signals + behavior.signals,
         matched_binding=verdict.matched_binding,
     )
