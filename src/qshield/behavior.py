@@ -378,6 +378,20 @@ def _dialect_signals(parsed, profil) -> list:
     )]
 
 
+def _rarity_signals(parsed, corpus) -> list:
+    """Model kelangkaan tak-terawasi — lihat profile.py."""
+    from . import profile as pf
+
+    bobot, langka = pf.score(parsed, corpus)
+    if not bobot:
+        return []
+    return [Signal(
+        name="rare_merchant_profile",
+        weight=bobot,
+        reason=pf.explain(langka),
+    )]
+
+
 def _device_signals(integrity) -> list:
     """Sinyal dari laporan integritas perangkat.
 
@@ -544,6 +558,7 @@ def evaluate(
     area=None,
     other_names=None,
     issuer_profile=None,
+    feature_corpus=None,
 ) -> BehaviorResult:
     """Nilai perilaku satu pemindaian.
 
@@ -569,6 +584,7 @@ def evaluate(
                + _dynamic_qr_signals(parsed, dynamic_history, bill_history)
                + _origin_signals(parsed, area, other_names)
                + _dialect_signals(parsed, issuer_profile)
+               + _rarity_signals(parsed, feature_corpus)
                + _behavioral_signals(state, nmid_matches_anchor, now))
 
     # Sidik jari encoding dibatasi bersama-sama: sekumpulan sinyal lemah

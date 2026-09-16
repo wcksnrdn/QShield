@@ -324,6 +324,92 @@ def _f12():
     return f"asli -> {asli['action']} (PIN), palsu -> {palsu['action']} (tanpa PIN)"
 
 
+@cek("Payload diurai di perangkat sebelum dikirim")
+def _f13():
+    # Kode yang bukan QRIS ditolak di perangkat dan tidak pernah
+    # dikirim — payload QRIS memuat identitas merchant.
+    assert "function parseQris" in SCRIPT, "tidak ada parser di halaman"
+    assert "function crc16ccitt" in SCRIPT, "tidak ada CRC16 di halaman"
+
+    blok = SCRIPT[SCRIPT.index("async function verifikasi"):]
+    blok = blok[:blok.index("function tampilkan")]
+    assert "parseQris(payload)" in blok, "parser tidak dipanggil sebelum kirim"
+    # Cabang gagal parse harus berhenti tanpa memanggil fetch.
+    cabang = blok[blok.index("catch (e)"):blok.index("let loc")]
+    assert "return" in cabang, "payload cacat tetap diteruskan ke jaringan"
+    assert "fetch" not in cabang, "cabang gagal parse memanggil jaringan"
+    return "parse lokal dulu; yang cacat berhenti sebelum fetch"
+
+
+@cek("Parser perangkat dan parser server sepakat")
+def _f14():
+    import shutil
+    import subprocess
+    import tempfile as _tf
+
+    node = shutil.which("node")
+    if not node:
+        return "(node tidak ada — pemeriksaan silang dilewati)"
+
+    # Parser di halaman diekstrak apa adanya, lalu diuji terhadap
+    # parser Python. Kalau keduanya menyimpang, klien bisa menampilkan
+    # merchant yang berbeda dari yang dinilai server.
+    # Batasnya tepat di ujung parser. Mengambil lebih jauh ikut
+    # menyeret kode khusus browser (localStorage) yang tidak ada di node.
+    awal = SCRIPT.index("const QRIS_NESTED")
+    akhir = SCRIPT.index("const AKSI = {")
+    js = SCRIPT[awal:akhir]
+
+    kasus = []
+    for i, statis in enumerate([True, False] * 6):
+        nmid = f"ID10{i:011d}"
+        acct = emvco.build_tlv({"00": "ID.CO.QRIS.WWW",
+                                "01": f"9360089900000{i:05d}",
+                                "02": nmid, "03": "UMI"})
+        f = {"00": "01", "01": "11" if statis else "12", "26": acct,
+             "52": "5812", "53": "360", "58": "ID",
+             "59": f"MERCHANT {i}", "60": "BANDUNG", "61": "40257"}
+        if not statis:
+            f["54"] = f"{1000 * (i + 1)}.00"
+            f["62"] = emvco.build_tlv({"01": f"INV-{i:04d}"})
+        p = emvco.build(f)
+        d = emvco.parse(p)
+        kasus.append({"payload": p, "nmid": d.nmid,
+                      "name": d.merchant_name, "city": d.merchant_city,
+                      "amount": d.amount, "static": d.is_static,
+                      "crc": d.crc_valid, "bill": d.bill_ref})
+    # Payload yang tidak bisa diurai sama sekali.
+    for rusak in ("", "bukan-qris", "0002010102"):
+        kasus.append({"payload": rusak, "error": True})
+
+    with _tf.TemporaryDirectory() as d:
+        js_path = os.path.join(d, "p.js")
+        json_path = os.path.join(d, "k.json")
+        with open(js_path, "w") as fh:
+            fh.write(js + "\nmodule.exports={parseQris};\n")
+        with open(json_path, "w") as fh:
+            json.dump(kasus, fh)
+        skrip = (
+            f"const {{parseQris}}=require({js_path!r});"
+            f"const K=require({json_path!r});"
+            "let beda=[];"
+            "for(const k of K){let r;"
+            "try{r=parseQris(k.payload);}catch(e){"
+            "if(!k.error)beda.push('galat tak terduga');continue;}"
+            "if(k.error){beda.push('tidak melempar galat');continue;}"
+            "const c=[[r.nmid,k.nmid],[r.merchantName,k.name],"
+            "[r.merchantCity,k.city],[r.amount,k.amount],"
+            "[r.isStatic,k.static],[r.crcValid,k.crc],[r.billRef,k.bill]];"
+            "for(const [a,b] of c)if((a??null)!==(b??null))beda.push([a,b]);}"
+            "console.log(JSON.stringify(beda));")
+        hasil = subprocess.run([node, "-e", skrip], capture_output=True,
+                               text=True, timeout=30)
+    assert hasil.returncode == 0, f"node gagal: {hasil.stderr[:200]}"
+    beda = json.loads(hasil.stdout.strip())
+    assert not beda, f"parser menyimpang: {beda[:3]}"
+    return f"{len(kasus)} payload, kedua parser sepakat"
+
+
 print("=" * 70)
 print("FRONTEND <-> API")
 print("=" * 70)

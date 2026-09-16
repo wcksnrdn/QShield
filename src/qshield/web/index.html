@@ -289,6 +289,127 @@ textarea{min-height:78px;resize:vertical;
 <script>
 "use strict";
 const $ = id => document.getElementById(id);
+
+// Parser EMVCo di sisi perangkat.
+//
+// Cermin dari qshield/emvco.py. Dua alasan ia ada di sini, dan
+// keduanya nyata:
+//
+//   1. Kode yang cacat bentuk atau checksum-nya salah ditolak TANPA
+//      pernah dikirim ke mana pun. Payload QRIS memuat identitas
+//      merchant; yang jelas bukan QRIS tidak perlu meninggalkan
+//      perangkat sama sekali.
+//   2. Nama merchant tampil seketika, tanpa menunggu jaringan.
+//
+// Yang TIDAK dilakukan: menggantikan pemeriksaan server. Server tetap
+// mengurai ulang payload mentah dan putusannya yang berlaku — klien
+// bisa berbohong, jadi hasil parsing klien tidak pernah dipercaya
+// sebagai kebenaran. Ini lapis tambahan, bukan pemindahan wewenang.
+
+const QRIS_NESTED = new Set([
+  ...Array.from({length: 26}, (_, i) => String(26 + i).padStart(2, "0")),
+  "62", "64",
+]);
+
+const MERCHANT_CRITERIA = {
+  UMI: "Usaha Mikro", UKE: "Usaha Kecil", UME: "Usaha Menengah",
+  UBE: "Usaha Besar", URE: "Usaha Regular",
+};
+
+function crc16ccitt(data) {
+  // Poli 0x1021, init 0xFFFF, tanpa refleksi — sama persis dengan
+  // crc16_ccitt() di emvco.py.
+  let crc = 0xFFFF;
+  for (const ch of new TextEncoder().encode(data)) {
+    crc ^= ch << 8;
+    for (let i = 0; i < 8; i++) {
+      crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) & 0xFFFF
+                           : (crc << 1) & 0xFFFF;
+    }
+  }
+  return crc.toString(16).toUpperCase().padStart(4, "0");
+}
+
+function parseTLV(data) {
+  const out = {};
+  let i = 0;
+  while (i < data.length) {
+    if (i + 4 > data.length) throw new Error(`TLV terpotong pada posisi ${i}`);
+    const tag = data.slice(i, i + 2);
+    const lenStr = data.slice(i + 2, i + 4);
+    if (!/^\d{2}$/.test(tag) || !/^\d{2}$/.test(lenStr)) {
+      throw new Error(`Tag/length bukan angka pada posisi ${i}`);
+    }
+    const len = parseInt(lenStr, 10);
+    const end = i + 4 + len;
+    if (end > data.length) {
+      throw new Error(`Value tag ${tag} melebihi panjang payload`);
+    }
+    out[tag] = data.slice(i + 4, end);
+    i = end;
+  }
+  return out;
+}
+
+function parseQris(payload) {
+  payload = (payload || "").trim();
+  if (!payload) throw new Error("Payload kosong");
+
+  const tags = parseTLV(payload);
+  if (!("00" in tags)) {
+    throw new Error("Tag 00 (payload format indicator) tidak ditemukan");
+  }
+
+  const crcFound = tags["63"];
+  let crcValid = false, crcExpected = null;
+  const idx = payload.lastIndexOf("6304");
+  if (crcFound && idx !== -1) {
+    crcExpected = crc16ccitt(payload.slice(0, idx + 4));
+    crcValid = crcFound.toUpperCase() === crcExpected;
+  }
+
+  // Template merchant account: tag 26-51, ambil yang GUID-nya QRIS.
+  let account = null;
+  for (let t = 26; t <= 51; t++) {
+    const tag = String(t).padStart(2, "0");
+    if (!(tag in tags)) continue;
+    let sub;
+    try { sub = parseTLV(tags[tag]); } catch (_) { continue; }
+    const guid = sub["00"] || "";
+    const cocok = guid.toUpperCase().startsWith("ID.CO.QRIS");
+    if (sub["02"] && (cocok || !account)) {
+      account = {tag, guid, pan: sub["01"], nmid: sub["02"],
+                 criteria: sub["03"]};
+      if (cocok) break;
+    }
+  }
+
+  let billRef = null;
+  if (tags["62"]) {
+    try { billRef = parseTLV(tags["62"])["01"] || null; } catch (_) {}
+  }
+
+  return {
+    raw: payload,
+    tags,
+    nmid: account ? account.nmid : null,
+    pan: account ? account.pan : null,
+    criteria: account ? account.criteria : null,
+    criteriaLabel: account && account.criteria
+      ? (MERCHANT_CRITERIA[account.criteria] || account.criteria) : null,
+    merchantName: tags["59"] || null,
+    merchantCity: tags["60"] || null,
+    postalCode: tags["61"] || null,
+    mcc: tags["52"] || null,
+    currency: tags["53"] || null,
+    amount: tags["54"] || null,
+    country: tags["58"] || null,
+    billRef,
+    isStatic: (tags["01"] || "11") === "11",
+    crcValid, crcFound: crcFound || null, crcExpected,
+  };
+}
+
 const AKSI = {
   proceed:   {t:"Aman dilanjutkan", s:"Ikatan merchant-lokasi cocok", i:"✓"},
   warn:      {t:"Periksa dulu",     s:"Belum cukup bukti untuk memastikan", i:"!"},
@@ -361,6 +482,32 @@ let hitungMundur = null;
 
 async function verifikasi(payload){
   bersihkanCatatan();
+
+  // Diurai di perangkat lebih dulu. Kode yang bukan QRIS sama sekali
+  // ditolak di sini dan TIDAK PERNAH dikirim ke mana pun — payload
+  // QRIS memuat identitas merchant, dan yang jelas bukan QRIS tidak
+  // perlu meninggalkan perangkat.
+  //
+  // Hasil parsing ini TIDAK menggantikan pemeriksaan server. Server
+  // mengurai ulang payload mentah dan putusannya yang berlaku; klien
+  // bisa berbohong, jadi hasil di sini hanya untuk umpan balik cepat.
+  let lokal = null;
+  try {
+    lokal = parseQris(payload);
+  } catch (e) {
+    catatan("<b>Ini bukan kode QRIS.</b> " + esc(e.message) +
+      "<br>Tidak ada yang dikirim ke server.");
+    return;
+  }
+
+  // Nama merchant tampil seketika, tanpa menunggu jaringan.
+  if (lokal.merchantName) {
+    catatan("Terbaca: <b>" + esc(lokal.merchantName) + "</b>" +
+      (lokal.nmid ? " &middot; " + esc(lokal.nmid) : "") +
+      (lokal.crcValid ? "" : " &middot; <b>checksum tidak cocok</b>") +
+      "<br>Memverifikasi lokasi\u2026");
+  }
+
   let loc;
   try { loc = await lokasi(); }
   catch (e) {

@@ -162,6 +162,20 @@ CREATE TABLE IF NOT EXISTS beneficiary_report (
     PRIMARY KEY (account_hash, reporter)
 );
 
+-- Sebaran ciri merchant, untuk model kelangkaan tak-terawasi.
+--
+-- Yang dihitung NMID berbeda, bukan jumlah pemindaian — alasan yang
+-- sama dengan area_city dan issuer_dialect. Tidak ada satu pun ciri di
+-- sini yang khas satu merchant: hanya kategori, skala, kota, dan
+-- bentuk-bentuk yang dipakai bersama oleh banyak merchant.
+CREATE TABLE IF NOT EXISTS merchant_feature (
+    feature  TEXT NOT NULL,
+    value    TEXT NOT NULL,
+    nmid     TEXT NOT NULL,
+    PRIMARY KEY (feature, value, nmid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_mfeat ON merchant_feature(feature);
 CREATE INDEX IF NOT EXISTS idx_benef ON beneficiary_report(account_hash);
 CREATE INDEX IF NOT EXISTS idx_dialect ON issuer_dialect(pan_prefix, attribute);
 CREATE INDEX IF NOT EXISTS idx_areacity ON area_city(geohash_5);
@@ -759,6 +773,30 @@ class Store:
                     "INSERT OR IGNORE INTO issuer_dialect "
                     "(pan_prefix, attribute, value, nmid) VALUES (?, ?, ?, ?)",
                     (prefix, atribut, nilai, nmid))
+
+    def learn_features(self, parsed, nmid: str) -> None:
+        """Catat ciri merchant ini ke sebaran yang dipelajari."""
+        from . import profile as pf
+
+        with self._lock:
+            for f, v in pf.features_of(parsed).items():
+                self.conn.execute(
+                    "INSERT OR IGNORE INTO merchant_feature "
+                    "(feature, value, nmid) VALUES (?, ?, ?)", (f, v, nmid))
+
+    def feature_corpus(self) -> dict:
+        """Sebaran ciri yang sudah diamati, siap dipakai profile.score()."""
+        with self._lock:
+            baris = self.conn.execute(
+                "SELECT feature, value, COUNT(DISTINCT nmid) n "
+                "FROM merchant_feature GROUP BY feature, value").fetchall()
+            total = self.conn.execute(
+                "SELECT COUNT(DISTINCT nmid) n FROM merchant_feature"
+            ).fetchone()["n"]
+        korpus = {"_total": total}
+        for r in baris:
+            korpus.setdefault(r["feature"], {})[r["value"]] = r["n"]
+        return korpus
 
     def account_hash(self, account: str) -> str:
         """Hash nomor rekening. Nomornya sendiri tidak pernah disimpan."""

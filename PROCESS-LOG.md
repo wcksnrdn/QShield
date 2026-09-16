@@ -1791,6 +1791,69 @@ pelakunya, bukan korbannya.
 
 ---
 
+## Keputusan 46 — Parsing di perangkat, dan model tak-terawasi
+
+Dua klaim terakhir dari naskah pitch yang bisa dibangun.
+
+### Parsing di perangkat
+
+Naskah menyebut payload diurai "entirely on-device". Sebelumnya parsing
+hanya terjadi di server. Sekarang ada parser EMVCo lengkap di halaman —
+cermin dari `emvco.py`, termasuk CRC16.
+
+Nilainya nyata, bukan sekadar mencocokkan klaim: **kode yang bukan QRIS
+ditolak tanpa pernah dikirim ke mana pun.** Payload QRIS memuat
+identitas merchant; yang jelas bukan QRIS tidak perlu meninggalkan
+perangkat. Dan nama merchant tampil seketika tanpa menunggu jaringan.
+
+Yang TIDAK dilakukan: menggantikan pemeriksaan server. Server tetap
+mengurai ulang payload mentah dan putusannya yang berlaku. Klien bisa
+berbohong, jadi hasil parsing klien tidak pernah dipercaya sebagai
+kebenaran — ini lapis tambahan, bukan pemindahan wewenang.
+
+**Kedua parser diuji silang.** `test_frontend.py` mengekstrak parser
+dari halaman apa adanya, menjalankannya di node, dan membandingkan
+hasilnya dengan parser Python pada 15 payload termasuk yang cacat.
+Kalau keduanya menyimpang, klien bisa menampilkan merchant yang berbeda
+dari yang dinilai server — dan itu akan lolos tanpa ketahuan.
+
+### Model kelangkaan tak-terawasi
+
+Naskah menyebut Layer 2 memakai "unsupervised ML models". Sekarang ada,
+dan bukan tempelan: `profile.py` mempelajari sebaran ciri merchant dari
+pengamatan, lalu menandai payload yang membawa beberapa nilai langka
+sekaligus.
+
+Tak-terawasi dalam arti sebenarnya — tidak ada satu pun contoh penipuan
+yang dipakai melatihnya. Yang dipelajari adalah bentuk normal, dan
+penyimpangan dikenali dari situ. Itu penting karena contoh penipuan
+terkonfirmasi memang tidak ada, sehingga classifier terawasi mustahil
+dilatih.
+
+**Yang membedakannya dari model buram: ia menyebut fitur mana yang
+langka dan seberapa.** Putusan yang tidak bisa dijelaskan tidak punya
+tempat di sistem pembayaran, dan model ini tidak menuntutnya.
+
+**Tebakan ambang awal keliru, dan sapuannya menunjukkannya.** Nilai
+0,02 terlalu ketat: nilai yang sungguh langka pada populasi nyata duduk
+persis di ambang itu, sehingga model hanya menangkap nilai yang tidak
+pernah muncul sama sekali — sekadar deteksi "nilai tak dikenal", bukan
+deteksi kelangkaan.
+
+| ambang | min fitur | sah tertandai | kombinasi langka | payload ngawur |
+|---|---|---|---|---|
+| 0,02 | 3 | 0,00% | **0%** | 100% |
+| **0,05** | **3** | **0,07%** | **100%** | **100%** |
+| 0,08 | 3 | 0,13% | 100% | 100% |
+| 0,12 | 3 | 3,23% | 100% | 100% |
+
+Butuh **tiga** fitur langka sekaligus. Satu keanehan adalah merchant
+yang tidak biasa; beberapa sekaligus adalah pola yang tidak pernah
+terjadi. Dan model diam sepenuhnya di bawah 40 merchant — "langka"
+tidak punya arti kalau datanya sedikit.
+
+---
+
 ## Hasil pengujian
 
 ```
