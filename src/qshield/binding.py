@@ -257,19 +257,46 @@ def _action_for(score: int) -> str:
 def normalize_city(city: Optional[str]) -> str:
     """Samakan bentuk penulisan nama kota sebelum dibandingkan.
 
-    Acquirer menulis kota dengan gaya berbeda-beda: "BANDUNG",
-    "KOTA BANDUNG", "Kab. Bandung". Membandingkan apa adanya membuat
-    merchant sah saling bertentangan tanpa sebab.
+    Acquirer menulis kota dengan gaya berbeda-beda. Bentuk di bawah
+    diambil dari korpus QRIS SUNGGUHAN, bukan dari tebakan:
+
+        "JAKARTA TIMUR ("   terpotong di tengah kurung
+        "LEBAK (KAB)"       jenis wilayah ditaruh di belakang
+        "KOTA BANDUNG"      jenis wilayah di depan
+        "Kab. Bandung"      disingkat dengan titik
+
+    Membandingkan apa adanya membuat merchant sah saling bertentangan
+    tanpa sebab, suaranya terpecah, dan ambang kesepakatan tidak pernah
+    tercapai.
+
+    Yang SENGAJA tidak ditangani: pemotongan di tengah kata, seperti
+    "JAKARTA TI" untuk "JAKARTA TIMUR". Menggabungkannya lewat
+    pencocokan awalan akan ikut menggabungkan "JAKARTA" dengan "JAKARTA
+    BARAT" — dua kota yang benar-benar berbeda. Batasan ini diakui dan
+    dicatat, bukan ditambal dengan tebakan.
     """
     if not city:
         return ""
     k = " ".join(str(city).upper().split())
+
+    # Buang kurung yang tidak pernah ditutup — sisa pemotongan field.
+    if k.count("(") > k.count(")"):
+        k = k[:k.rindex("(")].strip()
+
+    # Jenis wilayah di belakang: "LEBAK (KAB)", "BOGOR (KOTA)".
+    for akhiran in ("(KAB)", "(KOTA)", "(KABUPATEN)", "(KOTA ADM)"):
+        if k.endswith(akhiran):
+            k = k[:-len(akhiran)].strip()
+            break
+
+    # Jenis wilayah di depan.
     for awalan in ("KOTA ADM ", "KOTA ADMINISTRASI ", "KOTA ", "KAB. ",
                    "KABUPATEN ", "KAB "):
         if k.startswith(awalan):
             k = k[len(awalan):]
             break
-    return k.strip()
+
+    return k.strip(" .,-").strip()
 
 
 def _floor_action(status: str, action: str) -> str:
