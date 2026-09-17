@@ -158,6 +158,26 @@ W_DYNAMIC_SPREAD = 55
 W_PRINTED_NMID_MISMATCH = 75
 W_PRINTED_NAME_MISMATCH = 45
 
+# --- Sidik jari WiFi sekitar ---------------------------------------
+#
+# Daftar titik akses di sekeliling adalah penanda tempat yang jauh lebih
+# tajam daripada GPS: ia bekerja di dalam gedung dan memisahkan dua
+# lapak berdempetan. Browser sengaja tidak menyediakannya — justru
+# karena setajam itu — sehingga hanya klien native yang bisa mengisinya.
+#
+# Klien yang melakukan hashing, jadi BSSID mentah tidak pernah sampai
+# ke server.
+#
+# AMBANGNYA BELUM DIKALIBRASI LAPANGAN. Berapa banyak titik akses yang
+# wajar berubah antara dua kunjungan ke warung yang sama tidak bisa
+# ditebak dari simulasi — itu bergantung pada kepadatan WiFi, jam buka,
+# dan perangkat yang lalu-lalang. Nilai di bawah adalah titik awal yang
+# sengaja longgar, dan sinyalnya hanya berlaku bila jangkar sudah punya
+# sidik jari yang cukup besar.
+AP_MIN_KNOWN = 4          # titik akses minimum sebelum sidik jari dipakai
+AP_MIN_OVERLAP = 0.15     # irisan di bawah ini dianggap tempat berbeda
+W_AP_MISMATCH = 30
+
 # --- Integritas perangkat ------------------------------------------
 #
 # Diisi klien NATIVE; klien web tidak akan pernah bisa mengisinya karena
@@ -465,6 +485,40 @@ def _printed_signals(parsed, printed) -> list:
     return out
 
 
+def _ap_signals(ambient, known) -> list:
+    """Bandingkan titik akses sekitar dengan yang dikenal di jangkar ini.
+
+    Irisan Jaccard: berapa banyak titik akses yang sama antara
+    pemindaian ini dan yang pernah terlihat di sini.
+    """
+    from . import binding as bd
+
+    if not ambient or not known or len(known) < AP_MIN_KNOWN:
+        return []
+
+    sekarang = set(str(a)[:64] for a in ambient)
+    if not sekarang:
+        return []
+
+    irisan = len(sekarang & known)
+    gabungan = len(sekarang | known)
+    skor = irisan / gabungan if gabungan else 0.0
+
+    if skor >= AP_MIN_OVERLAP:
+        return []
+
+    return [Signal(
+        name="ambient_wifi_mismatch",
+        weight=W_AP_MISMATCH,
+        reason=(
+            f"Jaringan WiFi di sekitar tidak cocok dengan yang biasa "
+            f"terlihat di lokasi ini ({irisan} dari {len(known)} titik "
+            f"akses dikenali) — koordinatnya cocok tapi tempatnya "
+            f"kemungkinan berbeda"
+        ),
+    )]
+
+
 def _device_signals(integrity) -> list:
     """Sinyal dari laporan integritas perangkat.
 
@@ -635,6 +689,8 @@ def evaluate(
     dynamic_history=None,
     bill_history=None,
     printed=None,
+    ambient_ap=None,
+    known_ap=None,
     area=None,
     other_names=None,
     issuer_profile=None,
@@ -662,6 +718,7 @@ def evaluate(
     signals = (_structural_signals(parsed)
                + _location_claim_signals(accuracy_m, has_coords)
                + _printed_signals(parsed, printed)
+               + _ap_signals(ambient_ap, known_ap)
                + _device_signals(integrity)
                + _dynamic_qr_signals(parsed, dynamic_history, bill_history)
                + _origin_signals(parsed, area, other_names)

@@ -243,6 +243,26 @@ class PrintedLabel(BaseModel):
         description="nama merchant yang tercetak di stiker")
 
 
+class AmbientWifi(BaseModel):
+    """Sidik jari WiFi sekitar, diisi klien NATIVE.
+
+    Daftar titik akses di sekeliling adalah penanda tempat yang jauh
+    lebih tajam daripada GPS: bekerja di dalam gedung, dan memisahkan
+    dua lapak berdempetan yang koordinatnya tidak bisa dibedakan.
+
+    Browser sengaja tidak menyediakan API-nya — justru karena setajam
+    itu — sehingga klien web akan selalu mengosongkannya.
+
+    **Klien yang melakukan hashing.** BSSID mentah tidak boleh dikirim.
+    Pakai SHA-256 atas BSSID yang dinormalisasi huruf kecil, lalu ambil
+    32 karakter pertama. Server tidak pernah melihat alamat aslinya.
+    """
+
+    ap_hashes: list = Field(
+        default_factory=list, max_length=64,
+        description="hash titik akses sekitar; BSSID mentah ditolak")
+
+
 class VerifyRequest(BaseModel):
     """Seluruh field divalidasi di batas sistem, bukan di dalam logika.
 
@@ -291,6 +311,9 @@ class VerifyRequest(BaseModel):
 
     printed_label: Optional[PrintedLabel] = Field(
         None, description="teks yang terbaca di stiker fisik")
+
+    ambient_wifi: Optional[AmbientWifi] = Field(
+        None, description="sidik jari WiFi sekitar; hanya klien native")
 
 
 class MerchantOut(BaseModel):
@@ -777,6 +800,8 @@ def verify(req: VerifyRequest, request: Request):
         has_coords=True,
         integrity=di,
         printed=req.printed_label,
+        ambient_ap=(req.ambient_wifi.ap_hashes if req.ambient_wifi else None),
+        known_ap=(store.ap_fingerprint(anchor_id) if anchor_id else None),
         dynamic_history=riwayat_dinamis,
         bill_history=riwayat_tagihan,
         area=wilayah,
@@ -800,6 +825,16 @@ def verify(req: VerifyRequest, request: Request):
         # Pengetahuan wilayah dibangun HANYA dari pemindaian yang tidak
         # ditolak — alasan yang sama dengan invarian §3.
         store.learn_city(req.lat, req.lng, parsed.merchant_city, nmid)
+        if req.ambient_wifi and req.ambient_wifi.ap_hashes:
+            # Sidik jari menempel pada BINDING merchant ini, bukan pada
+            # jangkar umum — supaya dua lapak berdempetan bisa punya
+            # sidik jari masing-masing.
+            _b = store.conn.execute(
+                "SELECT id FROM bindings WHERE nmid = ? AND geohash_7 = ?",
+                (nmid, geo.encode(req.lat, req.lng, bd.INDEX_PRECISION))
+            ).fetchone()
+            if _b:
+                store.learn_ap(_b["id"], req.ambient_wifi.ap_hashes)
         store.learn_dialect(parsed, nmid)
         store.learn_features(parsed, nmid)
     elif anchor_id is not None and (
