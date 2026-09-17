@@ -144,6 +144,7 @@ yang juga mengimpor `scripts/seed.py` secara langsung.
 | `PITCH-PJP.md` | alasan bisnis untuk PJP + panduan pendekatan dari nol |
 | `KLARIFIKASI-ML.md` | koreksi istilah ML untuk panitia, plus panduan kapan perlu dikirim |
 | `PITCH-AUDIT.md` | audit naskah pitch ke kode + naskah pengganti |
+| `PANDUAN-SCAN.md` | tatacara mengumpulkan QRIS: korpus payload vs survei lokasi |
 
 ## Sebelum demo
 
