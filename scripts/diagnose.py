@@ -21,6 +21,7 @@ import sys
 from datetime import datetime, timezone
 
 AKAR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(AKAR, "src"))
 DB = os.environ.get("QSHIELD_DB", os.path.join(AKAR, "qshield.db"))
 
 

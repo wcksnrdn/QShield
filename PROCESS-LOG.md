@@ -2046,6 +2046,48 @@ struktural disamarkan panjangnya saja.
 
 ---
 
+## Keputusan 50 — Suite pengujian menghapus basis data kerja
+
+Korpus lapangan tim menyusut dari 20 merchant menjadi 2. Penyebabnya
+bukan bug di sistem, melainkan di pengujiannya.
+
+`tests/test_api.py` memanggil `seed.main()` tanpa argumen. `seed.main()`
+**menghapus** basis data sebelum mengisi ulang — itu memang gunanya
+untuk demo. Tapi berarti setiap kali suite dijalankan, seluruh data
+yang dikumpulkan tim ikut terhapus.
+
+**Dan tidak satu pun test gagal karenanya.** Semuanya lulus, tiap kali.
+Kerusakannya baru terlihat ketika datanya dicari dan ternyata tidak
+ada — beberapa hari setelah kejadian pertama.
+
+Itu kelas kegagalan yang paling berbahaya: merusak diam-diam, tanpa
+sinyal apa pun, di jalur yang justru dipakai untuk memastikan segalanya
+baik-baik saja.
+
+**Perbaikannya tiga lapis:**
+
+1. `seed.main()` menerima `db=` dan menghormati `QSHIELD_DB`, sehingga
+   pemanggilnya harus menyebut basis data mana yang boleh dihapus.
+2. `test_api.py` memakai basis data sementara di direktori temporer.
+   Basis data kerja dan basis data uji tidak boleh berbagi jalur.
+3. Pemeriksaan penjaga di `test_hardening.py`: menjalankan seluruh
+   suite lain sebagai subproses, lalu memastikan `qshield.db` masih ada
+   dan waktu ubahnya tidak berubah.
+
+Lapis ketiga yang paling penting. Dua yang pertama memperbaiki kasus
+ini; yang ketiga menangkap kasus berikutnya, yang bentuknya belum
+terbayang.
+
+**Pemulihan.** Sembilan merchant berhasil dipulihkan dari salinan
+sementara yang tertinggal saat diagnosis sebelumnya — hanya
+pembelajaran tingkat payload (`merchant_feature`, `issuer_dialect`).
+Bindings dan `area_city` sengaja tidak dipulihkan, karena pemindaian
+dari gambar tidak boleh membentuk pengetahuan lokasi (Keputusan 49).
+
+Sisanya hilang dan harus dikumpulkan ulang.
+
+---
+
 ## Hasil pengujian
 
 ```

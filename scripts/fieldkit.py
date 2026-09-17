@@ -41,6 +41,7 @@ from collections import defaultdict
 from datetime import datetime
 
 AKAR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(AKAR, "src"))
 BERKAS = os.environ.get("QSHIELD_FIELD_FILE",
                         os.path.join(AKAR, "fielddata.jsonl"))
 

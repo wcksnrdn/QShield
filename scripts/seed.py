@@ -63,19 +63,32 @@ def _shift(lat, lng, north_m, east_m):
     )
 
 
-def main(lat=None, lng=None):
+def main(lat=None, lng=None, db=None):
+    """Isi ulang basis data demo.
+
+    MENGHAPUS basis data yang ditunjuk sebelum mengisi ulang. Itu
+    memang gunanya untuk demo — tapi berarti memanggilnya tanpa
+    menyebut `db` akan menghapus basis data KERJA.
+
+    Pelajaran mahal: tests/test_api.py dulu memanggil main() tanpa
+    argumen, sehingga tiap kali suite dijalankan, seluruh korpus
+    lapangan yang dikumpulkan tim ikut terhapus. Basis data kerja dan
+    basis data uji tidak boleh berbagi jalur.
+    """
     lat = lat if lat is not None else DEFAULT_LAT
     lng = lng if lng is not None else DEFAULT_LNG
     WARUNG["lat"], WARUNG["lng"] = lat, lng
+
+    db = db or os.environ.get("QSHIELD_DB", "qshield.db")
 
     # WAL meninggalkan dua berkas pendamping. Menghapus berkas utama
     # saja membuat SQLite menemukan -wal/-shm yatim dan gagal dengan
     # "disk I/O error" — persis saat kalian re-seed di venue.
     for akhiran in ("", "-wal", "-shm"):
-        berkas = "qshield.db" + akhiran
+        berkas = db + akhiran
         if os.path.exists(berkas):
             os.remove(berkas)
-    s = Store("qshield.db")
+    s = Store(db)
 
     # Jangkar utama: warung sah dengan riwayat panjang.
     s.seed_binding(
