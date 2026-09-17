@@ -43,10 +43,13 @@ PERMINTAAN_OPSIONAL = {
     "device_integrity",
     # Ditambahkan 16 Sep 2026 — teks yang tercetak di stiker fisik.
     "printed_label",
+    # Ditambahkan 17 Sep 2026 — sidik jari WiFi dari klien native.
+    "ambient_wifi",
 }
 PERMINTAAN_TIPE = {
     "device_integrity": "object",
     "printed_label": "object",
+    "ambient_wifi": "object",
     "payload": "string",
     "lat": "number",
     "lng": "number",

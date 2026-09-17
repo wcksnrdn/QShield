@@ -175,6 +175,25 @@ CREATE TABLE IF NOT EXISTS merchant_feature (
     PRIMARY KEY (feature, value, nmid)
 );
 
+-- Sidik jari WiFi sekitar milik sebuah jangkar.
+--
+-- Yang disimpan adalah HASH titik akses yang dikirim klien — klien
+-- yang melakukan hashing, jadi BSSID mentah tidak pernah sampai ke
+-- sini. Menempel pada BINDING, yaitu properti lokasi merchant, bukan
+-- pada pengamat: sekategori dengan koordinat, dan tunduk aturan yang
+-- sama (Keputusan 6).
+--
+-- Gunanya memisahkan dua lapak berdempetan yang GPS-nya tidak sanggup
+-- membedakan, dan menguatkan jangkar saat sinyal GPS buruk di dalam
+-- gedung — dua hal yang selama ini jadi batasan R3.
+CREATE TABLE IF NOT EXISTS binding_ap (
+    binding_id  INTEGER NOT NULL REFERENCES bindings(id),
+    ap_hash     TEXT    NOT NULL,
+    seen_count  INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (binding_id, ap_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_bap ON binding_ap(binding_id);
 CREATE INDEX IF NOT EXISTS idx_mfeat ON merchant_feature(feature);
 CREATE INDEX IF NOT EXISTS idx_benef ON beneficiary_report(account_hash);
 CREATE INDEX IF NOT EXISTS idx_dialect ON issuer_dialect(pan_prefix, attribute);
@@ -777,6 +796,26 @@ class Store:
                     "INSERT OR IGNORE INTO issuer_dialect "
                     "(pan_prefix, attribute, value, nmid) VALUES (?, ?, ?, ?)",
                     (prefix, atribut, nilai, nmid))
+
+    def learn_ap(self, binding_id: int, ap_hashes) -> None:
+        """Catat titik akses yang terlihat di jangkar ini."""
+        if not ap_hashes:
+            return
+        with self._lock:
+            for h in set(ap_hashes):
+                self.conn.execute(
+                    "INSERT INTO binding_ap (binding_id, ap_hash, seen_count) "
+                    "VALUES (?, ?, 1) ON CONFLICT (binding_id, ap_hash) "
+                    "DO UPDATE SET seen_count = seen_count + 1",
+                    (binding_id, str(h)[:64]))
+
+    def ap_fingerprint(self, binding_id: int) -> set:
+        """Titik akses yang pernah terlihat di jangkar ini."""
+        with self._lock:
+            baris = self.conn.execute(
+                "SELECT ap_hash FROM binding_ap WHERE binding_id = ?",
+                (binding_id,)).fetchall()
+        return {r["ap_hash"] for r in baris}
 
     def learn_features(self, parsed, nmid: str) -> None:
         """Catat ciri merchant ini ke sebaran yang dipelajari."""
