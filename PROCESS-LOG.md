@@ -1985,6 +1985,67 @@ tidak diverifikasi menghabiskan waktu untuk bug yang tidak ada.
 
 ---
 
+## Keputusan 49 — QRIS sungguhan memakai dua template, dan parser kami hanya melihat satu
+
+Korpus lapangan 20 QRIS nyata mengungkap dua hal yang mustahil terlihat
+dari data buatan sendiri.
+
+### Bentuk nilai kota di dunia nyata
+
+Normalisasi kota sebelumnya hanya menangani awalan "KOTA"/"KAB.".
+Korpus nyata menunjukkan bentuk lain:
+
+```
+'JAKARTA TIMUR ('   terpotong di tengah kurung
+'LEBAK (KAB)'       jenis wilayah ditaruh di belakang
+'JAKARTA TI'        terpotong di tengah kata
+'KUKAR'             singkatan
+```
+
+Dua yang pertama diperbaiki. Dua yang terakhir **sengaja tidak**:
+menggabungkan "JAKARTA TI" dengan "JAKARTA TIMUR" lewat pencocokan
+awalan akan ikut menggabungkan "JAKARTA" dengan "JAKARTA BARAT", dan
+itu dua kota yang benar-benar berbeda. Batasan diakui, bukan ditambal
+dengan tebakan.
+
+### Dua template merchant
+
+Temuan yang lebih besar: **18 dari 20 QRIS sungguhan tampak tidak punya
+Merchant PAN.**
+
+Penyebabnya bukan payload-nya, melainkan parser kami. QRIS sungguhan
+sering memakai lebih dari satu template merchant:
+
+```
+tag 26   GUID acquirer penerbit   -> PAN ada di sini
+tag 51   GUID ID.CO.QRIS.WWW      -> NMID ada di sini, PAN sering tidak
+```
+
+`primary_account` memilih yang GUID-nya QRIS karena di situlah NMID
+yang berlaku — itu benar. Tapi kami juga mencari PAN di sana, dan
+akibatnya prefiks penyelenggara tidak pernah terbaca untuk hampir
+seluruh merchant nyata.
+
+Dampaknya nyata: `issuer_dialect` hanya terkumpul dari **satu**
+penyelenggara, padahal korpusnya berisi belasan. Seluruh pekerjaan
+dialek penerbit di Keputusan 39 praktis tidak berjalan pada data
+sungguhan.
+
+Diperbaiki dengan memisahkan keduanya: `primary_account` tetap sumber
+NMID, dan `acquirer_account` baru mencari PAN di template MANA PUN yang
+punya — mendahulukan yang bukan-QRIS, karena di situlah prefiks
+penyelenggara berada.
+
+`seed.py` hanya membuat satu template, jadi ini mustahil ketahuan dari
+pengujian sendiri. Inilah alasan korpus lapangan diperlukan, dan
+inilah yang R7 maksudkan sejak awal.
+
+`diagnose.py --struktur` ditambahkan supaya struktur payload sungguhan
+bisa diperiksa tanpa membagikan identitas merchantnya: nilai yang bukan
+struktural disamarkan panjangnya saja.
+
+---
+
 ## Hasil pengujian
 
 ```

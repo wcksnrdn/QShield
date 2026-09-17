@@ -129,6 +129,35 @@ class QrisPayload:
         return acc.nmid if acc else None
 
     @property
+    def acquirer_account(self) -> Optional["MerchantAccount"]:
+        """Template yang membawa Merchant PAN.
+
+        QRIS sungguhan sering memakai lebih dari satu template merchant:
+        satu milik acquirer penerbit (PAN ada di sini), satu lagi
+        ID.CO.QRIS.WWW nasional (NMID ada di sini, PAN sering tidak).
+
+        `primary_account` memilih yang GUID-nya QRIS karena di situlah
+        NMID yang berlaku. Tapi mencari PAN di sana membuat 18 dari 20
+        QRIS sungguhan tampak tidak punya PAN sama sekali — terukur dari
+        korpus lapangan, dan tidak pernah muncul di data sintetis karena
+        pembangkit kami hanya membuat satu template.
+
+        Jadi PAN dicari di template MANA PUN yang punya, dengan yang
+        bukan-QRIS didahulukan: itu template acquirer, dan prefiks PAN
+        di sanalah yang menandai penyelenggaranya.
+        """
+        bukan_qris = [a for a in self.accounts if a.pan and not a.is_qris]
+        if bukan_qris:
+            return bukan_qris[0]
+        with_pan = [a for a in self.accounts if a.pan]
+        return with_pan[0] if with_pan else None
+
+    @property
+    def merchant_pan(self) -> Optional[str]:
+        acc = self.acquirer_account
+        return acc.pan if acc else None
+
+    @property
     def bill_ref(self) -> Optional[str]:
         """Nomor tagihan pada tag 62 sub-tag 01.
 
@@ -267,6 +296,7 @@ def dialect(payload: "QrisPayload") -> dict:
     bukan nama, bukan kota. Yang dikumpulkan adalah gaya penerbitnya.
     """
     acc = payload.primary_account
+    pan_acc = payload.acquirer_account
     sub = list(acc.raw) if acc else []
     return {
         "tag_order": ",".join(payload.tags),
@@ -275,7 +305,9 @@ def dialect(payload: "QrisPayload") -> dict:
         "crc_case": ("upper" if payload.crc_found
                      and payload.crc_found == payload.crc_found.upper()
                      else "lower"),
-        "pan_len": str(len(acc.pan or "")) if acc else "?",
+        # PAN dicari di template mana pun yang punya — lihat
+        # acquirer_account untuk alasannya.
+        "pan_len": str(len(pan_acc.pan)) if pan_acc and pan_acc.pan else "0",
         "nmid_len": str(len(acc.nmid or "")) if acc else "?",
     }
 

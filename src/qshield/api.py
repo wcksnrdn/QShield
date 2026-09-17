@@ -740,10 +740,12 @@ def verify(req: VerifyRequest, request: Request):
     elsewhere = store.by_nmid(nmid)
     wilayah = store.area_city(req.lat, req.lng)
     nama_lain = store.names_for_nmid(nmid)
-    akun = parsed.primary_account
     korpus = store.feature_corpus()
-    dialek = (store.dialect_profile(akun.pan[:8])
-              if akun and akun.pan and len(akun.pan) >= 8 else None)
+    # Prefiks PAN menandai penyelenggara, dan PAN itu ada di template
+    # acquirer — bukan selalu template yang sama dengan NMID.
+    pan_merchant = parsed.merchant_pan
+    dialek = (store.dialect_profile(pan_merchant[:8])
+              if pan_merchant and len(pan_merchant) >= 8 else None)
     anchor_id, anchor_nmid, anchor_state = store.anchor_state(req.lat, req.lng)
     jangkar_bertuan = getattr(store, "_anchor_has_owner", False)
 
