@@ -1,11 +1,66 @@
-# Prompt untuk AI agent di Android Studio
+"""
+Tulis prompt Android Studio dengan nilai yang sudah terisi.
+
+Alamat laptop berubah tiap pindah jaringan — sudah tiga kali berubah
+selama proyek ini. Menuliskannya sekali di dokumen berarti dokumen itu
+basi beberapa jam kemudian, dan yang menanggung adalah orang yang
+menempelkannya ke agent lalu bingung kenapa aplikasinya tidak
+terhubung.
+
+Jadi diisi di sini, tiap kali dijalankan.
+
+  python scripts/make_android_prompt.py
+  python scripts/make_android_prompt.py --app-id com.namakalian.qshield
+  python scripts/make_android_prompt.py --host 10.0.0.5
+
+Keluarannya PROMPT-ANDROID.md — salin seluruh isinya ke agent.
+"""
+
+import os
+import socket
+import subprocess
+import sys
+
+AKAR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+KELUARAN = os.path.join(AKAR, "PROMPT-ANDROID.md")
+APP_ID_BAWAAN = "id.qshield.scanner"
+
+
+def ip_lan() -> str:
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+    finally:
+        s.close()
+
+
+def cert_cocok(ip: str):
+    """Apakah sertifikat yang ada masih berlaku untuk IP ini."""
+    cert = os.path.join(AKAR, "certs", "cert.pem")
+    if not os.path.exists(cert):
+        return False, "certs/cert.pem belum ada"
+    hasil = subprocess.run(
+        ["openssl", "x509", "-in", cert, "-noout", "-text"],
+        capture_output=True, text=True)
+    san = [b for b in hasil.stdout.split("\n") if "IP Address" in b]
+    if not san:
+        return False, "sertifikat tidak punya SAN"
+    if ip not in san[0]:
+        return False, f"sertifikat dibuat untuk {san[0].strip()}"
+    return True, "cocok"
+
+
+TEMPLATE = '''# Prompt untuk AI agent di Android Studio
 
 Dibuat otomatis oleh `scripts/make_android_prompt.py`. Alamat laptop
 dan application id sudah terisi.
 
-    alamat server : https://192.168.113.128:8000
-    application id: id.qshield.scanner
-    sertifikat    : cocok untuk 192.168.113.128
+    alamat server : {base_url}
+    application id: {app_id}
+    sertifikat    : {status_cert}
 
 Kalau berpindah jaringan, jalankan ulang skrip itu — alamatnya berubah.
 
@@ -16,7 +71,7 @@ Inggris karena agent coding umumnya lebih akurat begitu.
 
 ```
 Build an Android app in Kotlin called "Q-Shield Scanner", application
-id id.qshield.scanner. It is a reference client for an existing QRIS anti-fraud
+id {app_id}. It is a reference client for an existing QRIS anti-fraud
 API. The API already exists and is fully specified below — do not
 invent endpoints or fields.
 
@@ -88,7 +143,7 @@ When a QR is detected:
       val normalised = bssid.lowercase()
       val digest = MessageDigest.getInstance("SHA-256")
           .digest(normalised.toByteArray())
-      val hex = digest.joinToString("") { "%02x".format(it) }.take(32)
+      val hex = digest.joinToString("") {{ "%02x".format(it) }}.take(32)
 
    NEVER send the raw BSSID or SSID. Take at most 32 access points,
    sorted by signal level descending.
@@ -97,12 +152,12 @@ When a QR is detected:
    /system/xbin/su, and whether Build.TAGS contains "test-keys".
    Report the boolean; do not attempt to bypass anything.
 6. Device id: generate a random UUID on first launch, store it in
-   DataStore, reuse it forever. Must match ^[A-Za-z0-9_-]{8,64}$.
+   DataStore, reuse it forever. Must match ^[A-Za-z0-9_-]{{8,64}}$.
    Never use ANDROID_ID, IMEI, or any hardware identifier.
 
 ## The API
 
-Base URL configurable in a settings screen, default https://192.168.113.128:8000
+Base URL configurable in a settings screen, default {base_url}
 
 POST /api/v1/verify
 Header: X-API-Key: <configurable, may be empty during local testing>
@@ -111,26 +166,26 @@ Content-Type: application/json
 Request body — every field named here is real, nothing else is
 accepted:
 
-{
+{{
   "payload": "<raw QRIS string from the QR>",
   "lat": -6.914744,
   "lng": 107.609810,
   "accuracy_m": 8.5,
   "device_anon_id": "<the stored UUID>",
-  "device_integrity": {
+  "device_integrity": {{
     "mock_location": false,
     "rooted": false,
     "attested": null,
     "platform": "android"
-  },
-  "ambient_wifi": {
+  }},
+  "ambient_wifi": {{
     "ap_hashes": ["a1b2c3...", "d4e5f6..."]
-  },
-  "printed_label": {
+  }},
+  "printed_label": {{
     "nmid": "<only when the user typed it>",
     "merchant_name": null
-  }
-}
+  }}
+}}
 
 Rules that matter:
 - payload, lat, lng, accuracy_m, device_anon_id are REQUIRED.
@@ -144,21 +199,21 @@ Rules that matter:
 
 Response 200:
 
-{
+{{
   "verdict": "verified" | "unknown" | "anomaly",
   "action": "proceed" | "warn" | "step_up" | "cooling_off",
   "risk_score": 0,
   "reasons": ["...", "..."],
   "signals": ["..."],
-  "layers": {"location": 0, "behavior": 0},
-  "merchant": {
+  "layers": {{"location": 0, "behavior": 0}},
+  "merchant": {{
     "nmid": "...", "name": "...", "city": "...",
     "criteria": "...", "is_static": true
-  },
+  }},
   "location_source": "live",
   "device_integrity": "not_provided" | "reported" | "attested" | "failed",
   "processing_ms": 2.8
-}
+}}
 
 Map `action` to the UI, not `verdict`. Ignore unknown response fields —
 new ones are added without a version bump.
@@ -219,8 +274,8 @@ sering terjadi.
 ## Menjalankan server untuk mengujinya
 
 ```bash
-QSHIELD_AUTH=off .venv/bin/uvicorn qshield.api:app \
-  --host 0.0.0.0 --port 8000 \
+{perintah_cert}.venv/bin/uvicorn qshield.api:app \\
+  --host 0.0.0.0 --port 8000 \\
   --ssl-certfile certs/cert.pem --ssl-keyfile certs/key.pem
 ```
 
@@ -235,3 +290,47 @@ Untuk memastikan sidik jari WiFi benar-benar masuk:
 ```bash
 python3 scripts/diagnose.py --anchor <lat> <lng>
 ```
+'''
+
+
+def main(argv):
+    app_id = APP_ID_BAWAAN
+    if "--app-id" in argv:
+        app_id = argv[argv.index("--app-id") + 1]
+
+    ip = argv[argv.index("--host") + 1] if "--host" in argv else ip_lan()
+    base_url = f"https://{ip}:8000"
+
+    ok, pesan = cert_cocok(ip)
+    if not ok and "--tanpa-cert" not in argv:
+        # Skrip ini sudah tahu sertifikatnya salah. Menyuruh orang
+        # menjalankan perintah kedua untuk memperbaiki sesuatu yang
+        # sudah kita ketahui hanya memindahkan pekerjaan, bukan
+        # menyelesaikannya.
+        print(f"  sertifikat tidak cocok ({pesan}) — dibuat ulang...")
+        subprocess.run([sys.executable, os.path.join(AKAR, "scripts", "make_cert.py")],
+                       cwd=AKAR, capture_output=True)
+        ok, pesan = cert_cocok(ip)
+
+    status = f"cocok untuk {ip}" if ok else f"PERLU DIPERIKSA — {pesan}"
+    perintah = "QSHIELD_AUTH=off "
+
+    with open(KELUARAN, "w") as f:
+        f.write(TEMPLATE.format(base_url=base_url, app_id=app_id,
+                                status_cert=status, perintah_cert=perintah))
+
+    print("=" * 66)
+    print("PROMPT SIAP")
+    print("=" * 66)
+    print()
+    print(f"  berkas         : {os.path.relpath(KELUARAN, AKAR)}")
+    print(f"  alamat server  : {base_url}")
+    print(f"  application id : {app_id}")
+    print(f"  sertifikat     : {status}")
+    print()
+    print("  Buka berkasnya, salin blok di dalam ``` ke agent.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
