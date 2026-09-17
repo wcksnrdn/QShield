@@ -1,6 +1,7 @@
 """Test API end-to-end lewat TestClient."""
 
 import os
+import tempfile
 
 # Test ini sengaja membanjiri API, jadi pembatasan laju dimatikan di sini,
 # begitu juga autentikasi klien — keduanya diuji tersendiri di
@@ -12,14 +13,20 @@ os.environ["QSHIELD_AUTH"] = "off"
 import seed
 from fastapi.testclient import TestClient
 
-seed.main()
+# Basis data SEMENTARA. Sebelumnya berkas ini memanggil seed.main()
+# tanpa argumen, dan seed menghapus basis data sebelum mengisi ulang —
+# sehingga tiap kali suite dijalankan, korpus lapangan yang dikumpulkan
+# tim ikut terhapus tanpa ada yang menyadarinya.
+_DB_UJI = os.path.join(tempfile.mkdtemp(), "api-uji.db")
+os.environ["QSHIELD_DB"] = _DB_UJI
+seed.main(db=_DB_UJI)
 
 from qshield import api
 from qshield.api import app
 
 api.store.close()
 from qshield.store import Store
-api.store = Store("qshield.db")
+api.store = Store(_DB_UJI)
 
 client = TestClient(app)
 

@@ -551,6 +551,44 @@ def _sv4():
     return "peringatan menyebut payload mentah dan koordinat presisi"
 
 
+@cek("Tidak ada test yang menyentuh basis data kerja")
+def _db1():
+    import subprocess
+    import sys as _sys
+    import tempfile as _tf
+
+    AKAR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    kerja = os.path.join(AKAR, "qshield.db")
+
+    # Pelajaran mahal: tests/test_api.py dulu memanggil seed.main()
+    # tanpa argumen, dan seed MENGHAPUS basis data sebelum mengisi
+    # ulang. Tiap kali suite dijalankan, korpus lapangan yang
+    # dikumpulkan tim ikut terhapus — tanpa satu pun test gagal, jadi
+    # tidak ada yang menyadarinya sampai datanya dicari dan tidak ada.
+    if not os.path.exists(kerja):
+        return "(basis data kerja belum ada — pemeriksaan dilewati)"
+
+    sebelum = os.path.getmtime(kerja)
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join(
+        [env.get("PYTHONPATH", ""), os.path.join(AKAR, "src"),
+         os.path.join(AKAR, "scripts")])
+    env.pop("QSHIELD_DB", None)
+
+    berkas = sorted(f for f in os.listdir(os.path.join(AKAR, "tests"))
+                    if f.startswith("test_") and f.endswith(".py")
+                    and f != os.path.basename(__file__))
+    for t in berkas:
+        subprocess.run([_sys.executable, os.path.join(AKAR, "tests", t)],
+                       capture_output=True, env=env, cwd=AKAR, timeout=180)
+
+    assert os.path.exists(kerja), (
+        f"{kerja} DIHAPUS oleh salah satu suite pengujian")
+    assert os.path.getmtime(kerja) == sebelum, (
+        f"{kerja} diubah oleh salah satu suite pengujian")
+    return f"{len(berkas)} suite dijalankan, qshield.db tidak tersentuh"
+
+
 # --- Konkurensi ----------------------------------------------------
 
 @cek("Permintaan serentak tidak merusak hitungan pengamat")
