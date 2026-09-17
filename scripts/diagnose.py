@@ -9,6 +9,7 @@ sebabnya, bukan menebaknya.
   python scripts/diagnose.py PAYLOAD LAT LNG [AKURASI]
   python scripts/diagnose.py --last            pemindaian terakhir di audit log
   python scripts/diagnose.py --anchor LAT LNG  isi jangkar di titik itu
+  python scripts/diagnose.py --struktur PAYLOAD   bentuk payload, nilai disamarkan
 
 Contoh:
   python scripts/diagnose.py "00020101021126..." -6.1686 106.8724 15
@@ -92,6 +93,67 @@ def cmd_anchor(argv):
     else:
         print("  Pengetahuan wilayah: belum ada")
     s.close()
+    return 0
+
+
+def cmd_struktur(argv):
+    """Cetak STRUKTUR payload, bukan isinya.
+
+    Dipakai ketika struktur sebuah QRIS sungguhan perlu diperiksa tanpa
+    membagikan identitas merchantnya. Nilai yang bukan struktural
+    disamarkan panjangnya saja; yang ditampilkan apa adanya hanya yang
+    memang menentukan bentuk — GUID penyelenggara, nomor tag, dan
+    panjang tiap field.
+    """
+    from qshield import emvco
+
+    if not argv:
+        print("--struktur PAYLOAD", file=sys.stderr)
+        return 2
+    try:
+        parsed = emvco.parse(argv[0])
+    except emvco.ParseError as exc:
+        print(f"Tidak bisa diurai: {exc}", file=sys.stderr)
+        return 1
+
+    TAMPIL = {"00", "01", "52", "53", "58", "61", "63"}
+    print("=" * 62)
+    print("STRUKTUR PAYLOAD  (nilai disamarkan)")
+    print("=" * 62)
+    print()
+    print(f"  panjang total: {len(argv[0])} karakter")
+    print()
+    for tag in parsed.tags:
+        nilai = parsed.tags[tag]
+        if 26 <= int(tag) <= 51:
+            print(f"  tag {tag}  template merchant, {len(nilai)} karakter")
+            try:
+                sub = emvco.parse_tlv(nilai)
+            except emvco.ParseError:
+                print("      (sub-TLV tidak bisa diurai)")
+                continue
+            for st, sv in sub.items():
+                # GUID ditampilkan apa adanya: ia menentukan template
+                # mana yang nasional dan mana yang milik acquirer.
+                if st == "00":
+                    print(f"      {st}  GUID          {sv}")
+                else:
+                    peran = {"01": "PAN", "02": "NMID",
+                             "03": "kriteria"}.get(st, "?")
+                    print(f"      {st}  {peran:<12}  {len(sv)} karakter")
+        elif tag in TAMPIL:
+            print(f"  tag {tag}  {nilai}")
+        else:
+            print(f"  tag {tag}  {len(nilai)} karakter")
+
+    acc = parsed.primary_account
+    print()
+    print(f"  primary_account dipilih parser : tag "
+          f"{acc.tag if acc else '-'}")
+    print(f"    GUID     {acc.guid if acc else '-'}")
+    print(f"    NMID ada {bool(acc and acc.nmid)}")
+    print(f"    PAN ada  {bool(acc and acc.pan)}"
+          f"{'   <- INI MASALAHNYA' if acc and not acc.pan else ''}")
     return 0
 
 
@@ -223,6 +285,8 @@ if __name__ == "__main__":
     if not argv:
         print(__doc__)
         sys.exit(0)
+    if argv[0] == "--struktur":
+        sys.exit(cmd_struktur(argv[1:]))
     if argv[0] == "--anchor":
         sys.exit(cmd_anchor(argv[1:]))
     if argv[0] == "--last":

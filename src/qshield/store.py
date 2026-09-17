@@ -764,10 +764,13 @@ class Store:
         """Catat gaya penyusunan payload ini atas nama penerbitnya."""
         from . import emvco
 
-        acc = parsed.primary_account
-        if not acc or not acc.pan or len(acc.pan) < 8:
+        # Prefiks PAN menandai penyelenggara penerbit, dan PAN itu ada
+        # di template acquirer — bukan selalu di template yang sama
+        # dengan NMID. Lihat emvco.acquirer_account.
+        pan = parsed.merchant_pan
+        if not pan or len(pan) < 8:
             return
-        prefix = acc.pan[:8]
+        prefix = pan[:8]
         with self._lock:
             for atribut, nilai in emvco.dialect(parsed).items():
                 self.conn.execute(

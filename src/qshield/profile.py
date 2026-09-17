@@ -68,11 +68,13 @@ FEATURES = ("mcc", "criteria", "city", "pan_len", "has_postal",
 def features_of(parsed) -> dict:
     """Ciri kategorikal satu payload, untuk dipelajari dan dinilai."""
     acc = parsed.primary_account
+    pan_acc = parsed.acquirer_account
     return {
         "mcc": parsed.mcc or "?",
         "criteria": (acc.criteria if acc else None) or "?",
         "city": (parsed.merchant_city or "?").strip().upper(),
-        "pan_len": str(len(acc.pan or "")) if acc else "?",
+        "pan_len": (str(len(pan_acc.pan))
+                    if pan_acc and pan_acc.pan else "0"),
         "has_postal": "1" if parsed.postal_code else "0",
         "static": "1" if parsed.is_static else "0",
         "currency": parsed.currency or "?",

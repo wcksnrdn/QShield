@@ -114,4 +114,58 @@ print(f"  amount     {p5.amount}")
 assert not p5.is_static and p5.amount == "25000.00"
 print("\n  OK\n")
 
+# --- QRIS dua-template: PAN di acquirer, NMID di nasional ----------
+#
+# Ditemukan dari korpus lapangan: 18 dari 20 QRIS sungguhan tampak
+# tidak punya PAN, karena parser mencarinya di template yang sama
+# dengan NMID. QRIS sungguhan sering memisahkannya.
+print()
+print("=" * 66)
+print("QRIS dua-template")
+print("=" * 66)
+
+_a26 = emvco.build_tlv({"00": "ID.CO.BANKX.WWW", "01": "936008990000012345",
+                  "02": "ID1026542245422"})
+_a51 = emvco.build_tlv({"00": "ID.CO.QRIS.WWW", "02": "ID1026542245422",
+                  "03": "UMI"})
+_dua = emvco.build({"00": "01", "01": "11", "26": _a26, "51": _a51,
+              "52": "5499", "53": "360", "58": "ID",
+              "59": "ES KELAPA", "60": "JAKARTA TIMUR", "61": "13410"})
+_p = emvco.parse(_dua)
+
+print(f"  NMID diambil dari template QRIS   : {_p.nmid}")
+assert _p.nmid == "ID1026542245422", "NMID salah template"
+
+print(f"  PAN diambil dari template acquirer: {_p.merchant_pan}")
+assert _p.merchant_pan == "936008990000012345", (
+    "PAN tidak ditemukan — dialek penerbit akan terlewat")
+
+print(f"  primary_account                   : tag {_p.primary_account.tag}")
+assert _p.primary_account.tag == "51"
+print(f"  acquirer_account                  : tag {_p.acquirer_account.tag}")
+assert _p.acquirer_account.tag == "26"
+
+print(f"  dialect pan_len                   : {emvco.dialect(_p)['pan_len']}")
+assert emvco.dialect(_p)["pan_len"] == "18", "panjang PAN salah"
+
+# Struktur satu-template harus tetap benar.
+_satu = emvco.parse(emvco.build({
+    "00": "01", "01": "11",
+    "26": emvco.build_tlv({"00": "ID.CO.QRIS.WWW", "01": "936000149000000001",
+                     "02": "ID1024365478912", "03": "UMI"}),
+    "52": "5812", "53": "360", "58": "ID", "59": "W", "60": "B"}))
+assert _satu.merchant_pan == "936000149000000001", "satu-template rusak"
+assert _satu.nmid == "ID1024365478912"
+print("  satu-template tetap utuh          : OK")
+
+# Payload tanpa PAN di template mana pun.
+_tanpa = emvco.parse(emvco.build({
+    "00": "01", "01": "11",
+    "26": emvco.build_tlv({"00": "ID.CO.QRIS.WWW", "02": "ID1024365478912"}),
+    "52": "5812", "53": "360", "58": "ID", "59": "W", "60": "B"}))
+assert _tanpa.merchant_pan is None, "PAN muncul dari ketiadaan"
+assert emvco.dialect(_tanpa)["pan_len"] == "0"
+print("  tanpa PAN sama sekali             : dilaporkan 0, tidak galat")
+
+print()
 print("Semua test lolos.")
