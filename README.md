@@ -145,6 +145,7 @@ yang juga mengimpor `scripts/seed.py` secara langsung.
 | `KLARIFIKASI-ML.md` | koreksi istilah ML untuk panitia, plus panduan kapan perlu dikirim |
 | `PITCH-AUDIT.md` | audit naskah pitch ke kode + naskah pengganti |
 | `PANDUAN-SCAN.md` | tatacara mengumpulkan QRIS: korpus payload vs survei lokasi |
+| `PROMPT-ANDROID.md` | prompt siap kirim untuk agent Android Studio |
 
 ## Sebelum demo
 
