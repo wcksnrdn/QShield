@@ -24,6 +24,7 @@ import sys
 AKAR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 KELUARAN = os.path.join(AKAR, "PROMPT-ANDROID.md")
 APP_ID_BAWAAN = "id.qshield.scanner"
+PROYEK_ANDROID = os.path.expanduser("~/AndroidStudioProjects/QShield")
 
 
 def ip_lan() -> str:
@@ -293,6 +294,26 @@ python3 scripts/diagnose.py --anchor <lat> <lng>
 '''
 
 
+def salin_cert(proyek: str):
+    """Taruh sertifikat di res/raw supaya aplikasi mempercayainya sendiri.
+
+    Alternatifnya menyuruh orang memasang sertifikat lewat setelan HP:
+    butuh kunci layar, memunculkan peringatan "jaringan mungkin
+    dipantau", dan harus diulang tiap sertifikat dibuat ulang — yang
+    di proyek ini terjadi tiap pindah jaringan.
+    """
+    if not os.path.isdir(proyek):
+        return None
+    raw = os.path.join(proyek, "app", "src", "main", "res", "raw")
+    os.makedirs(raw, exist_ok=True)
+    tujuan = os.path.join(raw, "qshield_ca.pem")
+    with open(os.path.join(AKAR, "certs", "cert.pem")) as f:
+        isi = f.read()
+    with open(tujuan, "w") as f:
+        f.write(isi)
+    return tujuan
+
+
 def main(argv):
     app_id = APP_ID_BAWAAN
     if "--app-id" in argv:
@@ -312,6 +333,9 @@ def main(argv):
                        cwd=AKAR, capture_output=True)
         ok, pesan = cert_cocok(ip)
 
+    proyek = argv[argv.index("--proyek") + 1] if "--proyek" in argv else PROYEK_ANDROID
+    disalin = salin_cert(proyek) if ok else None
+
     status = f"cocok untuk {ip}" if ok else f"PERLU DIPERIKSA — {pesan}"
     perintah = "QSHIELD_AUTH=off "
 
@@ -327,6 +351,11 @@ def main(argv):
     print(f"  alamat server  : {base_url}")
     print(f"  application id : {app_id}")
     print(f"  sertifikat     : {status}")
+    if disalin:
+        print(f"  disalin ke     : {os.path.relpath(disalin, proyek)}")
+        print("                   (build ulang APK — tidak perlu pasang di setelan HP)")
+    elif os.path.isdir(proyek):
+        print("  sertifikat tidak disalin — perbaiki dulu")
     print()
     print("  Buka berkasnya, salin blok di dalam ``` ke agent.")
     return 0
