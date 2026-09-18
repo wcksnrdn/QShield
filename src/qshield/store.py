@@ -74,6 +74,32 @@ CREATE TABLE IF NOT EXISTS observations (
     UNIQUE (binding_id, device_ref)
 );
 
+-- Pemindaian yang DITOLAK di sebuah jangkar, dicatat per NMID penantang.
+--
+-- Bukan reputasi dan tidak pernah menyentuh observer_count — invarian §3
+-- utuh. Gunanya satu: membuktikan KEHADIRAN FISIK yang berkelanjutan.
+--
+-- Pembedanya bersifat fisik, bukan statistik. Stiker yang ditempel
+-- MENUTUPI membuat QR aslinya tidak bisa dipindai lagi, sehingga merchant
+-- lama berhenti terlihat. Dua pedagang bersebelahan sungguhan terus
+-- terlihat berdua. Penyerang tidak bisa memalsukan yang kedua tanpa
+-- membatalkan serangannya sendiri.
+--
+-- device_ref dilingkupi per (jangkar, nmid) dengan alasan yang sama
+-- seperti observations: baris tidak boleh bisa dirangkai antar-tempat
+-- menjadi jejak perjalanan.
+CREATE TABLE IF NOT EXISTS anchor_challenge (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    geohash_7     TEXT    NOT NULL,
+    nmid          TEXT    NOT NULL,
+    device_ref    TEXT    NOT NULL,
+    attempted_at  TEXT    NOT NULL,
+    UNIQUE (geohash_7, nmid, device_ref)
+);
+
+CREATE INDEX IF NOT EXISTS idx_challenge_lookup
+    ON anchor_challenge (geohash_7, nmid);
+
 CREATE TABLE IF NOT EXISTS meta (
     key    TEXT PRIMARY KEY,
     value  TEXT NOT NULL
@@ -933,6 +959,48 @@ class Store:
                 "WHERE nmid = ? AND merchant_name IS NOT NULL", (nmid,)
             ).fetchall()
         return [r["merchant_name"] for r in baris]
+
+    def note_challenge(self, lat: float, lng: float, nmid: str,
+                       device_anon_id: str,
+                       now: Optional[datetime] = None) -> None:
+        """Catat satu pemindaian yang ditolak, per (jangkar, NMID penantang).
+
+        Idempoten per perangkat: seratus pemindaian dari satu HP tetap
+        terhitung satu. Yang diukur adalah berapa ORANG berbeda yang
+        menemui stiker ini di sini, bukan berapa kali ia dipindai —
+        penyerang bisa mengulang, tapi tidak bisa menggandakan dirinya
+        jadi banyak pelanggan.
+        """
+        now = now or datetime.now(timezone.utc)
+        gh7 = geo.encode(lat, lng, bd.INDEX_PRECISION)
+        bahan = f"{self._salt}|tantangan|{gh7}|{nmid}|{device_anon_id}"
+        ref = hashlib.sha256(bahan.encode("utf-8")).hexdigest()
+        with self._lock:
+            self.conn.execute(
+                """INSERT OR IGNORE INTO anchor_challenge
+                   (geohash_7, nmid, device_ref, attempted_at)
+                   VALUES (?, ?, ?, ?)""",
+                (gh7, nmid, ref, _iso(now)),
+            )
+
+    def challenge_state(self, lat: float, lng: float,
+                        nmid: str) -> Optional[bd.Challenge]:
+        """Berapa perangkat berbeda menemui NMID ini di jangkar ini, sejak kapan."""
+        gh7 = geo.encode(lat, lng, bd.INDEX_PRECISION)
+        row = self.conn.execute(
+            """SELECT COUNT(*) AS n, MIN(attempted_at) AS awal,
+                      MAX(attempted_at) AS akhir
+               FROM anchor_challenge
+               WHERE geohash_7 = ? AND nmid = ?""",
+            (gh7, nmid),
+        ).fetchone()
+        if not row or not row["n"]:
+            return None
+        return bd.Challenge(
+            devices=row["n"],
+            first_at=_parse(row["awal"]),
+            last_at=_parse(row["akhir"]),
+        )
 
     def note_anomaly(self, binding_id: int,
                      now: Optional[datetime] = None) -> None:
