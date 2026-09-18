@@ -182,4 +182,61 @@ assert "adjacent_merchant" in v.signals, "koeksistensi harus dibedakan dari swap
 assert v.status != b.ANOMALY, "merchant bersebelahan tidak boleh jadi anomali keras"
 print("\n  dikenali sebagai merchant bersebelahan, bukan pertukaran stiker")
 
+print()
+print("=" * 66)
+print("14. Lapak sepi di sebelah warung ramai bisa keluar dari tuduhan")
+print("=" * 66)
+
+# Kebuntuan yang diukur di calibrate_tetangga.py: uji rasio membuat lapak
+# sah yang sepi ditolak, penolakan membuat pengamatnya tidak bertambah,
+# dan ia ditolak justru karena pengamatnya sedikit. Diuji di sini supaya
+# tidak bisa kembali tanpa ketahuan.
+ramai = mk(REAL, WARUNG_LAT, WARUNG_LNG, 300, 4000, "WARUNG RAMAI",
+           last_seen=NOW)
+SEPI = "ID2023254132939"
+
+# Hari pertama: belum ada bukti apa pun. Tuduhan memang benar di sini —
+# pada titik ini sistem tidak punya cara membedakannya dari penukaran.
+v = b.evaluate(SEPI, WARUNG_LAT, WARUNG_LNG, [ramai], [], now=NOW)
+show("hari pertama, tanpa bukti", v)
+assert v.status == b.ANOMALY, "tanpa bukti, kehati-hatian harus menang"
+
+# Setelah cukup orang berbeda menemuinya, sementara warung ramai TERUS
+# terpindai — bukti bahwa tidak ada QR yang tertutup.
+bukti = b.Challenge(
+    devices=b.ADJACENT_MIN_DEVICES,
+    first_at=NOW - timedelta(hours=b.MIN_AGE_HOURS + 2),
+    last_at=NOW,
+)
+v = b.evaluate(SEPI, WARUNG_LAT, WARUNG_LNG, [ramai], [], now=NOW,
+               challenge=bukti)
+show("setelah kehadiran terbukti", v)
+assert "adjacent_merchant" in v.signals, "kehadiran terbukti harus diakui"
+assert v.status != b.ANOMALY, "lapak sah tidak boleh tetap dituduh"
+print("\n  lapak sah keluar dari kebuntuan tanpa mengubah rumus konsensus")
+
+print()
+print("=" * 66)
+print("15. Bukti kehadiran ditolak kalau merchant lama berhenti terpindai")
+print("=" * 66)
+
+# Inilah pembedanya. Stiker yang ditempel MENUTUPI membuat QR lama tidak
+# bisa dipindai lagi, jadi last_seen-nya berhenti sebelum penantang
+# muncul. Korban yang berdatangan semuanya perangkat berbeda, sehingga
+# jumlahnya tumbuh persis seperti lapak sah — yang membedakan hanya
+# diamnya merchant lama.
+tertutup = mk(REAL, WARUNG_LAT, WARUNG_LNG, 300, 4000, "WARUNG RAMAI",
+              last_seen=NOW - timedelta(hours=b.MIN_AGE_HOURS + 10))
+banyak_korban = b.Challenge(
+    devices=b.ADJACENT_MIN_DEVICES * 10,
+    first_at=NOW - timedelta(hours=b.MIN_AGE_HOURS + 5),
+    last_at=NOW,
+)
+v = b.evaluate(SEPI, WARUNG_LAT, WARUNG_LNG, [tertutup], [], now=NOW,
+               challenge=banyak_korban)
+show("80 korban, merchant lama diam", v)
+assert v.status == b.ANOMALY, "penukaran sungguhan lolos lewat jalur kehadiran"
+assert "adjacent_merchant" not in v.signals
+print("\n  penukaran tetap ditahan walau korbannya jauh lebih banyak")
+
 print("\n\nSemua assertion lolos.")

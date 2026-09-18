@@ -94,8 +94,12 @@ def hidupkan(akar, env):
 
 def majukan(db, jam):
     c = sqlite3.connect(db)
+    # anchor_challenge WAJIB ikut. Tanpanya rentang waktu penantang
+    # selamanya nol dan bukti kehadiran tidak pernah matang — skrip akan
+    # melaporkan "tidak pernah pulih" untuk sesuatu yang sebenarnya pulih.
     for tabel, kolom in [("bindings", ["first_seen", "last_seen", "registered_at"]),
-                         ("observations", ["observed_at"])]:
+                         ("observations", ["observed_at"]),
+                         ("anchor_challenge", ["attempted_at"])]:
         for k in kolom:
             try:
                 c.execute(f"UPDATE {tabel} SET {k}=datetime({k},'-{jam} hours') "
@@ -203,8 +207,76 @@ def main():
   besar justru mengaburkan jangkar sehingga aturan tetangga terpicu.
   Ketelitian memperburuk, bukan memperbaiki.
 
-  Skrip ini TIDAK mengusulkan perbaikan. Invarian §5 mengunci rumus
-  konsensus, dan setiap konstanta baru wajib dikalibrasi lebih dulu.
+  Baris di atas adalah keadaan HARI PERTAMA, dan tuduhannya memang
+  benar di situ: pada titik itu sistem belum punya cara membedakan
+  lapak baru dari stiker yang ditempel menutupi.
+
+  Yang dulu salah adalah keadaan itu PERMANEN. Di bawah ini hari-hari
+  berikutnya, lewat HTTP yang sama.
+""")
+    return pemulihan(akar)
+
+
+def pemulihan(akar):
+    """Hari demi hari, lewat jalur HTTP lengkap.
+
+    calibrate_kehadiran.py memilih ADJACENT_MIN_DEVICES dengan memanggil
+    binding.evaluate() langsung. Bagian ini ada untuk membuktikan angka
+    itu bertahan melewati API, penyimpanan, dan komposisi Layer 2 —
+    bukan hanya di dalam satu fungsi.
+    """
+    print("=" * 74)
+    print("PEMULIHAN — lapak sah yang sama, hari demi hari")
+    print("=" * 74)
+    print(f"""
+  Merchant ramai dipindai 25x/hari dan TETAP terlihat. Lapak sepi
+  dipindai 5x/hari oleh orang yang berbeda-beda.
+
+  Ambang yang berlaku: {bd.ADJACENT_MIN_DEVICES} perangkat berbeda,
+  rentang {bd.MIN_AGE_HOURS} jam.
+""")
+    random.seed(23)
+    tmp = tempfile.mkdtemp(prefix="qshield-pulih-")
+    db = os.path.join(tmp, "sim.db")
+    env = dict(os.environ, QSHIELD_DB=db, QSHIELD_AUTH="off",
+               QSHIELD_RATE_LIMIT="off")
+    proc = hidupkan(akar, env)
+    if proc is None:
+        print("server gagal hidup", file=sys.stderr)
+        return 1
+    try:
+        kunjungi(*RAMAI, 40, "mapan-a", 6, 20)
+        proc.terminate(); proc.wait(timeout=10)
+        majukan(db, 48)
+        proc = hidupkan(akar, env)
+        if proc is None:
+            return 1
+
+        print(f"  {'hari':>5}  {'aksi':>12}  {'vonis':>9}  alasan utama")
+        print("  " + "-" * 66)
+        for hari in range(1, 8):
+            kunjungi(*RAMAI, 25, f"ramai-h{hari}", 6, 20)
+            hasil = kunjungi(*SEPI, 5, f"sepi-h{hari}", 6, 20)
+            aneh = [d.get("action") for d in hasil if d.get("action") not in
+                    ("proceed", "warn", "step_up", "cooling_off")]
+            if aneh:
+                print(f"  HARNESS RUSAK: {sorted(set(aneh))}", file=sys.stderr)
+                return 1
+            akhir = hasil[-1]
+            alasan = (akhir.get("reasons") or ["-"])[0]
+            print(f"  {hari:>5}  {akhir['action']:>12}  {akhir['verdict']:>9}  "
+                  f"{alasan[:44]}")
+            proc.terminate(); proc.wait(timeout=10)
+            majukan(db, 24)
+            proc = hidupkan(akar, env)
+            if proc is None:
+                return 1
+    finally:
+        proc.terminate(); proc.wait(timeout=10)
+
+    print("""
+  Merchant lama tidak pernah kehilangan apa pun: ia tetap proceed
+  sepanjang tabel ini. Yang berubah hanya nasib tetangganya.
 """)
     return 0
 

@@ -772,6 +772,8 @@ def verify(req: VerifyRequest, request: Request):
     anchor_id, anchor_nmid, anchor_state = store.anchor_state(req.lat, req.lng)
     jangkar_bertuan = getattr(store, "_anchor_has_owner", False)
 
+    tantangan = store.challenge_state(req.lat, req.lng, nmid)
+
     # Layer 1 — ikatan merchant-lokasi.
     lokasi = bd.evaluate(
         nmid=nmid,
@@ -780,6 +782,7 @@ def verify(req: VerifyRequest, request: Request):
         nearby=nearby,
         same_nmid_elsewhere=elsewhere,
         crc_valid=parsed.crc_valid,
+        challenge=tantangan,
     )
 
     # Layer 2 — perilaku artefak QR.
@@ -849,6 +852,18 @@ def verify(req: VerifyRequest, request: Request):
         # tempat ini, dan mencatatnya membuat merchant sah di sekitar
         # ikut tertuduh.
         store.note_anomaly(anchor_id)
+
+        # Sisi lain dari catatan yang sama: dari sudut pandang NMID yang
+        # DITOLAK. Merchant sah yang sepi di sebelah tetangga ramai
+        # mengumpulkan barisnya di sini, dan begitu cukup banyak orang
+        # berbeda menemuinya — sementara merchant lama TERUS terpindai,
+        # bukti bahwa tidak ada yang tertutup — kehadirannya diakui.
+        #
+        # Hanya untuk konflik jangkar TAK TERDAFTAR. Kalau jangkarnya
+        # terdaftar atas nama merchant lain, jalan keluarnya adalah
+        # mendaftar ke penyelenggara, bukan mengakumulasi pemindaian.
+        if "nmid_changed_at_anchor" in verdict.signals:
+            store.note_challenge(req.lat, req.lng, nmid, req.device_anon_id)
 
     elapsed = round((time.perf_counter() - started) * 1000, 2)
     lapisan = {"location": lokasi.risk_score, "behavior": perilaku.score}

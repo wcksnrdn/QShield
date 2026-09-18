@@ -116,6 +116,33 @@ W_REGISTERED_CONFLICT = 85
 
 MIN_OBSERVERS = 3           # device unik sebelum binding dianggap mapan
 ADJACENT_MIN_RATIO = 0.10   # basis pengamat minimum relatif tetangga
+# Berapa perangkat BERBEDA harus menemui sebuah NMID di jangkar yang sudah
+# dikuasai merchant lain sebelum kehadirannya diakui nyata.
+#
+# Dikalibrasi di calibrate_kehadiran.py. Hari sampai lapak sah diakui:
+#
+#        N     1/hari  2/hari  3/hari  5/hari  20/hari
+#        5         6       4       3       3        3
+#        8         9       5       4       3        3
+#       12        14       7       5       4        3
+#
+# Dipilih 8. Nilai 5 tidak menaikkan biaya penyerang sama sekali — itu
+# sudah biaya R10 yang berlaku lewat ADJACENT_MIN_RATIO. Nilai 12
+# membuat lapak yang sangat sepi tertahan dua minggu penuh, dan itu
+# tidak jauh lebih baik dari kebuntuan yang sedang diperbaiki.
+#
+# Yang menentukan keamanan BUKAN angka ini, melainkan syarat merchant
+# lama harus tetap terpindai. Penukaran sungguhan diuji pada semua N
+# dengan 280 korban berbeda selama 14 hari: tidak ada satu pun yang
+# lolos, karena QR yang tertutup membuat merchant lama diam.
+#
+# Jalan cepatnya tetap ada dan memang seharusnya begitu: merchant yang
+# didaftarkan penyelenggara lolos seketika lewat is_registered.
+ADJACENT_MIN_DEVICES = 8
+# Selisih minimal antara pemindaian terakhir merchant lama dan percobaan
+# pertama penantang. Membuktikan QR lama masih bisa dipindai, artinya ia
+# tidak tertutup — jadi ini bukan penempelan di atasnya.
+INCUMBENT_PROOF_HOURS = 1.0
 MIN_AGE_HOURS = 24          # rentang minimal pengamatan pertama ke terakhir
 SCATTER_MIN_AREAS = 2       # jumlah area lain yang memicu alarm sebaran
 STALE_DAYS = 90             # binding tak terlihat selama ini dianggap usang
@@ -149,6 +176,25 @@ STEP_UP = "step_up"
 COOLING_OFF = "cooling_off"
 
 THRESHOLDS = [(25, PROCEED), (50, WARN), (75, STEP_UP)]
+
+
+@dataclass
+class Challenge:
+    """Jejak pemindaian yang DITOLAK untuk satu NMID di satu jangkar.
+
+    Bukan reputasi: tidak pernah menaikkan kepercayaan, hanya dipakai
+    memutuskan apakah dua merchant benar-benar berdampingan.
+    """
+
+    devices: int = 0
+    first_at: Optional[datetime] = None
+    last_at: Optional[datetime] = None
+
+    @property
+    def span_hours(self) -> float:
+        if not self.first_at or not self.last_at:
+            return 0.0
+        return (self.last_at - self.first_at).total_seconds() / 3600
 
 
 @dataclass
@@ -365,12 +411,15 @@ def evaluate(
     same_nmid_elsewhere: list,
     crc_valid: bool = True,
     now: Optional[datetime] = None,
+    challenge: Optional["Challenge"] = None,
 ) -> Verdict:
     """Nilai satu pemindaian.
 
     nearby               binding hasil query indeks di sekitar titik ini,
                          belum disaring jarak
     same_nmid_elsewhere  binding dengan NMID sama di mana pun
+    challenge            jejak pemindaian NMID ini yang pernah DITOLAK di
+                         jangkar ini; bukan reputasi, hanya bukti kehadiran
     """
     now = now or datetime.now(timezone.utc)
     score = 0
@@ -469,8 +518,51 @@ def evaluate(
             or current.observer_count
             >= ADJACENT_MIN_RATIO * strongest.observer_count
         )
-        coexisting = (current is not None and current.is_established
-                      and basis_sebanding)
+
+        # Uji rasio di atas punya kebuntuan yang terukur: merchant sah
+        # yang sepi di sebelah tetangga ramai tidak akan pernah lolos,
+        # karena pemindaiannya ditolak sehingga observer_count-nya
+        # membeku, dan ia membeku justru karena observer_count-nya
+        # kecil. Diukur di calibrate_tetangga.py: 100% kunjungan sah
+        # diberi cooling_off, dan 100 kunjungan berikutnya tidak
+        # menaikkan pengamat satu pun. Lapak baru yang buka di food
+        # court kena sejak pemindaian pertama, dengan nol pengamatan.
+        #
+        # Jalan keluarnya tidak boleh berupa pelonggaran ambang — itu
+        # akan membuka lagi R10. Yang dipakai adalah bukti FISIK.
+        #
+        # Stiker yang ditempel MENUTUPI membuat QR di bawahnya tidak
+        # bisa dipindai lagi; sejak saat itu merchant lama berhenti
+        # terlihat. Kalau merchant lama TERUS terlihat setelah
+        # penantang muncul, berarti tidak ada yang tertutup — keduanya
+        # benar-benar ada di sana berdampingan.
+        #
+        # Penyerang tidak bisa memalsukan ini tanpa membatalkan
+        # serangannya sendiri: membiarkan QR korban tetap terpindai
+        # berarti tidak menggantikannya.
+        #
+        # observer_count tidak disentuh di mana pun oleh jalur ini,
+        # jadi invarian §3 tetap utuh: yang ditolak tidak membangun
+        # reputasi. Rumus konsensus juga tidak diubah — invarian §5
+        # utuh. Yang berubah hanya syarat pengecualian koeksistensi.
+        lama_masih_terpindai = (
+            challenge is not None
+            and challenge.first_at is not None
+            and strongest.last_seen is not None
+            and strongest.last_seen
+            >= challenge.first_at + timedelta(hours=INCUMBENT_PROOF_HOURS)
+        )
+        kehadiran_terbukti = (
+            lama_masih_terpindai
+            and challenge.devices >= ADJACENT_MIN_DEVICES
+            and challenge.span_hours >= MIN_AGE_HOURS
+        )
+
+        coexisting = (
+            (current is not None and current.is_established
+             and basis_sebanding)
+            or kehadiran_terbukti
+        )
 
         if coexisting:
             score += 20

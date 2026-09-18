@@ -33,6 +33,10 @@ from qshield import api, emvco
 from qshield import binding as bd
 from qshield.store import Store
 
+
+def _iso_uji(dt):
+    return dt.isoformat()
+
 NOW = datetime.now(timezone.utc)
 
 LAT, LNG = -6.914744, 107.609810
@@ -820,6 +824,63 @@ def _b4():
     return (f"BELUM DITAHAN SEPENUHNYA: penyerang butuh >{batas:.0f} device "
             f"(naik dari {bd.MIN_OBSERVERS}); penutupan sungguhan menuntut "
             f"deteksi integritas perangkat")
+
+
+@serangan("Jalur kehadiran tidak membangun reputasi (invarian §3)")
+def _a30():
+    """Pemindaian yang ditolak tidak boleh menaikkan observer_count.
+
+    Jalur kehadiran menambah tabel baru yang ikut tumbuh saat pemindaian
+    ditolak. Kalau suatu saat ia keliru disambungkan ke observer_count,
+    stiker palsu akan bisa memupuk reputasi lewat percobaan berulang —
+    persis yang dilarang invarian §3.
+    """
+    s, c = fresh_store()
+    for i in range(30):
+        d = scan(c, qr(PENYERANG), device=f"korban-{i:05d}")
+        assert d["verdict"] == "anomaly", f"swap lolos di percobaan {i}"
+    baris = s.conn.execute(
+        "SELECT observer_count FROM bindings WHERE nmid = ?", (PENYERANG,)
+    ).fetchone()
+    punya = baris["observer_count"] if baris else 0
+    assert punya == 0, f"reputasi terbangun dari penolakan: {punya} pengamat"
+    tantangan = s.conn.execute(
+        "SELECT COUNT(*) AS n FROM anchor_challenge WHERE nmid = ?",
+        (PENYERANG,)).fetchone()["n"]
+    assert tantangan == 30, f"buku tantangan tidak lengkap: {tantangan}"
+    return (f"{tantangan} percobaan tercatat, observer_count tetap 0 — "
+            f"buku tantangan terpisah dari reputasi")
+
+
+@serangan("Jangkar TERDAFTAR ditembus lewat jalur kehadiran")
+def _a31():
+    """Pernyataan penyelenggara tidak boleh dikalahkan akumulasi pemindaian.
+
+    Kalau jangkarnya terdaftar, jalan keluar bagi merchant sah adalah
+    ikut mendaftar — jalur yang punya pencatatan dan pencabutan. Membiarkan
+    pemindaian mengalahkannya berarti siapa pun dengan cukup perangkat
+    bisa menggusur merchant yang sudah dinyatakan resmi.
+    """
+    s = Store(os.path.join(tempfile.mkdtemp(), "adv31.db"))
+    s.seed_binding(nmid=KORBAN, lat=LAT, lng=LNG, merchant_name="WARUNG BU SRI",
+                   observer_count=47,
+                   first_seen=NOW - timedelta(days=180),
+                   last_seen=NOW - timedelta(hours=1))
+    s.conn.execute("UPDATE bindings SET registered_at = ? WHERE nmid = ?",
+                   (_iso_uji(NOW - timedelta(days=180)), KORBAN))
+    api.store = s
+    c = TestClient(api.app)
+
+    # Penyerang memupuk buku tantangan jauh melebihi ambang.
+    for i in range(bd.ADJACENT_MIN_DEVICES * 5):
+        s.note_challenge(LAT, LNG, PENYERANG, f"device-{i:05d}",
+                         now=NOW - timedelta(hours=bd.MIN_AGE_HOURS + 5))
+    d = scan(c, qr(PENYERANG), device="penyerang-akhir-1")
+    assert d["verdict"] == "anomaly", (
+        f"jangkar terdaftar ditembus: {d['verdict']} / {d['action']}")
+    assert "adjacent_merchant" not in d["signals"]
+    return (f"{bd.ADJACENT_MIN_DEVICES * 5} perangkat tidak cukup — "
+            f"pendaftaran tetap lebih otoritatif")
 
 
 print("=" * 72)

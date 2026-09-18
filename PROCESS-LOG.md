@@ -2088,6 +2088,87 @@ Sisanya hilang dan harus dikumpulkan ulang.
 
 ---
 
+## Keputusan 51 — Pedagang bersebelahan yang sah dituduh menukar stiker
+
+Ditemukan saat tim meminta bukti bahwa sistem benar-benar efektif untuk
+kasus mereka, sebelum menyetujui deployment. Pertanyaan yang tepat, dan
+jawabannya ternyata tidak.
+
+**Gejalanya.** Dua merchant asli di korpus lapangan — tukang es kelapa
+dan kotak donasi masjid di sebelahnya — tercatat pada koordinat yang
+sama. Keduanya sah. Begitu yang satu lebih ramai dipindai, yang sepi
+diberi `cooling_off` pada 100% kunjungan.
+
+Dua sifat membuatnya bukan sekadar soal ambang.
+
+**Buntu.** Pengamat merchant sepi membeku di 5 setelah 100 kunjungan
+sah. Pemindaian pada binding anomali tidak dicatat (invarian §3), dan
+binding itu anomali justru karena pengamatnya sedikit dibanding
+tetangga (`ADJACENT_MIN_RATIO`). Lingkarannya tertutup: tidak ada jalan
+keluar lewat pemakaian normal. Lapak baru yang buka di food court kena
+sejak pemindaian pertama, dengan nol pengamatan, selamanya.
+
+**Terbalik.** Makin akurat GPS makin parah — 100% tuduhan pada akurasi
+4–8 m, turun ke 55% pada 15–50 m. Galat besar mengaburkan jangkar
+sehingga aturan tetangga justru terpicu dan menyelamatkan. Perangkat
+yang lebih baik memberi hasil lebih buruk, kebalikan dari yang diklaim.
+
+**Kenapa pelonggaran ambang ditolak.** Menurunkan `ADJACENT_MIN_RATIO`
+akan membuka kembali R10: penyerang yang memupuk binding dengan tiga
+perangkat murah ikut lolos. Pilihannya bukan antara positif palsu dan
+celah keamanan.
+
+**Yang dipakai: bukti fisik.** Stiker yang ditempel MENUTUPI membuat QR
+di bawahnya tidak bisa dipindai lagi, sehingga merchant lama berhenti
+terlihat. Kalau merchant lama TERUS terlihat setelah penantang muncul,
+tidak ada yang tertutup — keduanya nyata-nyata berdampingan.
+
+Penyerang tidak bisa memalsukan itu tanpa membatalkan serangannya
+sendiri: membiarkan QR korban tetap terpindai berarti tidak
+menggantikannya.
+
+**Bentuknya.** Tabel `anchor_challenge` mencatat pemindaian yang
+DITOLAK, per (jangkar, NMID penantang), satu baris per perangkat.
+Pengecualian koeksistensi diberikan bila ketiganya terpenuhi:
+
+    >= ADJACENT_MIN_DEVICES perangkat berbeda
+    rentang >= MIN_AGE_HOURS
+    merchant lama terpindai >= INCUMBENT_PROOF_HOURS setelah
+      percobaan pertama penantang
+
+`observer_count` tidak disentuh di mana pun oleh jalur ini — invarian §3
+utuh. Rumus konsensus tidak diubah — invarian §5 utuh. Yang berubah
+hanya syarat pengecualian.
+
+**Kalibrasi** (`calibrate_kehadiran.py`), hari sampai lapak sah diakui:
+
+| N | 1/hari | 2/hari | 3/hari | 5/hari | 20/hari |
+|---|---|---|---|---|---|
+| 5 | 6 | 4 | 3 | 3 | 3 |
+| **8** | **9** | **5** | **4** | **3** | **3** |
+| 12 | 14 | 7 | 5 | 4 | 3 |
+
+Dipilih 8. Nilai 5 tidak menaikkan biaya penyerang sama sekali — itu
+sudah biaya R10 yang berlaku. Nilai 12 menahan lapak yang sangat sepi
+selama dua minggu, tidak jauh lebih baik dari kebuntuan yang sedang
+diperbaiki.
+
+**Syarat mutlak, diuji pada semua N:** penukaran sungguhan dengan 280
+korban berbeda selama 14 hari tidak pernah lolos, karena QR yang
+tertutup membuat merchant lama diam. Keamanannya tidak bergantung pada
+angka N, melainkan pada syarat merchant lama harus tetap terpindai.
+
+**Verifikasi lewat HTTP penuh** (`calibrate_tetangga.py`): hari 1
+`cooling_off`, hari 2 `step_up`, hari 3 dan seterusnya `proceed`.
+Merchant lama tidak kehilangan apa pun sepanjang tabel itu.
+
+**Jalan cepat tetap ada dan memang seharusnya:** merchant yang
+didaftarkan penyelenggara lolos seketika lewat `is_registered`.
+Jangkar terdaftar juga tidak bisa ditembus lewat jalur kehadiran —
+diuji sebagai skenario adversarial.
+
+---
+
 ## Hasil pengujian
 
 ```
@@ -2180,6 +2261,9 @@ Semua berada di `binding.py`, sengaja tidak ditanam di dalam logika.
 | `MIN_AGE_HOURS` | 24 | stiker palsu berumur pendek; waktu menyaring |
 | `SCATTER_MIN_KM` | 1,0 | mencegah jitter GPS terhitung sebagai area baru |
 | `STALE_DAYS` | 90 | binding lama tidak boleh memblokir merchant baru |
+| `ADJACENT_MIN_RATIO` | 0,10 | basis pengamat minimum relatif tetangga (`calibrate_adjacency.py`) |
+| `ADJACENT_MIN_DEVICES` | 8 | perangkat berbeda yang membuktikan lapak nyata (`calibrate_kehadiran.py`) |
+| `INCUMBENT_PROOF_HOURS` | 1,0 | bukti QR lama masih terpindai, artinya tidak tertutup |
 
 Layer 2 di `behavior.py`:
 
