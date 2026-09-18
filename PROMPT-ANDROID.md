@@ -3,9 +3,9 @@
 Dibuat otomatis oleh `scripts/make_android_prompt.py`. Alamat laptop
 dan application id sudah terisi.
 
-    alamat server : https://192.168.1.13:8000
+    alamat server : https://192.168.113.224:8000
     application id: id.qshield.scanner
-    sertifikat    : cocok untuk 192.168.1.13
+    sertifikat    : cocok untuk 192.168.113.224
 
 Kalau berpindah jaringan, jalankan ulang skrip itu — alamatnya berubah.
 
@@ -102,7 +102,7 @@ When a QR is detected:
 
 ## The API
 
-Base URL configurable in a settings screen, default https://192.168.1.13:8000
+Base URL configurable in a settings screen, default https://192.168.113.224:8000
 
 POST /api/v1/verify
 Header: X-API-Key: <configurable, may be empty during local testing>

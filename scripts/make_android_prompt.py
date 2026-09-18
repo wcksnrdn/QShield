@@ -17,6 +17,7 @@ Keluarannya PROMPT-ANDROID.md — salin seluruh isinya ke agent.
 """
 
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -46,12 +47,15 @@ def cert_cocok(ip: str):
     hasil = subprocess.run(
         ["openssl", "x509", "-in", cert, "-noout", "-text"],
         capture_output=True, text=True)
-    san = [b for b in hasil.stdout.split("\n") if "IP Address" in b]
-    if not san:
+    # SAN yang mencakup seluruh rentang jaringan memuat ribuan alamat dan
+    # terbungkus ke banyak baris, jadi dicari di seluruh teks.
+    alamat = set(re.findall(r"IP Address:([0-9.]+)", hasil.stdout))
+    if not alamat:
         return False, "sertifikat tidak punya SAN"
-    if ip not in san[0]:
-        return False, f"sertifikat dibuat untuk {san[0].strip()}"
-    return True, "cocok"
+    if ip not in alamat:
+        contoh = sorted(alamat)[:2]
+        return False, f"sertifikat tidak mencakup {ip} (mis. {', '.join(contoh)})"
+    return True, f"mencakup {len(alamat)} alamat"
 
 
 TEMPLATE = '''# Prompt untuk AI agent di Android Studio
