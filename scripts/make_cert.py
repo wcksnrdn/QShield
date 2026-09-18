@@ -54,7 +54,28 @@ def ip_lan() -> str:
         s.close()
 
 
-def buat(alamat: str) -> int:
+def subnet_lokal(alamat: str):
+    """Rentang jaringan tempat alamat ini berada, dibaca dari netmask.
+
+    DHCP di jaringan kampus memindahkan alamat laptop berkali-kali
+    sehari — di proyek ini tujuh kali dalam seminggu. Sertifikat yang
+    hanya sah untuk satu alamat berarti APK harus dibangun ulang tiap
+    kali itu terjadi, karena sertifikatnya ikut dibundel di dalamnya.
+
+    Menerbitkannya untuk seluruh rentang menghapus pembangunan ulang
+    itu; yang tersisa hanya mengganti satu isian alamat di aplikasi.
+    """
+    hasil = subprocess.run(["ifconfig"], capture_output=True, text=True)
+    for baris in hasil.stdout.split("\n"):
+        if f"inet {alamat} " in baris and "netmask" in baris:
+            mask = baris.split("netmask")[1].split()[0]
+            bits = bin(int(mask, 16)).count("1") if mask.startswith("0x") else None
+            if bits:
+                return ipaddress.ip_network(f"{alamat}/{bits}", strict=False)
+    return None
+
+
+def buat(alamat: str, seluruh_subnet: bool = False) -> int:
     try:
         ipaddress.ip_address(alamat)
     except ValueError:
@@ -68,20 +89,44 @@ def buat(alamat: str) -> int:
     # SAN wajib memuat alamat IP-nya. Browser modern mengabaikan
     # Common Name sepenuhnya dan hanya melihat Subject Alternative Name;
     # sertifikat tanpa SAN akan ditolak walau CN-nya benar.
-    san = f"IP:{alamat},IP:127.0.0.1,DNS:localhost"
+    entri = [f"IP:{alamat}", "IP:127.0.0.1", "DNS:localhost"]
+    cakupan = alamat
+
+    net = subnet_lokal(alamat) if seluruh_subnet else None
+    if net and net.num_addresses <= 4096:
+        # X.509 tidak mengenal notasi CIDR untuk iPAddress — tiap alamat
+        # harus disebut satu per satu.
+        entri = [f"IP:{ip}" for ip in net.hosts()]
+        entri += ["IP:127.0.0.1", "DNS:localhost"]
+        cakupan = f"{net} ({net.num_addresses - 2} alamat)"
+    elif seluruh_subnet:
+        print("  rentang jaringan tidak terbaca atau terlalu besar — "
+              "pakai satu alamat saja", file=sys.stderr)
+
+    san = ",".join(entri)
+
+    # Daftar sepanjang ini tidak muat dilewatkan sebagai argumen baris
+    # perintah, jadi ditulis ke berkas konfigurasi sementara.
+    konf = os.path.join(FOLDER, ".san.cnf")
+    with open(konf, "w") as f:
+        f.write("[req]\ndistinguished_name=dn\nx509_extensions=v3\nprompt=no\n"
+                "[dn]\nC=ID\nO=Q-Shield Demo\nCN=qshield.local\n"
+                "[v3]\nbasicConstraints=critical,CA:TRUE\n"
+                f"subjectAltName={san}\n")
 
     perintah = [
         "openssl", "req", "-x509", "-newkey", "rsa:2048",
         "-keyout", key, "-out", cert,
         "-days", str(HARI_BERLAKU), "-nodes",
-        "-subj", "/C=ID/O=Q-Shield Demo/CN=qshield.local",
-        "-addext", f"subjectAltName={san}",
+        "-config", konf,
     ]
     hasil = subprocess.run(perintah, capture_output=True, text=True)
+    os.remove(konf)
     if hasil.returncode != 0:
         print("openssl gagal:", file=sys.stderr)
         print(hasil.stderr, file=sys.stderr)
         return 1
+    san = f"{cakupan} + 127.0.0.1 + localhost"
 
     os.chmod(key, 0o600)
 
@@ -114,4 +159,7 @@ def buat(alamat: str) -> int:
 
 if __name__ == "__main__":
     arg = [a for a in sys.argv[1:] if not a.startswith("--")]
-    sys.exit(buat(arg[0] if arg else ip_lan()))
+    # Bawaannya mencakup seluruh rentang jaringan; pakai --satu-alamat
+    # kalau memang hanya satu yang diinginkan.
+    sys.exit(buat(arg[0] if arg else ip_lan(),
+                  seluruh_subnet="--satu-alamat" not in sys.argv))
