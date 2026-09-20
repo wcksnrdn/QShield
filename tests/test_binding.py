@@ -239,4 +239,64 @@ assert v.status == b.ANOMALY, "penukaran sungguhan lolos lewat jalur kehadiran"
 assert "adjacent_merchant" not in v.signals
 print("\n  penukaran tetap ditahan walau korbannya jauh lebih banyak")
 
+print()
+print("=" * 66)
+print("16. Pedagang yang pindah dua kali tidak dituduh menyebar stiker")
+print("=" * 66)
+
+# Kebuntuan kedua, diukur sebelum perbaikan: 500 pengamat di lokasi baru
+# dan lokasi lama terakhir terlihat sepuluh tahun lalu pun tidak
+# menyembuhkan, karena cabang scatter tidak menyaring binding usang.
+# Yang terkena pedagang kaki lima dan food truck — segmen inti.
+def lok(km, obs, mulai_hari, akhir_hari):
+    return b.Binding(
+        nmid=REAL, lat=WARUNG_LAT + km / 111.32, lng=WARUNG_LNG,
+        merchant_name="WARUNG BU SRI", observer_count=obs,
+        first_seen=NOW - timedelta(days=mulai_hari),
+        last_seen=NOW - timedelta(days=akhir_hari))
+
+# Berjualan di A, lalu B, lalu sekarang C. Periodenya berurutan.
+pindah = [lok(0, 50, 400, 200), lok(3, 30, 180, 40)]
+di_sini = (WARUNG_LAT + 6 / 111.32, WARUNG_LNG)
+
+v = b.evaluate(REAL, *di_sini, [], pindah, now=NOW)
+show("hari pertama, tanpa bukti", v)
+assert v.status == b.ANOMALY, "tanpa bukti, kehati-hatian harus menang"
+
+cukup = b.Challenge(devices=b.ADJACENT_MIN_DEVICES,
+                    first_at=NOW - timedelta(days=5),
+                    last_at=NOW - timedelta(days=5) + timedelta(hours=30))
+v = b.evaluate(REAL, *di_sini, [], pindah, now=NOW, challenge=cukup)
+show("setelah kepindahan terbukti", v)
+assert "nmid_relocated" in v.signals, "kepindahan tidak diakui"
+assert "nmid_scatter" not in v.signals
+assert v.status != b.ANOMALY, "pedagang yang pindah tidak boleh jadi anomali"
+
+mapan = b.Binding(nmid=REAL, lat=di_sini[0], lng=di_sini[1],
+                  merchant_name="WARUNG BU SRI", observer_count=30,
+                  first_seen=NOW - timedelta(days=20), last_seen=NOW)
+v = b.evaluate(REAL, *di_sini, [mapan], pindah, now=NOW, challenge=cukup)
+show("setelah mapan di lokasi baru", v)
+assert v.action == b.PROCEED, f"pemulihan berhenti di {v.action}"
+print("\n  pedagang yang pindah pulih penuh sampai proceed")
+
+print()
+print("=" * 66)
+print("17. Stiker disebar bersamaan tetap tertahan walau jarang dipindai")
+print("=" * 66)
+
+# Kasus yang paling mudah keliru: dua stiker yang nyaris tidak pernah
+# dipindai terlihat "sudah tidak aktif" kalau yang diperiksa hanya
+# last_seen. Yang membedakan adalah rentang aktifnya beririsan —
+# dipasang bersamaan, bukan ditinggali bergantian.
+sebar = [lok(0, 3, 300, 298), lok(3, 2, 299, 297)]
+banyak = b.Challenge(devices=b.ADJACENT_MIN_DEVICES * 5,
+                     first_at=NOW - timedelta(days=5),
+                     last_at=NOW - timedelta(days=2))
+v = b.evaluate(REAL, *di_sini, [], sebar, now=NOW, challenge=banyak)
+show("40 perangkat, stiker lama jarang dipindai", v)
+assert "nmid_scatter" in v.signals, "penyebaran lolos lewat jalur kepindahan"
+assert v.status == b.ANOMALY
+print("\n  periode yang beririsan menahannya; frekuensi tidak dipakai menilai")
+
 print("\n\nSemua assertion lolos.")

@@ -862,7 +862,10 @@ def verify(req: VerifyRequest, request: Request):
         # Hanya untuk konflik jangkar TAK TERDAFTAR. Kalau jangkarnya
         # terdaftar atas nama merchant lain, jalan keluarnya adalah
         # mendaftar ke penyelenggara, bukan mengakumulasi pemindaian.
-        if "nmid_changed_at_anchor" in verdict.signals:
+        # nmid_scatter ikut dicatat: merchant sah yang pindah tempat
+        # memakai buku yang sama untuk membuktikan ia benar-benar berada
+        # di lokasi barunya.
+        if {"nmid_changed_at_anchor", "nmid_scatter"} & set(verdict.signals):
             store.note_challenge(req.lat, req.lng, nmid, req.device_anon_id)
 
     elapsed = round((time.perf_counter() - started) * 1000, 2)
