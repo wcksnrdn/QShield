@@ -2169,6 +2169,76 @@ diuji sebagai skenario adversarial.
 
 ---
 
+## Keputusan 52 — Pedagang yang pindah lokasi dituduh menyebar stiker
+
+Kebuntuan kedua, kelas yang sama dengan Keputusan 51 tapi akibatnya
+lebih parah. Ditemukan saat menelusuri apa lagi yang bisa ditingkatkan,
+bukan dari laporan pengguna.
+
+**Gejalanya.** Merchant sah yang pindah dua kali memicu `nmid_scatter`,
+anomali membuat pengamatannya tidak dicatat, dan lokasi barunya tidak
+pernah tumbuh.
+
+**Seberapa permanen.** Tanpa syarat:
+
+| kondisi | hasil |
+|---|---|
+| lokasi lama terakhir terlihat 10 tahun lalu | tetap `anomaly` |
+| 500 pengamat di lokasi baru | tetap `anomaly` |
+
+Sebabnya cabang scatter **tidak menyaring binding usang** sama sekali,
+berbeda dari cabang konflik jangkar yang memakai `not b.is_stale(now)`.
+`STALE_DAYS` tidak pernah berlaku di sini.
+
+**Siapa yang terkena.** Pedagang kaki lima, food truck, pedagang pasar,
+pedagang bazar — segmen inti Q-Shield. Satu-satunya jalan keluar yang
+ada, `is_registered` + `is_mobile`, menuntut integrasi PJP yang belum
+dimiliki.
+
+**Pembedanya fisik.** Seorang pedagang hanya bisa berada di satu tempat
+pada satu waktu, sehingga periode aktif lokasi-lokasinya tidak pernah
+beririsan. Penyebar memasang stikernya sekaligus.
+
+Tiga syarat, semuanya wajib:
+
+    >= ADJACENT_MIN_DEVICES perangkat berbeda di tempat baru
+    semua lokasi lain diam sebelum tempat ini ramai
+    periode aktif lokasi-lokasi lama tidak beririsan
+
+**Syarat ketiga yang menentukan.** Tanpa itu, penyebar yang sebagian
+stikernya jarang dipindai akan lolos — stiker yang tidak pernah
+dipindai terlihat "sudah tidak aktif" kalau yang diperiksa hanya
+`last_seen`. Yang dibandingkan adalah RENTANG aktifnya, bukan
+frekuensinya. Diuji: 40 perangkat di lokasi baru dengan dua stiker lama
+yang nyaris tidak pernah dipindai tetap `cooling_off`.
+
+Penyerang bisa menghindarinya dengan memasang stiker satu per satu dan
+menunggu di antaranya — tapi itu persis sama lambatnya dengan
+benar-benar pindah, dan itulah biaya yang memang ingin dikenakan.
+
+**W_RELOCATED = 25**, dikalibrasi di `calibrate_relokasi.py`:
+
+| W | baru terbukti | sudah mapan di lokasi baru |
+|---|---|---|
+| 20 | step_up (55) | proceed (20) |
+| **25** | **step_up (60)** | **proceed (25)** |
+| 30 | step_up (65) | warn (30) — tidak pernah pulih |
+
+Di atas 25 pemulihannya berhenti di `warn` selamanya: ambang `proceed`
+adalah skor <= 25, dan pengurangan -20 untuk binding mapan tidak
+berlaku selama masih ada lokasi lain yang tercatat. Dipilih 25 juga
+karena konsisten dengan `nmid_second_location` yang bernilai sama —
+pindah sekali dan pindah berkali-kali dengan bukti diperlakukan setara.
+
+**Verifikasi end-to-end** lewat `Store` sungguhan, pedagang berjualan 60
+hari di A, 60 hari di B, lalu pindah ke C: hari 1 `cooling_off`, hari 2
+`warn`, hari 3 dan seterusnya `proceed` / `verified`.
+
+Buku `anchor_challenge` dari Keputusan 51 dipakai ulang tanpa perubahan
+skema — mekanisme yang sama menjawab dua kebuntuan yang berbeda.
+
+---
+
 ## Hasil pengujian
 
 ```
@@ -2264,6 +2334,7 @@ Semua berada di `binding.py`, sengaja tidak ditanam di dalam logika.
 | `ADJACENT_MIN_RATIO` | 0,10 | basis pengamat minimum relatif tetangga (`calibrate_adjacency.py`) |
 | `ADJACENT_MIN_DEVICES` | 8 | perangkat berbeda yang membuktikan lapak nyata (`calibrate_kehadiran.py`) |
 | `INCUMBENT_PROOF_HOURS` | 1,0 | bukti QR lama masih terpindai, artinya tidak tertutup |
+| `W_RELOCATED` | 25 | bobot pedagang yang terbukti pindah (`calibrate_relokasi.py`) |
 
 Layer 2 di `behavior.py`:
 

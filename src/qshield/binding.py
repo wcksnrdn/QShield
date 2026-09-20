@@ -143,6 +143,9 @@ ADJACENT_MIN_DEVICES = 8
 # pertama penantang. Membuktikan QR lama masih bisa dipindai, artinya ia
 # tidak tertutup — jadi ini bukan penempelan di atasnya.
 INCUMBENT_PROOF_HOURS = 1.0
+# Bobot untuk merchant yang TERBUKTI pindah, menggantikan 60 milik
+# nmid_scatter. Dikalibrasi di calibrate_relokasi.py.
+W_RELOCATED = 25
 MIN_AGE_HOURS = 24          # rentang minimal pengamatan pertama ke terakhir
 SCATTER_MIN_AREAS = 2       # jumlah area lain yang memicu alarm sebaran
 STALE_DAYS = 90             # binding tak terlihat selama ini dianggap usang
@@ -384,6 +387,33 @@ def urutkan_alasan(berbobot: list) -> tuple:
     return ([a for _, (_, a) in urut], [b for _, (b, _) in urut])
 
 
+def _berurutan(areas: list) -> bool:
+    """Apakah lokasi-lokasi ini ditempati BERGANTIAN, bukan bersamaan.
+
+    Seorang pedagang hanya bisa berada di satu tempat pada satu waktu.
+    Kalau ia pindah A -> B -> C, periode aktif ketiganya tidak pernah
+    beririsan. Penyebar stiker memasang QR-nya sekaligus, jadi periode
+    lokasinya tumpang tindih — termasuk ketika sebagian stikernya jarang
+    dipindai, karena yang dibandingkan adalah RENTANG aktifnya, bukan
+    seberapa sering.
+
+    Penyerang bisa menghindarinya dengan memasang stiker satu per satu
+    dan menunggu di antaranya — tapi itu persis sama lambatnya dengan
+    benar-benar pindah, dan itulah biaya yang memang ingin dikenakan.
+    """
+    rentang = sorted(
+        ((a.first_seen, a.last_seen) for a in areas
+         if a.first_seen and a.last_seen),
+        key=lambda r: r[0],
+    )
+    if len(rentang) < 2:
+        return True
+    for (_, akhir), (mulai_berikut, _) in zip(rentang, rentang[1:]):
+        if mulai_berikut <= akhir:
+            return False
+    return True
+
+
 def _distinct_areas(bindings: list, lat: float, lng: float) -> list:
     """Kelompokkan binding jadi area yang benar-benar berjauhan.
 
@@ -596,7 +626,39 @@ def evaluate(
         if b.distance_m(lat, lng) > SCATTER_MIN_KM * 1000
     ]
     areas = _distinct_areas(elsewhere, lat, lng)
-    if len(areas) >= SCATTER_MIN_AREAS:
+
+    # Merchant sah yang PINDAH memicu sinyal yang sama dengan penyebar
+    # stiker, dan akibatnya permanen: anomali membuat pengamatan tidak
+    # dicatat, sehingga lokasi barunya tidak pernah tumbuh. Diukur:
+    # 500 pengamat di tempat baru dan lokasi lama terakhir terlihat
+    # sepuluh tahun lalu pun tidak menyembuhkannya, karena cabang ini —
+    # berbeda dari cabang konflik jangkar — tidak menyaring binding
+    # usang sama sekali.
+    #
+    # Yang terkena justru segmen inti: pedagang kaki lima, food truck,
+    # pedagang pasar. Satu-satunya jalan keluar yang ada adalah
+    # is_registered + is_mobile, dan itu menuntut integrasi PJP.
+    #
+    # Pembedanya fisik: seorang pedagang hanya bisa berada di satu
+    # tempat pada satu waktu. Tiga syarat, semuanya harus terpenuhi:
+    #
+    #   1  cukup banyak orang BERBEDA menemuinya di sini (challenge),
+    #      jadi ini bukan klaim sepihak satu perangkat
+    #   2  semua lokasi lain sudah diam sebelum tempat ini ramai
+    #   3  periode aktif lokasi-lokasi lama tidak pernah beririsan
+    #
+    # Syarat 3 yang menahan penyebar bermodal sabar: stiker yang dipasang
+    # bersamaan punya rentang yang tumpang tindih walau jarang dipindai.
+    pindah_terbukti = (
+        challenge is not None
+        and challenge.devices >= ADJACENT_MIN_DEVICES
+        and challenge.span_hours >= MIN_AGE_HOURS
+        and all(a.last_seen is None or a.last_seen < challenge.first_at
+                for a in areas)
+        and _berurutan(areas)
+    )
+
+    if len(areas) >= SCATTER_MIN_AREAS and not pindah_terbukti:
         score += 60
         signals.append("nmid_scatter")
         farthest = max(areas, key=lambda b: b.distance_m(lat, lng))
@@ -604,6 +666,13 @@ def evaluate(
             f"Merchant ID yang sama terdeteksi di {len(areas) + 1} area berbeda, "
             f"terjauh {farthest.distance_m(lat, lng) / 1000:.0f} km — "
             f"pola khas stiker yang disebar"))
+    elif len(areas) >= SCATTER_MIN_AREAS:
+        score += W_RELOCATED
+        signals.append("nmid_relocated")
+        reasons.append((W_RELOCATED,
+            f"Merchant ID ini pernah tercatat di {len(areas)} lokasi lain, "
+            f"semuanya sudah tidak aktif — pola pindah tempat, "
+            f"bukan stiker yang disebar"))
     elif len(areas) == 1:
         score += 25
         signals.append("nmid_second_location")
