@@ -24,6 +24,7 @@ from . import behavior as bh
 from . import binding as bd
 from . import emvco
 from . import geo
+from . import ticket as tk
 from . import transfer as tf
 from .limits import RateLimiter
 from .store import Store
@@ -315,6 +316,18 @@ class VerifyRequest(BaseModel):
     ambient_wifi: Optional[AmbientWifi] = Field(
         None, description="sidik jari WiFi sekitar; hanya klien native")
 
+    # Bedah TLV untuk panel forensik. OPT-IN dengan sengaja: hasilnya
+    # beberapa kali lipat ukuran tanggapan normal, dan hanya mode demo
+    # yang memerlukannya. Memaksakannya ke setiap panggilan PJP berarti
+    # membebani jalur panas demi fitur yang tidak mereka pakai.
+    #
+    # Tidak ada paparan baru: seluruh isinya turunan dari `payload`,
+    # yang WAJIB dikirim pemanggil — jadi ia hanya menguraikan sesuatu
+    # yang sudah dipegang pemanggil itu sendiri. Berbeda dengan jejak
+    # audit, yang soal PENYIMPANAN dan tetap menolak payload mentah.
+    include_tlv: bool = Field(
+        False, description="sertakan bedah TLV di tanggapan (mode demo)")
+
 
 class MerchantOut(BaseModel):
     nmid: Optional[str]
@@ -322,6 +335,50 @@ class MerchantOut(BaseModel):
     city: Optional[str]
     criteria: Optional[str]
     is_static: bool
+
+
+class FeeOut(BaseModel):
+    """Biaya di luar nominal yang DIMINTA payload — tag 55, 56, 57.
+
+    PENGUNGKAPAN, BUKAN SKOR. Tidak satu pun field di sini menyentuh
+    penilaian: `behavior.py` tidak membacanya, dan tidak ada sinyal yang
+    lahir darinya. Alasannya disebut terus terang — kami belum
+    memverifikasi apakah biaya layanan pada QR STATIS itu kontradiksi
+    terhadap spec QRIS atau justru sah, dan menghukum yang ternyata sah
+    dengan bobot struktural berarti memaksa `anomaly` pada payload yang
+    benar. Itu persis kelas positif palsu yang membuat Keputusan 13
+    membuang sebuah sinyal.
+
+    Yang dilakukan sebagai gantinya: ditampilkan apa adanya, supaya
+    pengguna dan auditor bisa melihat bahwa stiker ini meminta biaya
+    tambahan SEBELUM PIN dimasukkan. Pola yang sama dengan
+    `location_source` dan `device_integrity` — pengungkapan, bukan skor.
+    """
+
+    indicator: Optional[str] = None   # tag 55 mentah
+    label: Optional[str] = None       # artinya, untuk dibaca manusia
+    fixed: Optional[str] = None       # tag 56
+    percent: Optional[str] = None     # tag 57
+    present: bool = False             # ada salah satu dari ketiganya
+
+
+class TlvOut(BaseModel):
+    """Satu entri bedah TLV. FORENSIK, BUKAN PENILAIAN.
+
+    Tidak satu pun field di sini dibaca `binding.py` maupun
+    `behavior.py`. Ia menjawab "apa yang sistem baca sehingga
+    memutuskan begini" — pertanyaan sesudah putusan, bukan masukan
+    baginya.
+    """
+
+    tag: str
+    length: int
+    value: str
+    label: str
+    children: list["TlvOut"] = []
+
+
+TlvOut.model_rebuild()
 
 
 class LayerScores(BaseModel):
@@ -344,6 +401,15 @@ class VerifyResponse(BaseModel):
     signals: list
     layers: LayerScores
     merchant: MerchantOut
+    fees: FeeOut
+    # Putusan ini, ditandatangani dan diikat ke sidik jari payload yang
+    # diperiksa. MENGIKAT, bukan memaksa: ia mencegah putusan dipindah
+    # ke QR lain, TIDAK mencegah PJP mengabaikannya. Lihat ticket.py.
+    verification_ticket: str
+    ticket_expires_in: int
+    # Kosong kecuali permintaan menyetel include_tlv. Field-nya SELALU
+    # ada supaya bentuk tanggapan tidak berubah-ubah antar panggilan.
+    tlv: list = []
     location_source: str
     # Pengungkapan, bukan skor: "not_provided" berarti pemeriksaan
     # integritas TIDAK PERNAH DIJALANKAN — bukan dijalankan lalu lolos.
@@ -356,6 +422,35 @@ REPLAY_NOTICE = ("Koordinat diputar ulang dari rekaman lokasi — bukan GPS "
 
 MOCK_NOTICE = ("Sistem operasi melaporkan lokasi ini berasal dari mock "
                "provider — jangkar tidak dapat dinilai")
+
+
+def _bahan_tiket(client_id: Optional[str]) -> str:
+    """Bahan rahasia untuk menandatangani tiket permintaan ini.
+
+    Kunci PJP kalau ada; kalau autentikasi dimatikan, rahasia server
+    yang tersimpan. Yang kedua tidak bisa diverifikasi PJP mana pun —
+    dan memang tidak perlu, karena di mode itu tidak ada PJP.
+    """
+    bahan = clients.secret_material(client_id) if client_id else None
+    return bahan or store.ticket_secret()
+
+
+def _bedah(parsed, diminta: bool) -> list:
+    """Bedah TLV, hanya kalau diminta. Tidak menilai apa pun."""
+    if not diminta:
+        return []
+    return [TlvOut(**e) for e in parsed.breakdown()]
+
+
+def _biaya(parsed) -> FeeOut:
+    """Ringkas tag 55/56/57 jadi satu objek. Tidak menilai apa pun."""
+    return FeeOut(
+        indicator=parsed.tip_indicator,
+        label=parsed.tip_label,
+        fixed=parsed.fee_fixed,
+        percent=parsed.fee_percent,
+        present=parsed.has_fee,
+    )
 
 
 def _status_integritas(di) -> str:
@@ -680,12 +775,22 @@ def verify(req: VerifyRequest, request: Request):
                                  accuracy_m=req.accuracy_m, has_coords=True)
         palsu = _tandai_replay(bd.compose(palsu, struktural), req)
         elapsed = round((time.perf_counter() - started) * 1000, 2)
+        # status_integritas WAJIB ikut. Tanpanya parameternya jatuh ke
+        # default "not_provided", dan jejak audit mencatat peristiwa
+        # integritas PALING SERIUS yang kita punya — GPS yang diakui
+        # palsu — seolah pemeriksaannya tidak pernah dijalankan.
+        # Tanggapan ke klien selalu benar; yang keliru hanya jejaknya,
+        # dan justru jejak itulah yang dipakai auditor merekonstruksi
+        # insiden (aset A5).
         audit.record_verdict(
             palsu, nmid, req.lat, req.lng,
             {"location": 65, "behavior": struktural.score},
             elapsed, req.accuracy_m, parsed.merchant_name,
-            req.location_source, client_id,
+            req.location_source, client_id, status_integritas,
         )
+        _tiket = tk.issue(
+            req.payload, palsu.status, palsu.action, nmid,
+            client_id or "anonymous", _bahan_tiket(client_id))
         return VerifyResponse(
             verdict=palsu.status, action=palsu.action,
             risk_score=palsu.risk_score, reasons=palsu.reasons,
@@ -697,6 +802,10 @@ def verify(req: VerifyRequest, request: Request):
                 nmid=nmid, name=parsed.merchant_name,
                 city=parsed.merchant_city, criteria=parsed.criteria_label,
                 is_static=parsed.is_static),
+            fees=_biaya(parsed),
+            tlv=_bedah(parsed, req.include_tlv),
+            verification_ticket=_tiket["ticket"],
+            ticket_expires_in=_tiket["expires_in"],
             processing_ms=elapsed,
         )
 
@@ -771,6 +880,9 @@ def verify(req: VerifyRequest, request: Request):
             elapsed, req.accuracy_m, parsed.merchant_name,
             req.location_source, client_id, status_integritas,
         )
+        _tiket = tk.issue(
+            req.payload, low.status, low.action, nmid,
+            client_id or "anonymous", _bahan_tiket(client_id))
         return VerifyResponse(
             verdict=low.status,
             action=low.action,
@@ -788,6 +900,10 @@ def verify(req: VerifyRequest, request: Request):
                 criteria=parsed.criteria_label,
                 is_static=parsed.is_static,
             ),
+            fees=_biaya(parsed),
+            tlv=_bedah(parsed, req.include_tlv),
+            verification_ticket=_tiket["ticket"],
+            ticket_expires_in=_tiket["expires_in"],
             processing_ms=elapsed,
         )
 
@@ -946,6 +1062,9 @@ def verify(req: VerifyRequest, request: Request):
         client_id, status_integritas,
     )
 
+    _tiket = tk.issue(
+        req.payload, verdict.status, verdict.action, nmid,
+        client_id or "anonymous", _bahan_tiket(client_id))
     return VerifyResponse(
         verdict=verdict.status,
         action=verdict.action,
@@ -962,5 +1081,9 @@ def verify(req: VerifyRequest, request: Request):
             criteria=parsed.criteria_label,
             is_static=parsed.is_static,
         ),
+        fees=_biaya(parsed),
+        tlv=_bedah(parsed, req.include_tlv),
+        verification_ticket=_tiket["ticket"],
+        ticket_expires_in=_tiket["expires_in"],
         processing_ms=elapsed,
     )

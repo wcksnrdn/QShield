@@ -86,6 +86,20 @@ class ClientRegistry:
     def client_ids(self) -> list:
         return sorted(self._clients)
 
+    def secret_material(self, client_id: str):
+        """Bahan rahasia untuk menurunkan kunci tiket klien ini.
+
+        Yang dikembalikan adalah hash kunci API yang tersimpan — bukan
+        kunci mentahnya, yang memang tidak pernah kami punya. PJP bisa
+        menurunkan nilai yang sama dari kunci mentahnya sendiri, jadi
+        tidak ada kunci baru yang perlu didistribusikan.
+
+        Konsekuensinya jujur: konfigurasi yang bocor kini bisa dipakai
+        memalsukan tiket, dan itu melemahkan properti yang diklaim di
+        docstring atas. Tercatat sebagai R14 di THREAT-MODEL.md.
+        """
+        return self._clients.get(client_id)
+
     def authenticate(self, presented: str):
         """Kembalikan client_id kalau kuncinya cocok, None kalau tidak.
 

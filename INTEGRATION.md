@@ -15,13 +15,28 @@ Tepat **setelah QR dipindai, sebelum layar PIN muncul.**
                 ▼
        POST /api/v1/verify          ← Q-Shield di sini
                 │
+                ▼
+    putusan + tiket bertanda tangan
+                │
         ┌───────┴────────┐
         │                │
     proceed          selain proceed
         │                │
         ▼                ▼
    layar PIN       friksi sesuai tier
+        │
+        ▼
+   eksekusi pembayaran
+        │
+        └──► PERIKSA TIKET DI SINI: hitung sha256 payload yang
+             hendak dibayar, tuntut sama dengan `fp` di tiket.
+             Tanpa langkah ini, jeda antara "diperiksa" dan
+             "dieksekusi" tidak dijaga apa pun.
 ```
+
+**Tiketnya mengikat, bukan memaksa.** Ia mencegah putusan dipindahkan
+ke QR lain; ia tidak mencegah Anda mengabaikannya. Yang mengeksekusi
+pembayaran adalah Anda, bukan kami — lihat §7.
 
 Q-Shield tidak memindahkan dana, tidak menyentuh saldo, dan tidak
 menggantikan pemeriksaan apa pun yang sudah Anda lakukan. Ia menambah
@@ -49,12 +64,46 @@ tekanannya; menolak hanya membuat korban mencari jalan lain.
 ketahui"; `action` menjawab "apa yang sebaiknya dilakukan". Yang kedua
 itulah yang menentukan layar.
 
-**Tampilkan `reasons`, jangan `risk_score`.** Angka tidak bisa
-dijelaskan ke pengguna maupun ke regulator. Kalimatnya bisa.
+**`reasons` yang menjelaskan; angka hanya boleh tampil dengan skalanya.**
+Kalimat itulah yang bisa dipertanggungjawabkan ke pengguna maupun
+regulator — tampilkan selalu.
+
+`risk_score` boleh ikut ditampilkan, tapi **tidak pernah telanjang**:
+"Skor 83" sama sekali tidak memberi tahu 83 itu buruk atau bagus.
+Sertakan denominatornya — "Risiko 83 dari 100". Klien acuan kami
+melakukan persis itu.
+
+Dua field yang **tidak boleh** sampai ke pengguna akhir:
+
+| Field | Kenapa |
+|---|---|
+| `layers` | alat AUDIT — ia menjawab "dari lapisan mana skor ini datang", pertanyaan milik Anda dan auditor. Dan "Lokasi 0" gampang dibaca terbalik sebagai gagal, padahal itu hasil terbaik |
+| `processing_ms` | mengukur kecepatan kami, bukan risiko pengguna |
+
+Lihat `PROCESS-LOG.md` Keputusan 44.
 
 **Perlakukan `unknown` sebagai peringatan, bukan lampu hijau.** Ini
 invarian sistem, bukan preferensi: ketiadaan bukti bukan bukti
 ketiadaan.
+
+**Tampilkan `fees` bila `fees.present`.** Tanggapan memuat hasil parsing
+tag 55/56/57 — tip atau biaya layanan yang diminta kode itu di luar
+nominal transaksi.
+
+Ini **pengungkapan, bukan skor**: tidak ada sinyal yang lahir darinya,
+dan `risk_score` tidak bergeser sedikit pun karenanya. Belum
+terverifikasi apakah biaya layanan pada QR **statis** menyalahi spec
+QRIS atau justru sah, dan menghukum yang sah jauh lebih mahal daripada
+melewatkan yang mencurigakan.
+
+Tampilkan **sebelum** layar PIN, dan tampilkan netral — ini fakta, bukan
+tuduhan. Orang yang hendak membayar berhak tahu stikernya meminta
+tambahan; itu keputusan mereka, bukan keputusan kami.
+
+**Bedah TLV (`include_tlv`).** Setel `include_tlv: true` untuk menerima
+uraian per tag di `tlv`. Ditujukan untuk perkakas internal dan
+investigasi — bukan untuk ditampilkan ke nasabah. Bawaannya mati, dan
+tidak menyentuh penilaian sama sekali.
 
 ---
 
@@ -120,6 +169,40 @@ sini, dan menghukumnya berarti menghukum pengguna untuk sesuatu yang
 bukan kesalahan mereka. Yang dilakukan sebagai gantinya: ketiadaannya
 **diungkapkan** di tanggapan, supaya jelas pemeriksaan itu tidak pernah
 dijalankan — bukan dijalankan lalu lolos.
+
+---
+
+## 3b. Tiket verifikasi — menutup jeda antara "diperiksa" dan "dibayar"
+
+Setiap tanggapan membawa `verification_ticket`: putusan yang
+ditandatangani dan **diikat ke sidik jari payload** yang diperiksa,
+berlaku 90 detik.
+
+**Celah yang ditutupnya.** Tanpa tiket, tidak ada yang menghubungkan
+jawaban `/verify` dengan transaksi yang benar-benar dieksekusi.
+Aplikasi — atau malware di antaranya — bisa memverifikasi QR A lalu
+membayar ke QR B. Tiket membuat pemindahan itu ketahuan.
+
+**Celah yang TIDAK ditutupnya, disebut terus terang.** Tiket hanya
+berguna kalau ada yang memeriksanya, dan pemeriksanya adalah Anda.
+Kalau implementasi Anda mengabaikan `cooling_off`, ia akan mengabaikan
+tiketnya juga. Q-Shield tidak berada di jalur eksekusi pembayaran dan
+tidak bisa menolak apa pun di sana. Tiket **mengikat**, tidak
+**memaksa**.
+
+Ia juga tidak mencegah replay dalam 90 detik itu — idempotensi
+transaksi tetap milik Anda.
+
+**Di mana memeriksanya.** Di titik yang mengeksekusi pembayaran, bukan
+di aplikasi. Kalau verifikasi dan eksekusi terjadi di layanan berbeda
+atau tidak berbagi state tepercaya, di situlah tiket paling berguna;
+kalau keduanya satu proses yang berbagi sesi, Anda sudah bisa mengikat
+sendiri dan tiket menambah nilai audit saja.
+
+Algoritma lengkapnya di `API.md`. Intinya empat langkah, dan **langkah
+keempat yang menentukan**: hitung `sha256` payload yang hendak dibayar
+dan tuntut sama dengan `fp` di tiket. Tanpa itu Anda hanya membuktikan
+tiketnya asli, bukan bahwa ia menyangkut QR yang sedang dieksekusi.
 
 ---
 

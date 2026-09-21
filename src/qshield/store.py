@@ -249,6 +249,7 @@ CREATE INDEX IF NOT EXISTS idx_bindings_nmid ON bindings(nmid);
 
 
 SALT_KEY = "device_salt"
+TICKET_KEY = "ticket_secret"
 
 
 def _iso(dt: datetime) -> str:
@@ -360,6 +361,29 @@ class Store:
         baris = self.conn.execute(
             "SELECT value FROM meta WHERE key = ?", (SALT_KEY,)).fetchone()
         return baris["value"]
+
+    def ticket_secret(self) -> str:
+        """Rahasia cadangan untuk menandatangani tiket TANPA klien.
+
+        Dipakai hanya saat autentikasi dimatikan (demo lokal), ketika
+        tidak ada kunci PJP untuk diturunkan. Tiket yang ditandatangani
+        dengannya TIDAK bisa diverifikasi PJP mana pun — dan memang
+        tidak perlu: di mode demo tidak ada PJP.
+
+        Pola yang sama dengan garam device_ref: dibangkitkan sekali,
+        disimpan, stabil sepanjang umur basis data.
+        """
+        baris = self.conn.execute(
+            "SELECT value FROM meta WHERE key = ?", (TICKET_KEY,)).fetchone()
+        if baris:
+            return baris["value"]
+        rahasia = secrets.token_hex(32)
+        self.conn.execute(
+            "INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)",
+            (TICKET_KEY, rahasia))
+        return self.conn.execute(
+            "SELECT value FROM meta WHERE key = ?", (TICKET_KEY,)
+        ).fetchone()["value"]
 
     def device_ref(self, binding_id: int, device_anon_id: str) -> str:
         """Rujukan perangkat yang hanya berlaku di dalam satu binding."""

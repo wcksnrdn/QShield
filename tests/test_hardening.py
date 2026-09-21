@@ -337,6 +337,58 @@ def _m3():
     return "ditandai di tanggapan, sinyal, alasan terdepan, dan jejak audit"
 
 
+@cek("Jejak audit mencatat status integritas yang SEBENARNYA")
+def _m3b():
+    c = siapkan()
+    log = audit.get_logger()
+
+    def rekam(**ganti):
+        tangkap = io.StringIO()
+        h = logging.StreamHandler(tangkap)
+        h.setFormatter(logging.Formatter("%(message)s"))
+        log.addHandler(h)
+        try:
+            d = kirim(c, **ganti).json()
+        finally:
+            log.removeHandler(h)
+        baris = [b for b in tangkap.getvalue().strip().split("\n") if b]
+        return d, json.loads(baris[0])
+
+    # Ketiga cabang di verify() menulis jejaknya sendiri-sendiri, dan
+    # cabang mock location sempat lupa meneruskan status integritasnya
+    # sehingga jatuh ke default "not_provided" — peristiwa integritas
+    # paling serius yang kita punya tercatat seolah pemeriksaannya tidak
+    # pernah dijalankan. Tanggapannya benar; jejaknya yang bohong, dan
+    # justru jejak itu yang dipakai auditor (aset A5).
+    kasus = [
+        ("mock location", {"device_anon_id": "audit-integritas-01",
+                           "device_integrity": {"mock_location": True,
+                                                "platform": "android"}},
+         "failed"),
+        ("akurasi buruk", {"device_anon_id": "audit-integritas-02",
+                           "accuracy_m": 250.0,
+                           "device_integrity": {"rooted": True,
+                                                "platform": "android"}},
+         "failed"),
+        ("jalur utama", {"device_anon_id": "audit-integritas-03",
+                         "device_integrity": {"mock_location": False,
+                                              "rooted": False,
+                                              "attested": True,
+                                              "platform": "android"}},
+         "attested"),
+        ("tanpa blok", {"device_anon_id": "audit-integritas-04"},
+         "not_provided"),
+    ]
+    for nama, ganti, harapan in kasus:
+        d, entri = rekam(**ganti)
+        assert d["device_integrity"] == harapan, (
+            f"{nama}: tanggapan {d['device_integrity']}, harusnya {harapan}")
+        assert entri["device_integrity"] == harapan, (
+            f"{nama}: jejak audit mencatat '{entri['device_integrity']}' "
+            f"padahal tanggapannya '{harapan}' — auditor akan melewatkannya")
+    return f"{len(kasus)} cabang: tanggapan dan jejak audit sepakat"
+
+
 @cek("Default tetap live — replay tidak pernah tidak sengaja aktif")
 def _m4():
     c = siapkan()

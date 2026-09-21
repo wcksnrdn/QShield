@@ -1,0 +1,317 @@
+{
+  "DeviceIntegrity": {
+    "description": "Laporan integritas dari klien NATIVE.\n\nBrowser sengaja tidak membocorkan hal-hal ini ke halaman web, jadi\nklien web akan selalu mengosongkannya. Itu bukan kekurangan yang\ndisembunyikan — ketiadaannya diungkapkan di tanggapan.\n\nRantai kepercayaannya: Q-Shield TIDAK bisa memverifikasi field ini.\nYang membuatnya berarti adalah `attested` — hasil Play Integrity\n(Android) atau App Attest (iOS) yang diverifikasi PJP di sisi\nmereka, lalu dipertanggungkan lewat kunci API mereka. Kami tidak\nmemercayai perangkatnya; kami memercayai PJP yang menyatakan sudah\nmemeriksanya.",
+    "properties": {
+      "attested": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Play Integrity / App Attest lolos",
+        "title": "Attested"
+      },
+      "mock_location": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "OS melaporkan lokasi berasal dari mock provider",
+        "title": "Mock Location"
+      },
+      "platform": {
+        "anyOf": [
+          {
+            "enum": [
+              "android",
+              "ios",
+              "web",
+              "other"
+            ],
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Platform"
+      },
+      "rooted": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "perangkat di-root / jailbreak",
+        "title": "Rooted"
+      }
+    },
+    "title": "DeviceIntegrity",
+    "type": "object"
+  },
+  "LayerScores": {
+    "description": "Rincian per layer.\n\nDipisah supaya auditor bisa melihat sumbangan tiap layer, bukan cuma\nangka gabungan — dan supaya jelas Layer 2 melengkapi, bukan\nmenggantikan, putusan Layer 1.",
+    "properties": {
+      "behavior": {
+        "title": "Behavior",
+        "type": "integer"
+      },
+      "location": {
+        "title": "Location",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "location",
+      "behavior"
+    ],
+    "title": "LayerScores",
+    "type": "object"
+  },
+  "MerchantOut": {
+    "properties": {
+      "city": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "City"
+      },
+      "criteria": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Criteria"
+      },
+      "is_static": {
+        "title": "Is Static",
+        "type": "boolean"
+      },
+      "name": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Name"
+      },
+      "nmid": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Nmid"
+      }
+    },
+    "required": [
+      "nmid",
+      "name",
+      "city",
+      "criteria",
+      "is_static"
+    ],
+    "title": "MerchantOut",
+    "type": "object"
+  },
+  "VerifyRequest": {
+    "description": "Seluruh field divalidasi di batas sistem, bukan di dalam logika.\n\nPayload QRIS datang dari kamera dan bisa berisi apa saja; polanya\ndibatasi ke ASCII yang bisa dicetak supaya null byte dan karakter\nkendali tidak pernah sampai ke parser maupun ke basis data.",
+    "properties": {
+      "accuracy_m": {
+        "maximum": 100000.0,
+        "minimum": 0.0,
+        "title": "Accuracy M",
+        "type": "number"
+      },
+      "ambient_wifi": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/AmbientWifi"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "sidik jari WiFi sekitar; hanya klien native"
+      },
+      "device_anon_id": {
+        "description": "Pengenal acak per perangkat, bukan identitas pengguna",
+        "maxLength": 64,
+        "minLength": 8,
+        "pattern": "^[A-Za-z0-9_-]+$",
+        "title": "Device Anon Id",
+        "type": "string"
+      },
+      "device_integrity": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/DeviceIntegrity"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "diisi klien native; klien web mengosongkannya"
+      },
+      "include_tlv": {
+        "default": false,
+        "description": "sertakan bedah TLV di tanggapan (mode demo)",
+        "title": "Include Tlv",
+        "type": "boolean"
+      },
+      "lat": {
+        "maximum": 90.0,
+        "minimum": -90.0,
+        "title": "Lat",
+        "type": "number"
+      },
+      "lng": {
+        "maximum": 180.0,
+        "minimum": -180.0,
+        "title": "Lng",
+        "type": "number"
+      },
+      "location_source": {
+        "default": "live",
+        "description": "'replay' bila koordinat berasal dari rekaman",
+        "enum": [
+          "live",
+          "replay"
+        ],
+        "title": "Location Source",
+        "type": "string"
+      },
+      "payload": {
+        "description": "String QRIS mentah hasil scan",
+        "maxLength": 1024,
+        "minLength": 8,
+        "pattern": "^[\\x20-\\x7E]+$",
+        "title": "Payload",
+        "type": "string"
+      },
+      "printed_label": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/PrintedLabel"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "teks yang terbaca di stiker fisik"
+      }
+    },
+    "required": [
+      "payload",
+      "lat",
+      "lng",
+      "device_anon_id",
+      "accuracy_m"
+    ],
+    "title": "VerifyRequest",
+    "type": "object"
+  },
+  "VerifyResponse": {
+    "properties": {
+      "action": {
+        "title": "Action",
+        "type": "string"
+      },
+      "device_integrity": {
+        "title": "Device Integrity",
+        "type": "string"
+      },
+      "fees": {
+        "$ref": "#/components/schemas/FeeOut"
+      },
+      "layers": {
+        "$ref": "#/components/schemas/LayerScores"
+      },
+      "location_source": {
+        "title": "Location Source",
+        "type": "string"
+      },
+      "merchant": {
+        "$ref": "#/components/schemas/MerchantOut"
+      },
+      "processing_ms": {
+        "title": "Processing Ms",
+        "type": "number"
+      },
+      "reasons": {
+        "items": {},
+        "title": "Reasons",
+        "type": "array"
+      },
+      "risk_score": {
+        "title": "Risk Score",
+        "type": "integer"
+      },
+      "signals": {
+        "items": {},
+        "title": "Signals",
+        "type": "array"
+      },
+      "ticket_expires_in": {
+        "title": "Ticket Expires In",
+        "type": "integer"
+      },
+      "tlv": {
+        "default": [],
+        "items": {},
+        "title": "Tlv",
+        "type": "array"
+      },
+      "verdict": {
+        "title": "Verdict",
+        "type": "string"
+      },
+      "verification_ticket": {
+        "title": "Verification Ticket",
+        "type": "string"
+      }
+    },
+    "required": [
+      "verdict",
+      "action",
+      "risk_score",
+      "reasons",
+      "signals",
+      "layers",
+      "merchant",
+      "fees",
+      "verification_ticket",
+      "ticket_expires_in",
+      "location_source",
+      "device_integrity",
+      "processing_ms"
+    ],
+    "title": "VerifyResponse",
+    "type": "object"
+  }
+}

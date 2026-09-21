@@ -162,7 +162,11 @@ Dockerfile-nya belum teruji sampai ada yang membangunnya.
 **Sudah diverifikasi**, dengan menjalankan jalur yang sama tanpa Docker:
 
 - `pip install .` dari repo bersih menghasilkan paket yang lengkap —
-  kesepuluh modul `qshield` terimpor
+  kesepuluh modul `qshield` terimpor. Catatan: itu dependensi LAYANAN
+  saja. Untuk menjalankan `tests/` di mesin deploy — termasuk
+  `test_invariants.py` yang disebut di §4 — dibutuhkan
+  `pip install '.[test]'`; tanpanya `fastapi.testclient` gagal diimpor
+  dan seluruh suite tidak bisa berjalan sama sekali (Keputusan 37)
 - `uvicorn qshield.api:app` menyala dan melayani
 - perintah `HEALTHCHECK` dijalankan apa adanya → `200`
 - autentikasi aktif dengan env sungguhan: tanpa kunci `401`, dengan

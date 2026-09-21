@@ -43,6 +43,10 @@ membuat mereka tidak tahu harus menampilkan apa.
 | 18 Sep 2026 | sinyal `adjacent_merchant` diperluas lewat bukti kehadiran | aditif |
 | 20 Sep 2026 | sinyal `nmid_relocated` | aditif |
 | 20 Sep 2026 | sinyal `ambient_wifi_confirms_place`, `ambient_wifi_foreign_nmid` | aditif |
+| 21 Sep 2026 | sinyal `malformed_country` (tag 58 cacat bentuk) | aditif — `signals` daftar terbuka |
+| 21 Sep 2026 | `fees` ditambahkan ke tanggapan | aditif — klien wajib mengabaikan field tak dikenal |
+| 21 Sep 2026 | `include_tlv` (permintaan, opsional, bawaan `false`) + `tlv` (tanggapan) | aditif — bawaannya mati, klien lama tidak terbebani |
+| 21 Sep 2026 | `verification_ticket` + `ticket_expires_in` ditambahkan ke tanggapan | aditif — klien yang mengabaikannya tetap berjalan seperti sebelumnya |
 
 `location_source` **tidak** bertambah nilainya. Sidik jari WiFi bisa
 menyimpulkan tempat, tapi field itu menyatakan bagaimana KLIEN
@@ -85,7 +89,9 @@ Untuk demo lokal, jalankan dengan `QSHIELD_AUTH=off`.
 | `device_anon_id` | string | ya | 8–64 char, `[A-Za-z0-9_-]` | pengenal acak per perangkat, **bukan** identitas pengguna |
 | `accuracy_m` | number | ya | 0…100000 | radius keyakinan GPS dalam meter |
 | `location_source` | string | tidak | `live` \| `replay` | bawaan `live` |
-| `printed_label` | object | tidak | teks yang TERCETAK di stiker: `nmid`, `merchant_name` |
+| `printed_label` | object | tidak | — | teks yang TERCETAK di stiker: `nmid`, `merchant_name` |
+| `device_integrity` | object | tidak | — | diisi klien **native**; klien web selalu mengosongkannya. Lihat `INTEGRATION.md` §3 |
+| `include_tlv` | boolean | tidak | — | bawaan `false`. `true` menyertakan bedah TLV di `tlv` — hampir 4x ukuran tanggapan, jadi opt-in |
 
 `accuracy_m` wajib dengan sengaja. Tanpa tahu seberapa bagus fix-nya,
 jangkar tidak bisa dinilai — dan kalau field ini opsional, penyerang
@@ -101,9 +107,17 @@ Keputusan 24.
   "lat": -6.914744,
   "lng": 107.609810,
   "device_anon_id": "550e8400-e29b-41d4-a716-446655440000",
-  "accuracy_m": 12
+  "accuracy_m": 12,
+  "device_integrity": {
+    "mock_location": false, "rooted": false,
+    "attested": true, "platform": "android"
+  },
+  "include_tlv": false
 }
 ```
+
+Dua field terakhir opsional. `device_integrity` hanya bisa diisi klien
+native; `include_tlv` hanya dipakai perkakas forensik dan mode demo.
 
 ### Tanggapan `200`
 
@@ -116,6 +130,10 @@ Keputusan 24.
 | `signals` | array of string | nama sinyal untuk analitik — **terbuka** |
 | `layers` | object | `{ "location": int, "behavior": int }` |
 | `merchant` | object | `nmid`, `name`, `city`, `criteria`, `is_static` |
+| `fees` | object | biaya di luar nominal yang DIMINTA payload — tag 55/56/57. **Pengungkapan, bukan skor**: tidak satu pun sinyal lahir darinya |
+| `tlv` | array | bedah TLV per tag. **Kosong** kecuali permintaan menyetel `include_tlv: true`. Forensik, bukan penilaian |
+| `verification_ticket` | string | putusan yang ditandatangani, terikat ke sidik jari payload. **Mengikat, bukan memaksa** |
+| `ticket_expires_in` | integer | masa berlaku tiket dalam detik (90) |
 | `location_source` | string | `live` \| `replay` |
 | `processing_ms` | number | |
 
@@ -131,14 +149,123 @@ Keputusan 24.
     "nmid": "ID1024365478912", "name": "WARUNG BU SRI",
     "city": "BANDUNG", "criteria": "Usaha Mikro", "is_static": true
   },
+  "fees": {
+    "indicator": null, "label": null,
+    "fixed": null, "percent": null, "present": false
+  },
   "location_source": "live",
   "processing_ms": 2.8
 }
 ```
 
-**`reasons` yang dipakai, bukan `risk_score`.** Angka tidak bisa
-dijelaskan ke pengguna maupun auditor; kalimatnya bisa. `risk_score`
-ada untuk analitik dan penyetelan ambang, bukan untuk ditampilkan.
+**Tentang `verification_ticket`.** Setiap tanggapan membawa putusan yang
+**ditandatangani dan diikat ke sidik jari payload** yang diperiksa,
+berlaku `ticket_expires_in` detik (90).
+
+Gunanya menutup satu celah: antara "diperiksa" dan "dieksekusi" ada
+jeda, dan tanpa tiket tidak ada yang menjamin keduanya menyangkut QR
+yang sama. Aplikasi — atau malware di antaranya — bisa memverifikasi QR
+A lalu membayar ke QR B.
+
+**Yang tiket ini TIDAK lakukan, dan tidak pernah kami klaim:** ia tidak
+memaksa siapa pun mematuhi putusan. Tiket hanya berguna kalau ada yang
+memeriksanya, dan yang mengeksekusi pembayaran adalah Anda, bukan kami.
+PJP yang mengabaikan `cooling_off` akan mengabaikan tiketnya juga. Ia
+**mengikat**, bukan **memaksa** — lihat R15 di `THREAT-MODEL.md`.
+
+Ia juga tidak mencegah replay dalam masa berlakunya: tiketnya stateless
+dan tidak disimpan, jadi QR yang sama bisa dieksekusi dua kali dalam 90
+detik. Idempotensi transaksi tetap milik Anda (R16).
+
+### Cara memverifikasi tiket
+
+Algoritmanya sengaja sederhana supaya bisa ditulis ulang di bahasa mana
+pun tanpa pustaka tambahan.
+
+```
+tiket        = <badan>.<tanda>            keduanya base64url tanpa padding
+bahan        = sha256_hex(kunci_API_mentah_Anda)
+kunci_tiket  = HMAC-SHA256(bahan, "qshield-ticket-v1")
+tanda_harap  = base64url(HMAC-SHA256(kunci_tiket, badan))   tanpa padding
+```
+
+1. Bandingkan `tanda` dengan `tanda_harap` memakai **perbandingan
+   waktu-tetap**, bukan `==`.
+2. Decode `badan` sebagai JSON. Tolak bila `v != "qs1"`.
+3. Tolak bila `exp <= sekarang`, atau `iat > sekarang + 60`
+   (jam tidak sinkron).
+4. **Hitung `sha256_hex` dari payload yang HENDAK DIBAYAR dan tuntut
+   sama dengan `fp`.** Langkah inilah gunanya tiket — tanpa langkah 4,
+   Anda hanya membuktikan tiketnya asli, bukan bahwa ia menyangkut QR
+   yang sedang dieksekusi.
+
+Klaim di dalam `badan`:
+
+| Klaim | Isi |
+|---|---|
+| `v` | versi format, `"qs1"` |
+| `fp` | sha256 hex payload QRIS yang diperiksa |
+| `verdict` / `action` | putusan, sama persis dengan tanggapannya |
+| `nmid` | merchant yang diperiksa |
+| `client` | `client_id` PJP penerbit |
+| `iat` / `exp` | epoch detik UTC |
+
+Tidak ada koordinat, tidak ada `device_anon_id`, tidak ada payload
+mentah — hanya sidik jarinya. Invarian §8 berlaku di sini juga.
+
+Implementasi acuan ada di `src/qshield/ticket.py`; PJP yang memakai
+Python bisa langsung `from qshield.ticket import verify`.
+
+**Tentang `tlv`.** Setel `include_tlv: true` di permintaan untuk
+menerima bedah TLV payload — tiap tag beserta `tag`, `length`, `value`,
+`label`, dan `children` untuk tag bersarang (26-51, 62, 64). Urutannya
+urutan kemunculan di payload, bukan urut tag.
+
+Sengaja **opt-in**: bedahnya hampir empat kali lipat ukuran tanggapan
+normal (533 → 1984 byte pada payload demo), dan hanya panel forensik
+yang memerlukannya. Tidak ada paparan baru — seluruh isinya turunan
+dari `payload` yang wajib Anda kirim sendiri.
+
+**Tidak menyentuh penilaian sama sekali.** `verdict`, `action`,
+`risk_score`, `layers`, dan `signals` identik dengan atau tanpa flag
+ini; dikunci `tests/test_contract.py` "Bedah TLV opt-in".
+
+**Tentang `fees`.** Tag 55 (indikator tip/biaya layanan), 56 (nominal
+tetap), dan 57 (persentase) diparse dan diteruskan apa adanya:
+
+| Field | Isi |
+|---|---|
+| `indicator` | tag 55 mentah — `01` minta tip, `02` nominal tetap, `03` persentase |
+| `label` | arti `indicator` dalam bahasa manusia |
+| `fixed` | tag 56 |
+| `percent` | tag 57 |
+| `present` | `true` bila salah satu dari ketiganya ada |
+
+**Tidak satu pun dari field ini menyentuh penilaian.** Belum
+terverifikasi apakah biaya layanan pada QR **statis** itu kontradiksi
+terhadap spec QRIS atau justru sah, dan menghukum yang ternyata sah
+dengan bobot struktural berarti memaksa `anomaly` pada payload yang
+benar. Jadi ia diperlakukan seperti `location_source` dan
+`device_integrity`: pengungkapan, bukan skor. Dikunci
+`tests/test_contract.py` "Tag biaya diungkapkan".
+
+**`reasons` yang menjelaskan; angka hanya boleh tampil dengan skalanya.**
+Kalimat itulah yang bisa dipertanggungjawabkan ke pengguna maupun
+regulator — tampilkan selalu.
+
+`risk_score` boleh ikut ditampilkan, tapi **tidak pernah telanjang**:
+"Skor 83" sama sekali tidak memberi tahu 83 itu buruk atau bagus.
+Sertakan denominatornya — "Risiko 83 dari 100". Klien acuan kami
+melakukan persis itu.
+
+Dua field yang **tidak boleh** sampai ke pengguna akhir:
+
+| Field | Kenapa |
+|---|---|
+| `layers` | alat AUDIT — ia menjawab "dari lapisan mana skor ini datang", pertanyaan milik Anda dan auditor. Dan "Lokasi 0" gampang dibaca terbalik sebagai gagal, padahal itu hasil terbaik |
+| `processing_ms` | mengukur kecepatan kami, bukan risiko pengguna |
+
+Lihat `PROCESS-LOG.md` Keputusan 44.
 
 ### Kode kesalahan
 
@@ -267,13 +394,18 @@ Terbuka tanpa autentikasi, untuk monitoring.
 
 1. **Abaikan field tanggapan yang tidak dikenal.** Field baru bisa
    muncul tanpa naik versi.
-2. **Tampilkan `reasons`, bukan `risk_score`.**
+2. **Tampilkan `reasons` selalu.** `risk_score` boleh ikut, tapi hanya
+   dengan skalanya ("Risiko 83 dari 100"), tidak pernah telanjang.
+   `layers` dan `processing_ms` tidak pernah untuk pengguna akhir.
 3. **Petakan `action`, bukan `verdict`,** ke perilaku UI. `verdict`
    menjawab "apa yang kami ketahui", `action` menjawab "apa yang
    sebaiknya dilakukan" — dan yang kedua itulah yang menentukan layar.
 4. **Perlakukan `unknown` sebagai peringatan, bukan lampu hijau.**
    Ini invarian, bukan preferensi: ketiadaan bukti bukan kepercayaan.
-5. **Teruskan `coords.accuracy` apa adanya** dari Geolocation API.
+5. **Verifikasi `verification_ticket` sebelum mengeksekusi**, dan
+   sertakan payload yang hendak dibayar di langkah 4 algoritmanya.
+   Tanpa langkah itu tiketnya hanya hiasan.
+6. **Teruskan `coords.accuracy` apa adanya** dari Geolocation API.
    Jangan dibulatkan, jangan diisi nilai tetap — keduanya menghasilkan
    penilaian yang salah, dan nilai di bawah 1 m ditandai sebagai
    mustahil secara fisik.

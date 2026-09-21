@@ -1,0 +1,153 @@
+{
+  "_keterangan": "include_tlv: true — bedah TLV lengkap, termasuk tag bersarang 26 yang terurai jadi GUID/PAN/NMID/kriteria. Biarkan false di build produksi: tanggapannya membengkak ~4x.",
+  "permintaan": {
+    "accuracy_m": 8.5,
+    "device_anon_id": "11111111-2222-4333-8444-555555555555",
+    "device_integrity": {
+      "attested": true,
+      "mock_location": false,
+      "platform": "android",
+      "rooted": false
+    },
+    "include_tlv": true,
+    "lat": -6.914744,
+    "lng": 107.60981,
+    "payload": "00020101021126660014ID.CO.QRIS.WWW01189360001490000000010215ID10243654789120303UMI5204581253033605802ID5913WARUNG BU SRI6007BANDUNG6105402576304E671"
+  },
+  "status_http": 200,
+  "tanggapan": {
+    "action": "proceed",
+    "device_integrity": "attested",
+    "fees": {
+      "fixed": null,
+      "indicator": null,
+      "label": null,
+      "percent": null,
+      "present": false
+    },
+    "layers": {
+      "behavior": 0,
+      "location": 0
+    },
+    "location_source": "live",
+    "merchant": {
+      "city": "BANDUNG",
+      "criteria": "Usaha Mikro",
+      "is_static": true,
+      "name": "WARUNG BU SRI",
+      "nmid": "ID1024365478912"
+    },
+    "processing_ms": 0,
+    "reasons": [
+      "Konsisten dengan 48 pengamatan sebelumnya di lokasi ini"
+    ],
+    "risk_score": 0,
+    "signals": [
+      "established_binding"
+    ],
+    "ticket_expires_in": 90,
+    "tlv": [
+      {
+        "children": [],
+        "label": "Indikator format payload",
+        "length": 2,
+        "tag": "00",
+        "value": "01"
+      },
+      {
+        "children": [],
+        "label": "Metode inisiasi (11 statis, 12 dinamis)",
+        "length": 2,
+        "tag": "01",
+        "value": "11"
+      },
+      {
+        "children": [
+          {
+            "children": [],
+            "label": "Pengenal global penyelenggara (GUID)",
+            "length": 14,
+            "tag": "00",
+            "value": "ID.CO.QRIS.WWW"
+          },
+          {
+            "children": [],
+            "label": "PAN / nomor akun merchant",
+            "length": 18,
+            "tag": "01",
+            "value": "936000149000000001"
+          },
+          {
+            "children": [],
+            "label": "Merchant ID nasional (NMID)",
+            "length": 15,
+            "tag": "02",
+            "value": "ID1024365478912"
+          },
+          {
+            "children": [],
+            "label": "Kriteria usaha merchant",
+            "length": 3,
+            "tag": "03",
+            "value": "UMI"
+          }
+        ],
+        "label": "Informasi akun merchant (template 26)",
+        "length": 66,
+        "tag": "26",
+        "value": "0014ID.CO.QRIS.WWW01189360001490000000010215ID10243654789120303UMI"
+      },
+      {
+        "children": [],
+        "label": "Kategori merchant (MCC)",
+        "length": 4,
+        "tag": "52",
+        "value": "5812"
+      },
+      {
+        "children": [],
+        "label": "Mata uang transaksi",
+        "length": 3,
+        "tag": "53",
+        "value": "360"
+      },
+      {
+        "children": [],
+        "label": "Kode negara",
+        "length": 2,
+        "tag": "58",
+        "value": "ID"
+      },
+      {
+        "children": [],
+        "label": "Nama merchant",
+        "length": 13,
+        "tag": "59",
+        "value": "WARUNG BU SRI"
+      },
+      {
+        "children": [],
+        "label": "Kota merchant",
+        "length": 7,
+        "tag": "60",
+        "value": "BANDUNG"
+      },
+      {
+        "children": [],
+        "label": "Kode pos",
+        "length": 5,
+        "tag": "61",
+        "value": "40257"
+      },
+      {
+        "children": [],
+        "label": "Checksum CRC16",
+        "length": 4,
+        "tag": "63",
+        "value": "E671"
+      }
+    ],
+    "verdict": "verified",
+    "verification_ticket": "<base64url-klaim>.<base64url-hmac-sha256>"
+  }
+}
