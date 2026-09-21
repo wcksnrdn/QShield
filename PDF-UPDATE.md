@@ -21,16 +21,18 @@ ulang sebelum menyalin.
 
 **Baru:**
 
-> Sepuluh berkas pengujian mencakup parser payload, geohash & jarak, 13
-> skenario konsensus (termasuk kasus ruko dan relokasi merchant), 37
-> skenario adversarial, 9 invarian yang dikunci regression test, kontrak
-> API, integrasi antarmuka, pendaftaran merchant, serta pengerasan
-> (validasi masukan, autentikasi klien, pembatasan laju, audit tanpa
-> PII, dan konkurensi).
+> Sebelas berkas pengujian mencakup parser payload, geohash & jarak, 17
+> skenario konsensus (termasuk ruko, relokasi merchant, pedagang
+> bersebelahan, dan pedagang yang pindah dua kali), 36 skenario
+> adversarial — enam di antaranya batasan yang diakui belum ditahan,
+> diuji agar sistem tetap jujur — 9 invarian yang dikunci regression
+> test, kontrak API, integrasi antarmuka, pendaftaran merchant, serta
+> pengerasan (validasi masukan, autentikasi klien, pembatasan laju,
+> audit tanpa PII, dan konkurensi).
 
-Catatan: "13 skenario konsensus" **masih benar** — `test_binding.py`
-memang berisi 13 skenario bernomor. Yang berubah adalah jumlah
-berkasnya.
+Catatan: angka "13 skenario konsensus" di naskah lama **sudah tidak
+benar**. `test_binding.py` kini berisi 17 skenario bernomor, bertambah
+empat dari penutupan R11 dan R12.
 
 ---
 
@@ -38,11 +40,11 @@ berkasnya.
 
 **Lama:** `13` / SKENARIO BINDING DIUJI
 
-**Baru:** `37` / SKENARIO ADVERSARIAL DIUJI
+**Baru:** `36` / SKENARIO ADVERSARIAL DIUJI
 
-Angka 13 masih sah untuk skenario konsensus, tapi 37 lebih mewakili
-kedalaman pengujian sekarang — dan itu angka yang akan menarik perhatian
-juri keamanan.
+Enam di antaranya adalah batasan yang **diakui belum ditahan**, diuji
+justru agar tidak diam-diam berubah jadi klaim aman. Sebutkan itu —
+juri keamanan mempercayai angka yang datang bersama batasannya.
 
 ---
 
@@ -110,9 +112,18 @@ jangkauan terlihat seperti utang.
 
 **Baru:**
 
-> Relokasi merchant yang sah ditangani lewat pendaftaran ulang oleh
-> penyelenggara: jangkar lama otomatis berhenti berstatus resmi, dan
-> lokasi barunya langsung terverifikasi.
+> Relokasi merchant yang sah pulih sendiri dalam tiga hari, tanpa
+> menunggu tindakan siapa pun. Pembedanya fisik: seorang pedagang hanya
+> bisa berada di satu tempat pada satu waktu, sehingga periode aktif
+> lokasi-lokasinya tidak pernah beririsan — sementara penyebar stiker
+> memasang QR-nya sekaligus. Pendaftaran oleh penyelenggara tetap
+> tersedia sebagai jalan cepat.
+
+Ini perubahan yang layak ditonjolkan. Sebelumnya pedagang yang pindah
+dua kali dituduh menyebar stiker **secara permanen** — 500 pengamat di
+lokasi baru dan lokasi lama berumur sepuluh tahun pun tidak
+menyembuhkan. Yang terkena justru segmen inti: pedagang kaki lima,
+food truck, pedagang pasar.
 
 ---
 
@@ -146,6 +157,28 @@ jangkauan terlihat seperti utang.
 **Kalau belum jalan survei, JANGAN diganti.** Kalimat lamanya masih
 benar, dan mengklaim kalibrasi yang belum dilakukan adalah kesalahan
 yang paling mudah ketahuan saat ditanya ukuran sampelnya.
+
+---
+
+## 7b. Halaman 5 — di dalam ruangan
+
+**Butir baru, tidak ada padanannya di naskah lama:**
+
+> Ketika akurasi GPS jatuh ke ratusan meter — di dalam ruko, basement,
+> atau lantai atas — Q-Shield beralih ke sidik jari WiFi di sekitar,
+> sehingga tetap bisa menilai apakah sebuah stiker memang milik tempat
+> itu. Titik akses lebih sulit dipalsukan daripada koordinat:
+> memalsukan GPS cukup satu sakelar di opsi pengembang, memalsukan
+> daftar titik akses menuntut kehadiran fisik di jangkauan radio yang
+> sama.
+
+Ambangnya dikalibrasi dari sidik jari lapangan sungguhan: tempat yang
+sama beririsan 0,66–0,80, tempat berbeda 0,00.
+
+**Yang jangan diklaim:** sidik jari WiFi tidak dipakai MEMBERI izin,
+hanya menaikkan kecurigaan. Merchant sah di dalam ruangan tetap
+berhenti di `warn`. Sebabnya korpus belum memuat kasus ruko sebelah
+yang berbagi titik akses.
 
 ---
 
@@ -187,7 +220,6 @@ terkuat sekarang:
 Masih akurat apa adanya:
 
 - seluruh Bagian 1–3 (celah yang ditangani, arsitektur, empat tier)
-- "13 skenario konsensus" pada `test_binding.py`
 - p50 2,8 ms
 - ambang presisi geohash 7 dan angka 81,9%
 - argumen privasi (tanpa `user_id`, tanpa koordinat kunjungan)

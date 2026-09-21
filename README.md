@@ -76,7 +76,7 @@ python3 tests/test_emvco.py
 python3 tests/test_geo.py
 python3 tests/test_binding.py
 python3 tests/test_invariants.py               # kunci regresi kedelapan invarian
-python3 tests/test_adversarial.py              # 13 skenario dari sisi penyerang
+python3 tests/test_adversarial.py              # 36 skenario dari sisi penyerang
 python3 tests/test_hardening.py                # input, auth, rate limit, audit, konkurensi
 python3 tests/test_contract.py                 # kunci bentuk API v1
 python3 tests/test_frontend.py                 # kecocokan halaman dengan API
@@ -84,8 +84,12 @@ python3 tests/test_registration.py             # pendaftaran merchant + penyalah
 python3 tests/test_transfer.py                 # Layer 2 jalur transfer manual
 PYTHONPATH=scripts python3 tests/test_api.py   # test_api.py mengimpor scripts/seed.py
 
-python3 scripts/calibrate_geo.py               # kalibrasi presisi geohash
-python3 scripts/calibrate_layer2.py            # kalibrasi konstanta Layer 2
+python3 scripts/calibrate_geo.py               # presisi geohash
+python3 scripts/calibrate_layer2.py            # konstanta Layer 2
+python3 scripts/calibrate_falsepos.py          # gesekan pada pedagang jujur
+python3 scripts/calibrate_tetangga.py          # pedagang bersebelahan (R11)
+python3 scripts/calibrate_kehadiran.py         # ADJACENT_MIN_DEVICES
+python3 scripts/calibrate_relokasi.py          # pedagang pindah lokasi (R12)
 ```
 
 `test_invariants.py` keluar dengan status bukan-nol kalau ada satu invarian
