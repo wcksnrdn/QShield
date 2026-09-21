@@ -2301,6 +2301,66 @@ akses menuntut kehadiran fisik di jangkauan radio yang sama.
 
 ---
 
+## Keputusan 54 — Pemindaian dari gambar membentuk pengetahuan lokasi palsu
+
+Prinsipnya sudah ditetapkan di Keputusan 49: *pemindaian dari gambar
+tidak boleh membentuk pengetahuan lokasi*. Tapi waktu itu hanya
+diterapkan **dengan tangan** saat memulihkan data — tidak pernah
+ditegakkan di kode.
+
+**Akibatnya.** Tim memindai tujuh QRIS dari internet di rumah salah
+satu anggota, untuk menambah keragaman penerbit. Ketujuhnya terekam
+sebagai binding di satu titik di Jakarta:
+
+| merchant | kota di stiker |
+|---|---|
+| meowz kitchen | KARANGANYAR |
+| suka jajan | PANGKAL PINANG |
+| PARKIR CIRCLE K JAKAL | SLEMAN |
+| LOPO COFFEE ROASTERY | MANDAILING NATAL |
+
+Pengetahuan wilayah untuk lingkungan itu jadi campur aduk: kota
+dominan hanya 2 dari 11 NMID, jauh di bawah `AREA_CITY_MIN_SHARE` =
+0,75. Sinyal `city_mismatch` **tidak akan pernah bekerja** di
+lingkungan itu — dan itu lingkungan tempat merchant demo berada.
+
+Yang perlu dicatat: penjaganya menahan, jadi tidak ada putusan yang
+salah. Yang hilang adalah kemampuannya, diam-diam.
+
+**Yang ditegakkan.** Pembagiannya bukan "boleh belajar" vs "tidak",
+melainkan APA yang boleh dipelajari:
+
+| | dari lapangan | dari gambar |
+|---|---|---|
+| binding, kota wilayah, sidik jari WiFi | ya | **tidak** |
+| dialek penerbit, kelangkaan ciri merchant | ya | **ya** |
+
+Bentuk payload tidak berubah karena difoto, dan keragaman penerbit
+justru yang paling sulit dikumpulkan sendiri di lapangan — itu alasan
+QRIS internet dikumpulkan sejak awal. Memblokirnya sekalian akan
+membuang bayinya bersama air mandinya.
+
+**Pembersihan** lewat `scripts/bersihkan_gambar.py`. Penandanya: kota
+di stiker berjauhan dari wilayah pemindaian, DAN bindingnya lahir dari
+satu burst (≤2 pengamat, riwayat <1 jam).
+
+Penjaga burst itu wajib. Versi pertama skrip ini nyaris menghapus
+binding demo dengan 149 pengamat dan riwayat 181 hari, karena pencarian
+kotanya mengambil sembarang baris `area_city` untuk NMID itu tanpa
+memandang wilayahnya.
+
+**Pencemaran kedua, dari dalam.** Pembersihan ini juga mengangkat
+binding hantu yang dibuat oleh skrip diagnostik saya sendiri: sebuah
+probe menggeser WARUNG BU SRI 7 km dan menembak basis data KERJA, bukan
+salinan. Hasilnya `step_up` — bukan anomali — sehingga tercatat sebagai
+binding sah dan mulai memicu `nmid_second_location` terhadap seed yang
+asli.
+
+Pelajarannya sama dengan Keputusan 50, dan berulang: skrip diagnostik
+wajib memakai `QSHIELD_DB` ke berkas sementara, tanpa kecuali.
+
+---
+
 ## Hasil pengujian
 
 ```

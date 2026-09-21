@@ -858,9 +858,32 @@ def verify(req: VerifyRequest, request: Request):
 
     verdict = _tandai_replay(bd.compose(lokasi, perilaku), req)
 
+    # Pemindaian dari GAMBAR tidak boleh membentuk pengetahuan lokasi.
+    #
+    # Prinsip ini ditetapkan di Keputusan 49 tapi dulu hanya diterapkan
+    # dengan tangan saat pemulihan data — tidak pernah ditegakkan di
+    # sini. Akibatnya terukur: tujuh QRIS dari internet, dengan kota
+    # Karanganyar sampai Mandailing Natal, semuanya terekam di satu
+    # titik di Jakarta. Pengetahuan wilayah untuk lingkungan itu jadi
+    # campur aduk dan tidak akan pernah mencapai konsensus.
+    #
+    # Yang dipisahkan bukan "boleh belajar" vs "tidak boleh", melainkan
+    # APA yang boleh dipelajari:
+    #
+    #   pengetahuan LOKASI   binding, kota wilayah, sidik jari WiFi
+    #                        -> hanya dari pemindaian di tempatnya
+    #   pengetahuan PAYLOAD  dialek penerbit, kelangkaan ciri merchant
+    #                        -> boleh dari gambar; bentuk payload tidak
+    #                           berubah karena difoto
+    #
+    # Pembagian itu yang membuat QRIS dari internet tetap berguna:
+    # keragaman penerbit adalah justru yang paling sulit dikumpulkan
+    # sendiri di lapangan.
+    lokasi_tepercaya = req.location_source != "replay"
+
     # Pengamatan dicatat hanya kalau tidak terindikasi anomali,
     # supaya stiker palsu tidak ikut membangun reputasi.
-    if verdict.status != bd.ANOMALY:
+    if verdict.status != bd.ANOMALY and lokasi_tepercaya:
         store.record(
             nmid=nmid,
             lat=req.lat,
@@ -881,9 +904,13 @@ def verify(req: VerifyRequest, request: Request):
             ).fetchone()
             if _b:
                 store.learn_ap(_b["id"], req.ambient_wifi.ap_hashes)
+    if verdict.status != bd.ANOMALY:
+        # Pengetahuan tingkat payload tidak bergantung pada tempat
+        # pemindaian, jadi berlaku untuk gambar maupun lapangan.
         store.learn_dialect(parsed, nmid)
         store.learn_features(parsed, nmid)
-    elif anchor_id is not None and (
+
+    if verdict.status == bd.ANOMALY and anchor_id is not None and (
             set(verdict.signals) & bd.ANOMALI_LOKASI):
         # Jangkar ini jadi sasaran. Dicatat sebagai PERCOBAAN, bukan
         # pengamatan: observer_count tidak disentuh, jadi invarian §3

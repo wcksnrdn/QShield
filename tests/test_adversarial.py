@@ -965,6 +965,56 @@ def _a33():
             "jadi dasar memberi izin")
 
 
+@serangan("Pemindaian dari gambar meracuni pengetahuan lokasi")
+def _a34():
+    """Bukan serangan dari luar — kecelakaan dari dalam, dan itu terjadi.
+
+    Tim memindai tujuh QRIS dari internet di rumah salah satu anggota,
+    untuk menambah keragaman penerbit. Ketujuhnya terekam sebagai
+    binding di satu titik di Jakarta, dengan kota tertulis Karanganyar,
+    Pangkal Pinang, Sleman, sampai Mandailing Natal. Pengetahuan
+    wilayah untuk lingkungan itu jadi campur aduk dan tidak akan pernah
+    mencapai konsensus.
+
+    Prinsipnya sudah ditetapkan di Keputusan 49, tapi dulu hanya
+    diterapkan dengan tangan saat pemulihan data. Sekarang ditegakkan
+    di kode.
+    """
+    s, c = fresh_store()
+    sebelum = {
+        t: s.conn.execute(f"SELECT COUNT(*) n FROM {t}").fetchone()["n"]
+        for t in ("bindings", "observations", "area_city", "binding_ap")
+    }
+    dialek_awal = s.conn.execute(
+        "SELECT COUNT(*) n FROM issuer_dialect").fetchone()["n"]
+
+    # Titik yang belum dikuasai siapa pun. Kalau dipindai di jangkar
+    # milik merchant lain, hasilnya anomali — dan anomali memang tidak
+    # mengajari apa pun, sehingga yang teruji bukan aturan gambarnya.
+    JAUH_LAT, JAUH_LNG = LAT + 0.5, LNG + 0.5
+    for i in range(3):
+        c.post("/api/v1/verify", json={
+            "payload": qr(f"ID10265030375{i:02d}", nama="TOKO JAUH"),
+            "lat": JAUH_LAT, "lng": JAUH_LNG, "accuracy_m": 8.0,
+            "device_anon_id": f"pemindai-gambar-{i:04d}",
+            "location_source": "replay",
+            "ambient_wifi": {"ap_hashes": [f"{j:032x}" for j in range(20)]}})
+
+    for t, awal in sebelum.items():
+        kini = s.conn.execute(f"SELECT COUNT(*) n FROM {t}").fetchone()["n"]
+        assert kini == awal, (
+            f"pemindaian gambar menambah {t}: {awal} -> {kini}")
+
+    dialek = s.conn.execute(
+        "SELECT COUNT(*) n FROM issuer_dialect").fetchone()["n"]
+    assert dialek > dialek_awal, (
+        "pengetahuan payload ikut diblokir — keragaman penerbit hilang "
+        "padahal itu justru yang paling sulit dikumpulkan di lapangan")
+
+    return (f"nol pengetahuan lokasi terbentuk; dialek penerbit "
+            f"{dialek_awal} -> {dialek} tetap dipelajari")
+
+
 print("=" * 72)
 print("SUITE ADVERSARIAL")
 print("=" * 72)
