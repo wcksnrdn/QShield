@@ -22,6 +22,11 @@ python3 -m venv .venv && source .venv/bin/activate
 # Install dependencies dan package qshield (editable)
 pip install -e .
 
+# Untuk MENJALANKAN test, dependensinya ada di extra [test].
+# Tanpa ini, sepuluh suite tidak bisa jalan sama sekali di mesin bersih
+# — fastapi.testclient menuntut httpx saat diimpor.
+pip install -e '.[test]'
+
 # (Opsional) Jika butuh membuat/mencetak prop QR fisik (OpenCV & QRCode):
 # pip install -e ".[props]"
 ```
