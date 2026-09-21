@@ -199,10 +199,23 @@ atau tidak berbagi state tepercaya, di situlah tiket paling berguna;
 kalau keduanya satu proses yang berbagi sesi, Anda sudah bisa mengikat
 sendiri dan tiket menambah nilai audit saja.
 
-Algoritma lengkapnya di `API.md`. Intinya empat langkah, dan **langkah
-keempat yang menentukan**: hitung `sha256` payload yang hendak dibayar
-dan tuntut sama dengan `fp` di tiket. Tanpa itu Anda hanya membuktikan
-tiketnya asli, bukan bahwa ia menyangkut QR yang sedang dieksekusi.
+**Dua cara memeriksanya.** Hitung sendiri (algoritmanya di `API.md`,
+`hmac` ada di pustaka standar hampir semua bahasa), atau panggil
+`POST /api/v1/tickets/verify` dengan `{ticket, payload}`. Yang pertama
+lebih cepat karena tanpa perjalanan jaringan; yang kedua berguna kalau
+bahasa Anda merepotkan.
+
+Apa pun caranya, **langkah yang menentukan adalah mencocokkan sidik
+jari payload yang HENDAK DIBAYAR** dengan `fp` di tiket. Tanpa itu Anda
+hanya membuktikan tiketnya asli, bukan bahwa ia menyangkut QR yang
+sedang dieksekusi. Endpoint di atas mewajibkan `payload` justru supaya
+langkah itu tidak bisa dilewati.
+
+**Jejak audit.** Setiap putusan kini dicatat beserta `payload_fp` —
+sidik jari QR yang diperiksa. Tanpa itu, stiker asli dan stiker yang
+dicetak ulang ke rekening lain meninggalkan baris audit yang identik,
+dan penyidik tidak punya cara membedakannya setelah kejadian. Yang
+dicatat tetap hash, bukan payloadnya.
 
 ---
 

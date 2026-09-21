@@ -737,6 +737,67 @@ def cabut(nmid: str, request: Request, response: Response):
     return RegisterResponse(ok=True, nmid=nmid, registrar=client_id)
 
 
+class TicketVerifyRequest(BaseModel):
+    """Permintaan memeriksa tiket di titik eksekusi pembayaran.
+
+    `payload` WAJIB, dan itu keputusan desain. Tanpa payload yang
+    HENDAK DIBAYAR, pemeriksaan ini hanya membuktikan tiketnya asli —
+    bukan bahwa ia menyangkut QR yang sedang dieksekusi. Menjadikannya
+    opsional berarti menyediakan cara memakai endpoint ini yang terasa
+    benar tapi tidak menutup celah apa pun, dan itu kesalahan paling
+    mungkin dilakukan integrator. Ditutup secara struktural di sini.
+    """
+
+    ticket: str = Field(..., min_length=16, max_length=4096)
+    payload: str = Field(
+        ..., min_length=8, max_length=MAX_PAYLOAD_CHARS,
+        pattern=r"^[\x20-\x7E]+$",
+        description="payload QRIS yang HENDAK DIBAYAR, bukan yang diverifikasi")
+
+
+class TicketVerifyResponse(BaseModel):
+    valid: bool
+    verdict: Optional[str] = None
+    action: Optional[str] = None
+    nmid: Optional[str] = None
+    issued_at: Optional[str] = None
+    expires_at: Optional[str] = None
+    detail: Optional[str] = None
+
+
+@app.post("/api/v1/tickets/verify", response_model=TicketVerifyResponse)
+def periksa_tiket(req: TicketVerifyRequest, request: Request,
+                  response: Response):
+    """Periksa tiket terhadap payload yang hendak dibayar.
+
+    Ini yang dilakukan backend PJP di titik eksekusi. Disediakan sebagai
+    endpoint karena kuncinya tinggal di server — klien tidak boleh
+    memegangnya — dan supaya integrator di bahasa apa pun bisa memakai
+    jalur yang sama tanpa menulis ulang HMAC. Yang punya `hmac` di
+    pustaka standarnya sebaiknya memeriksanya sendiri, tanpa perjalanan
+    jaringan tambahan; algoritmanya ada di API.md.
+    """
+    client_id = getattr(request.state, "client_id", None)
+    try:
+        klaim = tk.verify(req.ticket, _bahan_tiket(client_id),
+                          payload=req.payload)
+    except tk.TicketError as exc:
+        # 200, bukan 4xx: "tiket tidak sah" adalah JAWABAN yang benar
+        # atas pertanyaan yang sah, bukan kesalahan pemanggil. Klien
+        # yang memperlakukan non-200 sebagai gangguan jaringan lalu
+        # mencoba lagi tidak boleh diam-diam melewatkan penolakan.
+        audit.record_rejected("ticket_invalid", str(exc))
+        return TicketVerifyResponse(valid=False, detail=str(exc))
+
+    def _waktu(detik):
+        return datetime.fromtimestamp(detik, timezone.utc).isoformat()
+
+    return TicketVerifyResponse(
+        valid=True, verdict=klaim["verdict"], action=klaim["action"],
+        nmid=klaim.get("nmid"), issued_at=_waktu(klaim["iat"]),
+        expires_at=_waktu(klaim["exp"]))
+
+
 @app.post(VERIFY_PATH, response_model=VerifyResponse)
 def verify(req: VerifyRequest, request: Request):
     started = time.perf_counter()
@@ -787,6 +848,7 @@ def verify(req: VerifyRequest, request: Request):
             {"location": 65, "behavior": struktural.score},
             elapsed, req.accuracy_m, parsed.merchant_name,
             req.location_source, client_id, status_integritas,
+            tk.payload_fingerprint(req.payload),
         )
         _tiket = tk.issue(
             req.payload, palsu.status, palsu.action, nmid,
@@ -879,6 +941,7 @@ def verify(req: VerifyRequest, request: Request):
             {"location": low.risk_score, "behavior": struktural.score},
             elapsed, req.accuracy_m, parsed.merchant_name,
             req.location_source, client_id, status_integritas,
+            tk.payload_fingerprint(req.payload),
         )
         _tiket = tk.issue(
             req.payload, low.status, low.action, nmid,
@@ -1060,6 +1123,7 @@ def verify(req: VerifyRequest, request: Request):
         verdict, nmid, req.lat, req.lng, lapisan, elapsed,
         req.accuracy_m, parsed.merchant_name, req.location_source,
         client_id, status_integritas,
+        tk.payload_fingerprint(req.payload),
     )
 
     _tiket = tk.issue(

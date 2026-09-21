@@ -74,6 +74,22 @@ button{font-family:inherit}
 .holdhint{margin:8px 18px 18px;font-size:11.5px;line-height:1.45;
   color:var(--ink2);text-align:center}
 
+/* Tombol serangan — HANYA di mode demo. Ia memperagakan malware yang
+   menukar QR setelah pemeriksaan, dan warnanya sengaja dibedakan dari
+   tombol apa pun yang dipakai pengguna sungguhan. */
+.attack{margin:0 18px 14px;width:calc(100% - 36px);padding:12px;
+  border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;
+  background:rgba(229,72,77,.12);border:1px dashed rgba(229,72,77,.55);
+  color:#F5A9AB}
+.attack[disabled]{opacity:.5;cursor:not-allowed}
+.fpbox{margin-top:16px;padding:12px;border-radius:11px;text-align:left;
+  background:rgba(0,0,0,.28);border:1px solid var(--line);font-size:11px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  color:var(--ink2);word-break:break-all}
+.fpbox b{color:var(--ink);display:block;margin-bottom:2px;
+  font-family:'Plus Jakarta Sans',-apple-system,sans-serif;font-size:11.5px}
+.fpbox .beda{color:#F5A9AB}
+
 .note{margin-top:12px;padding:12px 14px;border-radius:12px;font-size:13px;
   background:rgba(240,116,44,.1);border:1px solid rgba(240,116,44,.3);color:#FFC9A8}
 .note b{color:#fff}
@@ -583,11 +599,14 @@ async function lokasi(){
 
 let hitungMundur = null;
 
-let terakhirPayload = null;
+// Dua payload, dan bedanya itulah seluruh inti tiket. `dipindai` yang
+// diperiksa Q-Shield; `dibayar` yang benar-benar akan dieksekusi.
+// Keduanya sama sampai ada yang menukarnya di tengah jalan.
+let payloadDipindai = null, payloadDibayar = null;
 
 async function verifikasi(payload, printed){
+  payloadDipindai = payloadDibayar = payload;
   bersihkanCatatan();
-  terakhirPayload = payload;
 
   // Diurai di perangkat lebih dulu. Kode yang bukan QRIS sama sekali
   // ditolak di sini dan TIDAK PERNAH dikirim ke mana pun — payload
@@ -813,7 +832,7 @@ function tampilkan(d){
     $("cekPrinted").onclick = () => {
       const t = $("printedNmid").value.trim();
       if (!t) return;
-      terakhirPayload && verifikasi(terakhirPayload, {nmid: t});
+      payloadDipindai && verifikasi(payloadDipindai, {nmid: t});
     };
   } else ck.style.display = "none";
 
@@ -874,7 +893,7 @@ function pasangTombolLanjut(d){
     if (!jalan) return;
     const p = Math.min(1, (performance.now() - mulai) / TAHAN_MS);
     isi.style.width = (p * 100) + "%";
-    if (p >= 1) { batal(); bukaPembayaran(d); return; }
+    if (p >= 1) { batal(); periksaTiketLaluBayar(d); return; }
     raf = requestAnimationFrame(tik);
   };
   const tahan = () => {
@@ -895,6 +914,22 @@ function pasangTombolLanjut(d){
   // Dan klik biasa tidak membuka apa pun.
   t.addEventListener("click", e => e.preventDefault());
 
+  // Tombol serangan: hanya mode demo, dan ia TIDAK menyentuh apa yang
+  // sudah diverifikasi — ia mengubah apa yang akan DIBAYAR. Persis
+  // posisi malware: sesudah pemeriksaan, sebelum eksekusi.
+  if (demo.checked) {
+    const a = document.createElement("button");
+    a.id = "btnTukar";
+    a.className = "attack";
+    a.textContent = "Tukar QR diam-diam (simulasi malware)";
+    a.onclick = () => {
+      payloadDibayar = tukarPayload(payloadDipindai);
+      a.disabled = true;
+      a.textContent = "QR sudah ditukar — sekarang coba bayar";
+    };
+    $("result").appendChild(a);
+  }
+
   const k = document.createElement("div");
   k.id = "btnLanjutKet";
   k.className = "holdhint";
@@ -903,6 +938,76 @@ function pasangTombolLanjut(d){
 
   $("result").appendChild(t);
   $("result").appendChild(k);
+}
+
+// Mengubah digit nomor akun merchant di dalam payload. Bentuk TLV-nya
+// tetap sah; yang berubah ke mana uang mengalir — persis yang dilakukan
+// stiker yang dicetak ulang. Kalau polanya tidak ketemu, satu digit
+// diubah sebagai cadangan: yang diperagakan adalah PENGIKATANNYA, bukan
+// kecanggihan pemalsuannya.
+function tukarPayload(p){
+  const ubah = p.replace(/(0118)(\d{18})/,
+                         (m, tag, pan) => tag + pan.slice(0, 10) + "99999999");
+  if (ubah !== p) return ubah;
+  const i = p.search(/\d/);
+  return i < 0 ? p + "0" : p.slice(0, i) + ((+p[i] + 1) % 10) + p.slice(i + 1);
+}
+
+async function sidikJari(teks){
+  const buf = await crypto.subtle.digest(
+    "SHA-256", new TextEncoder().encode(teks.trim()));
+  return Array.from(new Uint8Array(buf))
+    .map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function klaimTiket(t){
+  try {
+    const b = t.split(".")[0].replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(b + "=".repeat((4 - b.length % 4) % 4)));
+  } catch (_) { return null; }
+}
+
+// Inilah yang dilakukan backend PJP di titik eksekusi, dan kenapa ia
+// dipanggil ke SERVER: kuncinya tinggal di sana, halaman tidak boleh
+// memegangnya.
+async function periksaTiketLaluBayar(d){
+  const head = {"Content-Type": "application/json"};
+  const key = $("apikey").value.trim();
+  if (key) head["X-API-Key"] = key;
+
+  let r, hasil;
+  try {
+    r = await fetch("/api/v1/tickets/verify", {
+      method: "POST", headers: head,
+      body: JSON.stringify({ticket: d.verification_ticket,
+                            payload: payloadDibayar})});
+    hasil = await r.json();
+  } catch (e) {
+    catatan("<b>Tidak bisa memeriksa tiket.</b> " + e.message);
+    return;
+  }
+
+  if (r.ok && hasil.valid) { bukaPembayaran(d); return; }
+
+  // Ditolak. Layar PIN TIDAK PERNAH DIRENDER — bukan disembunyikan,
+  // memang tidak pernah dibuat. Pola yang sama dengan cooling_off.
+  const klaim = klaimTiket(d.verification_ticket) || {};
+  let fpBayar = "";
+  try { fpBayar = await sidikJari(payloadDibayar); } catch (_) {}
+
+  $("payjudul").textContent = "Pembayaran dihentikan";
+  $("paybody").innerHTML =
+    '<div class="blocked"><div class="ic">&#9209;</div>' +
+    '<h2>QR yang dibayar bukan yang diperiksa</h2>' +
+    '<p>' + esc(hasil && hasil.detail ? hasil.detail : "Tiket tidak sah") + '</p>' +
+    '<p>Tiket verifikasi terikat pada satu QR. Begitu yang hendak ' +
+    'dibayar berbeda, ikatannya putus dan pembayaran berhenti di sini.</p>' +
+    '<div class="fpbox"><b>Sidik jari QR yang DIPERIKSA</b>' +
+    esc(klaim.fp || "-") + '</div>' +
+    (fpBayar ? '<div class="fpbox"><b>Sidik jari QR yang HENDAK DIBAYAR</b>' +
+      '<span class="beda">' + esc(fpBayar) + '</span></div>' : "") +
+    '<div class="quote">PIN-nya tidak pernah dimasukkan.</div></div>';
+  $("pay").classList.add("show");
 }
 
 // --- alur bayar tiruan ---------------------------------------------
