@@ -731,12 +731,19 @@ def verify(req: VerifyRequest, request: Request):
         # dipakai menaikkan kecurigaan dan memberi konteks, tidak pernah
         # menerbitkan kepercayaan. Invarian §6 tetap utuh — jangkar GPS
         # tetap tidak dinilai; yang dipakai saluran bukti yang berbeda.
-        sumber_lokasi = req.location_source
+        # location_source TIDAK disentuh di sini. Field itu digemakan dari
+        # permintaan: ia menyatakan bagaimana KLIEN memperoleh posisinya,
+        # bukan bagaimana server menyimpulkan tempatnya. Menimpanya
+        # mengubah arti field, bukan sekadar menambah nilai — dan API.md
+        # sudah menyatakan `location_source` kosakata tertutup yang
+        # menuntut versi baru kalau nilainya bertambah.
+        #
+        # Yang dipakai `signals`, yang memang daftar terbuka dan memang
+        # disediakan untuk ini.
         if req.ambient_wifi and req.ambient_wifi.ap_hashes:
             cocok, irisan = store.locate_by_ap(
                 req.ambient_wifi.ap_hashes, bh.AP_LOCATE_MIN_OVERLAP)
             if cocok is not None:
-                sumber_lokasi = "wifi"
                 if cocok.nmid == nmid:
                     low.reasons.insert(0,
                         f"Tempat ini dikenali dari {len(req.ambient_wifi.ap_hashes)} "
@@ -772,7 +779,7 @@ def verify(req: VerifyRequest, request: Request):
             signals=low.signals,
             layers=LayerScores(location=low.risk_score,
                                behavior=struktural.score),
-            location_source=sumber_lokasi,
+            location_source=req.location_source,
             device_integrity=status_integritas,
             merchant=MerchantOut(
                 nmid=nmid,

@@ -40,6 +40,14 @@ membuat mereka tidak tahu harus menampilkan apa.
 | 11 Sep 2026 | `POST/DELETE /api/v1/merchants` ditambahkan | aditif |
 | 16 Sep 2026 | `POST /assess-transfer`, `POST /beneficiary-reports` | aditif |
 | 11 Sep 2026 | sinyal `registered_merchant`, `nmid_changed_at_registered_anchor`, `mobile_merchant` | aditif — `signals` memang daftar terbuka |
+| 18 Sep 2026 | sinyal `adjacent_merchant` diperluas lewat bukti kehadiran | aditif |
+| 20 Sep 2026 | sinyal `nmid_relocated` | aditif |
+| 20 Sep 2026 | sinyal `ambient_wifi_confirms_place`, `ambient_wifi_foreign_nmid` | aditif |
+
+`location_source` **tidak** bertambah nilainya. Sidik jari WiFi bisa
+menyimpulkan tempat, tapi field itu menyatakan bagaimana KLIEN
+memperoleh posisinya — bukan kesimpulan server. Yang dipakai `signals`,
+yang memang disediakan untuk ini.
 
 Dua yang terakhir terjadi sebelum ada klien eksternal, jadi versinya
 tidak dinaikkan. Setelah code freeze, perubahan sekelas itu menuntut

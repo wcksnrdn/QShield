@@ -916,7 +916,10 @@ def _a32():
         f"stiker tukar lolos di dalam ruangan sebagai {tukar['verdict']}")
     assert tukar["action"] in ("step_up", "cooling_off"), (
         f"friksi cuma {tukar['action']}")
-    assert tukar["location_source"] == "wifi"
+    assert "ambient_wifi_foreign_nmid" in tukar["signals"]
+    # location_source tetap apa adanya: ia menyatakan bagaimana KLIEN
+    # memperoleh posisinya, bukan kesimpulan server soal tempatnya.
+    assert tukar["location_source"] == "live"
 
     # Merchant sah di tempat yang sama tidak boleh ikut kena.
     sah = dalam_ruangan(qr(KORBAN), ap)

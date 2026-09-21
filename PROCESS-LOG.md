@@ -2306,11 +2306,12 @@ akses menuntut kehadiran fisik di jangkauan radio yang sama.
 ```
 test_emvco.py        parser, CRC16, payload cacat, QR dinamis
 test_geo.py          roundtrip, arah tetangga, kasus batas, kutub
-test_binding.py      13 skenario termasuk ruko dan relokasi merchant
+test_binding.py      17 skenario termasuk ruko, relokasi, pedagang
+                     bersebelahan, dan pedagang yang pindah dua kali
 test_api.py          end-to-end, akumulasi, latency
 test_invariants.py   satu pemeriksaan per invarian, keluar bukan-nol
                      kalau ada yang jebol
-test_adversarial.py  15 skenario dari sisi penyerang, termasuk empat
+test_adversarial.py  36 skenario dari sisi penyerang, termasuk enam
                      batasan yang diakui — diuji agar sistem tetap jujur
 test_hardening.py    25 pemeriksaan: validasi input, autentikasi klien,
                      rate limit, header, audit tanpa PII, mode replay,
