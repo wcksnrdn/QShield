@@ -10,6 +10,10 @@ Apa yang DICATAT, dan mengapa boleh:
   geohash_7        sel kasar ~152 m, jangkar merchant, bukan posisi
                    pengguna
   verdict, action, risk_score, signals, layers, processing_ms
+  payload_fp       sidik jari sha256 payload — BUKAN payloadnya. Cukup
+                   untuk membedakan dua QR yang NMID-nya sama (stiker
+                   dicetak ulang ke rekening lain), tidak cukup untuk
+                   memulihkan nomor rekening merchant di dalamnya
 
 Apa yang TIDAK PERNAH dicatat, dan mengapa:
   device_anon_id   dipakai menghitung pengamat unik (Keputusan 6);
@@ -19,7 +23,9 @@ Apa yang TIDAK PERNAH dicatat, dan mengapa:
   alamat IP        lihat limits.py — tidak pernah keluar dari memori
   kunci API        tidak pernah dicatat, bahkan saat autentikasi gagal
   payload mentah   memuat identitas merchant lengkap dan tidak
-                   dibutuhkan untuk audit putusan
+                   dibutuhkan untuk audit putusan. Yang dicatat adalah
+                   SIDIK JARINYA (lihat payload_fp di atas) — satu arah,
+                   jadi nomor rekening di dalamnya tidak bisa dipulihkan
 
 Aturannya satu kalimat: yang dicatat adalah PUTUSAN dan alasannya,
 bukan siapa yang memindai.
@@ -64,6 +70,7 @@ def record_verdict(
     location_source="live",
     client_id=None,
     device_integrity="not_provided",
+    payload_fp=None,
 ) -> dict:
     """Tulis satu baris audit. Mengembalikan dict yang ditulis (untuk test)."""
     from . import binding as bd
@@ -95,6 +102,11 @@ def record_verdict(
         # Diaudit supaya bisa dibedakan putusan yang integritas
         # perangkatnya diperiksa dari yang tidak pernah diperiksa.
         "device_integrity": device_integrity,
+        # Tanpa ini, dua QR dengan NMID sama tapi rekening berbeda —
+        # stiker asli dan stiker yang dicetak ulang — menghasilkan baris
+        # audit yang IDENTIK. Penyidik tidak punya cara membedakannya
+        # setelah kejadian. Menutup §8 no. 8.
+        "payload_fp": payload_fp,
         "processing_ms": processing_ms,
     }
     get_logger().info(json.dumps(entri, ensure_ascii=False))

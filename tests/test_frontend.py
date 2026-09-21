@@ -331,10 +331,17 @@ def _f13():
                        SCRIPT, _re.S).group(1)
     tahan = badan.split('t.className = "btn hold"')[1]
 
-    # Satu ketukan tidak boleh cukup. Kalau tombolnya punya onclick yang
-    # membuka pembayaran, seluruh gesekan ini cuma hiasan.
-    assert "onclick" not in tahan, (
-        "jalur bayar masih punya onclick — satu ketukan masih cukup")
+    # Satu ketukan tidak boleh cukup. Yang dilarang adalah TOMBOL
+    # BAYARNYA punya handler klik — bukan setiap onclick di sekitarnya;
+    # tombol simulasi serangan di mode demo memang memakai onclick, dan
+    # itu bukan jalur bayar.
+    assert "t.onclick" not in tahan, (
+        "tombol bayar punya onclick — satu ketukan masih cukup")
+    # Dan jalur menuju pembayaran hanya boleh dicapai dari tik() yang
+    # menghitung durasi tahanan, bukan dari handler mana pun.
+    for pemanggil in _re.findall(r"(\S*)\s*periksaTiketLaluBayar\(", tahan):
+        assert not pemanggil.endswith("=>"), (
+            f"pembayaran dipicu langsung dari handler: {pemanggil!r}")
     assert "pointerdown" in tahan, "tidak ada gerakan tahan sama sekali"
     assert "keydown" in tahan and "keyup" in tahan, (
         "papan ketik tidak punya jalur tahan — pengguna keyboard terkunci")
@@ -524,6 +531,55 @@ def _f17():
     for k in ("verdict", "action", "risk_score", "signals"):
         assert hidup[k] == mati[k], f"include_tlv menggeser {k}"
     return f"{len(hidup['tlv'])} entri di mode demo; putusan tidak bergerak"
+
+
+@cek("QR yang ditukar tidak pernah sampai ke layar PIN")
+def _f18():
+    import re as _re
+    c = klien()
+    d = c.post("/api/v1/verify", json={
+        "payload": qr(), "lat": LAT, "lng": LNG,
+        "device_anon_id": "fe-tiket-00001", "accuracy_m": 8.0}).json()
+    t = d["verification_ticket"]
+
+    # Endpoint yang dipanggil halaman sebelum PIN.
+    sama = c.post("/api/v1/tickets/verify", json={
+        "ticket": t, "payload": qr()}).json()
+    assert sama["valid"] is True, f"QR yang sama ditolak: {sama}"
+
+    ditukar = c.post("/api/v1/tickets/verify", json={
+        "ticket": t, "payload": qr("ID1099887766554", "936000149099999999")
+    }).json()
+    assert ditukar["valid"] is False, "QR ditukar tapi tiket tetap sah"
+
+    # Halaman benar-benar memanggilnya, dan memanggilnya SEBELUM PIN.
+    assert "/api/v1/tickets/verify" in SCRIPT, "halaman tidak memeriksa tiket"
+    fn = _re.search(
+        r'async function periksaTiketLaluBayar\(d\)\{(.+?)\n\}',
+        SCRIPT, _re.S).group(1)
+    assert "payloadDibayar" in fn, (
+        "yang dikirim bukan payload yang hendak DIBAYAR — pemeriksaannya "
+        "tidak menutup celah apa pun")
+
+    # Cabang penolakan TIDAK BOLEH merender layar PIN. Pola yang sama
+    # dengan cooling_off: bukan disembunyikan, memang tidak pernah dibuat.
+    tolak = fn.split("if (r.ok && hasil.valid)")[1]
+    assert "layarPin" not in tolak, (
+        "cabang tolak masih memanggil layarPin — layar PIN-nya "
+        "disembunyikan, bukan tidak pernah ada")
+    assert "PIN-nya tidak pernah dimasukkan" in tolak, (
+        "kalimat terpenting pitch tidak muncul di layar tolak")
+
+    # Tombol simulasi serangan hanya hidup di mode demo, dan ia mengubah
+    # yang DIBAYAR — bukan yang sudah diverifikasi.
+    pasang = _re.search(r'function pasangTombolLanjut\(d\)\{(.+?)\n\}',
+                        SCRIPT, _re.S).group(1)
+    assert "demo.checked" in pasang, "tombol serangan bocor ke mode normal"
+    tukar = _re.search(r'a\.onclick = \(\) => \{(.+?)\};', pasang,
+                       _re.S).group(1)
+    assert "payloadDibayar =" in tukar and "payloadDipindai =" not in tukar, (
+        "simulasi serangan mengubah yang DIPERIKSA, bukan yang DIBAYAR")
+    return "tiket diperiksa sebelum PIN; QR ditukar berhenti sebelum PIN"
 
 
 print("=" * 70)

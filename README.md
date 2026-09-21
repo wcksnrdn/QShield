@@ -256,6 +256,7 @@ GET    /api/v1/health
 POST   /api/v1/verify
 POST   /api/v1/merchants           daftarkan ikatan merchant-lokasi
 DELETE /api/v1/merchants/{nmid}    cabut pendaftaran
+POST   /api/v1/tickets/verify      periksa tiket di titik eksekusi
 ```
 
 Semua kecuali `/health` menuntut header `X-API-Key`. Daftar putih, bukan

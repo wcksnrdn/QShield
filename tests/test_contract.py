@@ -102,6 +102,9 @@ JALUR = {
     # endpoint baru tidak memecah klien yang sudah ada.
     "/api/v1/merchants",
     "/api/v1/merchants/{nmid}",
+    # Ditambahkan 21 Sep 2026 bersama tiket verifikasi. Dipakai di titik
+    # EKSEKUSI pembayaran, bukan saat memindai.
+    "/api/v1/tickets/verify",
 }
 
 _hasil = []

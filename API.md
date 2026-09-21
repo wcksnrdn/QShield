@@ -43,6 +43,8 @@ membuat mereka tidak tahu harus menampilkan apa.
 | 21 Sep 2026 | `fees` ditambahkan ke tanggapan | aditif — klien wajib mengabaikan field tak dikenal |
 | 21 Sep 2026 | `include_tlv` (permintaan, opsional, bawaan `false`) + `tlv` (tanggapan) | aditif — bawaannya mati, klien lama tidak terbebani |
 | 21 Sep 2026 | `verification_ticket` + `ticket_expires_in` ditambahkan ke tanggapan | aditif — klien yang mengabaikannya tetap berjalan seperti sebelumnya |
+| 21 Sep 2026 | `POST /api/v1/tickets/verify` ditambahkan | aditif — endpoint baru tidak memecah klien yang sudah ada |
+| 21 Sep 2026 | `payload_fp` ditambahkan ke jejak audit | aditif; bukan kontrak API, tapi mengubah bentuk baris log |
 
 Dua yang terakhir terjadi sebelum ada klien eksternal, jadi versinya
 tidak dinaikkan. Setelah code freeze, perubahan sekelas itu menuntut
@@ -166,6 +168,47 @@ PJP yang mengabaikan `cooling_off` akan mengabaikan tiketnya juga. Ia
 Ia juga tidak mencegah replay dalam masa berlakunya: tiketnya stateless
 dan tidak disimpan, jadi QR yang sama bisa dieksekusi dua kali dalam 90
 detik. Idempotensi transaksi tetap milik Anda (R13).
+
+### `POST /api/v1/tickets/verify`
+
+Kalau bahasa Anda tidak punya HMAC yang nyaman, atau Anda ingin jalur
+yang sama dengan klien acuan kami, periksa tiketnya di sini.
+
+```json
+{
+  "ticket": "eyJhY3Rpb24iOi...gwQ",
+  "payload": "00020101021126660014ID.CO.QRIS.WWW..."
+}
+```
+
+`payload` adalah QR yang **HENDAK DIBAYAR**, bukan yang tadi
+diverifikasi — dan ia **wajib**. Menjadikannya opsional berarti
+menyediakan cara memakai endpoint ini yang terasa benar tapi tidak
+menutup celah apa pun, dan itu kesalahan yang paling mungkin dilakukan
+integrator. Ditutup di batas sistem, bukan lewat peringatan di dokumen.
+
+```json
+{
+  "valid": true,
+  "verdict": "verified", "action": "proceed",
+  "nmid": "ID1024365478912",
+  "issued_at": "2026-09-21T08:34:08+00:00",
+  "expires_at": "2026-09-21T08:35:38+00:00",
+  "detail": null
+}
+```
+
+Tiket yang tidak sah dijawab **`200` dengan `valid: false`**, bukan
+`4xx`. Alasannya: "tiket tidak sah" adalah jawaban yang BENAR atas
+pertanyaan yang sah, bukan kesalahan pemanggil. Klien yang
+memperlakukan non-200 sebagai gangguan jaringan lalu mencoba lagi tidak
+boleh diam-diam melewatkan penolakan. `detail` berisi alasannya.
+
+Endpoint ini menuntut `X-API-Key` seperti jalur `/api/` lainnya —
+kuncinya juga yang menentukan bahan penandatanganan yang dipakai.
+
+Yang punya `hmac` di pustaka standarnya sebaiknya memeriksanya sendiri
+tanpa perjalanan jaringan tambahan; algoritmanya di bawah.
 
 ### Cara memverifikasi tiket
 
