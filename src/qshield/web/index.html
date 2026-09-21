@@ -56,6 +56,24 @@ button{font-family:inherit}
 .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink2);font-weight:600}
 .btn[disabled]{opacity:.5;cursor:not-allowed}
 
+/* Tombol tahan. Satu ketukan tidak cukup untuk membayar: seluruh
+   modus stiker palsu bergantung pada pengguna yang menekan sebelum
+   membaca. Menahan tombol memberi nama merchant waktu untuk terbaca,
+   dan namanya ada DI tombolnya supaya tidak bisa terlewat.
+
+   Yang dibeli di sini bukan bukti, melainkan perhatian — nama itu
+   berasal dari QR, yang justru dikendalikan penyerang. Karena itu
+   keterangan di bawahnya menyuruh mencocokkannya dengan toko tempat
+   pengguna berdiri, pemeriksaan yang tidak bergantung pada data kami. */
+.hold{position:relative;overflow:hidden;touch-action:none;
+  user-select:none;-webkit-user-select:none}
+.hold .fill{position:absolute;left:0;top:0;bottom:0;width:0;
+  background:rgba(255,255,255,.25);pointer-events:none}
+.hold .lbl{position:relative;z-index:1;display:block}
+.hold .lbl b{font-weight:800}
+.holdhint{margin:8px 18px 18px;font-size:11.5px;line-height:1.45;
+  color:var(--ink2);text-align:center}
+
 .note{margin-top:12px;padding:12px 14px;border-radius:12px;font-size:13px;
   background:rgba(240,116,44,.1);border:1px solid rgba(240,116,44,.3);color:#FFC9A8}
 .note b{color:#fff}
@@ -91,16 +109,62 @@ button{font-family:inherit}
 .merchant{padding:0 18px 14px;display:flex;gap:10px;align-items:baseline;
   border-bottom:1px solid var(--line);margin-bottom:14px;flex-wrap:wrap}
 .merchant .nm{font-weight:700;font-size:14.5px}
+/* Kota (tag 60) dan nama (tag 59) berasal dari payload yang SAMA:
+   keduanya klaim stiker, bukan kesimpulan Q-Shield. Karena itu ia
+   tinggal di baris ini, bukan naik ke baris chip putusan — string
+   yang dikendalikan penyerang tidak boleh mewarisi otoritas angka
+   yang kami hitung sendiri.
+
+   Yang diperbaiki tipografinya: sebelumnya kota memakai gaya .id yang
+   monospace, sehingga nama tempat tampil seperti identifier teknis dan
+   berdempetan dengan NMID 15 karakter. Sekarang ia teks biasa —
+   terbaca sebagai tempat, dan jadi hal KEDUA yang bisa dicocokkan
+   pengguna dengan dunia nyata selain nama merchant. */
+.merchant .city{font-size:13px;color:var(--ink2);font-weight:500}
+.merchant .city::before{content:'\00B7';margin-right:8px;color:var(--line)}
 .merchant .id{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
   font-size:11.5px;color:var(--ink2)}
 .reasons{list-style:none;margin:0;padding:0 18px}
 .reasons li{position:relative;padding:0 0 12px 18px;font-size:14px;color:#E4E1F2}
 .reasons li::before{content:'';position:absolute;left:2px;top:8px;width:6px;height:6px;
   border-radius:50%;background:var(--brand)}
+/* Bedah TLV — panel forensik, HANYA di mode demo.
+   Ia menjawab "apa yang sistem baca sehingga memutuskan begini",
+   pertanyaan SESUDAH putusan. Karena itu ia tertutup secara bawaan
+   dan tidak pernah muncul untuk pengguna biasa: jawaban atas
+   pertanyaan yang tidak ditanyakan hanya jadi kebisingan. */
+.tlv{margin:0 18px 16px;border:1px solid var(--line);border-radius:12px;
+  background:var(--bg2);overflow:hidden}
+.tlv>summary{padding:11px 13px;font-size:12.5px;font-weight:700;
+  cursor:pointer;color:var(--ink2);list-style:none}
+.tlv>summary::-webkit-details-marker{display:none}
+.tlv>summary::before{content:'\25B8';margin-right:8px;display:inline-block;
+  transition:transform .15s}
+.tlv[open]>summary::before{transform:rotate(90deg)}
+.tlvbody{border-top:1px solid var(--line);overflow-x:auto}
+.tlvrow{display:flex;gap:10px;align-items:baseline;padding:7px 13px;
+  font-size:11.5px;border-bottom:1px solid rgba(48,43,78,.5);
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap}
+.tlvrow:last-child{border-bottom:0}
+.tlvrow.anak{padding-left:30px;background:rgba(0,0,0,.14)}
+.tlvrow .t{color:var(--brand);font-weight:700;flex:none;width:22px}
+.tlvrow .n{color:var(--ink2);flex:none;width:26px;text-align:right}
+.tlvrow .l{color:var(--ink2);flex:none;width:170px;white-space:normal;
+  font-family:'Plus Jakarta Sans',-apple-system,sans-serif}
+.tlvrow .v{color:var(--ink);word-break:break-all;white-space:normal}
 .meta{padding:6px 18px 18px;display:flex;gap:8px;flex-wrap:wrap}
 .chip{font-size:11px;padding:5px 10px;border-radius:8px;background:var(--bg2);
   border:1px solid var(--line);color:var(--ink2);font-weight:600}
 .chip b{color:var(--ink)}
+/* Biaya layanan yang diminta payload. NETRAL dengan sengaja — ini
+   fakta yang diungkapkan, bukan tuduhan. Memberinya warna alarm
+   mengulang kesalahan yang diperbaiki Keputusan 29: sistem yang
+   terlihat cemas untuk hal biasa akan diabaikan saat benar-benar
+   perlu didengar. Dan ia HANYA dirender kalau tag-nya memang ada,
+   jadi nol biaya visual pada mayoritas pemindaian. */
+.fee{margin:0 18px 14px;padding:10px 13px;border-radius:11px;font-size:12.5px;
+  background:var(--bg2);border:1px solid var(--line);color:#E4E1F2}
+.fee b{color:#fff}
 .replay{margin:0 18px 14px;padding:9px 12px;border-radius:10px;font-size:12px;
   background:rgba(124,108,245,.14);border:1px solid rgba(124,108,245,.35);color:#CFC7FF}
 
@@ -205,6 +269,7 @@ textarea{min-height:78px;resize:vertical;
       <div><h2 id="title"></h2><p id="sub"></p></div>
     </div>
     <div class="newbie" id="newbie" style="display:none"></div>
+    <div class="fee" id="fee" style="display:none"></div>
     <div class="replay" id="replay" style="display:none"></div>
     <div class="cool-timer" id="cool" style="display:none">
       <div class="n" id="coolN">30</div>
@@ -213,6 +278,10 @@ textarea{min-height:78px;resize:vertical;
     <div class="merchant" id="merchant"></div>
     <ul class="reasons" id="reasons"></ul>
     <div class="meta" id="meta"></div>
+    <details class="tlv" id="tlv" style="display:none">
+      <summary>Bedah TLV — apa yang dibaca sistem</summary>
+      <div class="tlvbody" id="tlvbody"></div>
+    </details>
   </div>
 </div>
 
@@ -238,6 +307,15 @@ textarea{min-height:78px;resize:vertical;
 
     <label>Kunci API <span style="opacity:.6">(kosongkan bila server dijalankan dengan QSHIELD_AUTH=off)</span></label>
     <input id="apikey" placeholder="X-API-Key" autocomplete="off">
+
+    <label style="display:flex;align-items:center;gap:9px;margin-top:16px">
+      <input type="checkbox" id="demo" style="width:auto;margin:0">
+      <span>Mode demo — tampilkan bedah TLV</span>
+    </label>
+    <div class="hint">Menambahkan panel forensik di kartu hasil: tiap tag
+      EMVCo beserta panjang, keterangan, dan isinya. Permintaannya
+      menyertakan <code>include_tlv</code>; tanpa mode ini server tidak
+      mengirimkannya sama sekali.</div>
 
     <label>Sumber lokasi</label>
     <select id="src">
@@ -305,6 +383,12 @@ if (!dev) {
 $("dev").value = dev;
 $("apikey").value = localStorage.getItem("qs_key") || "";
 $("apikey").addEventListener("change", e => localStorage.setItem("qs_key", e.target.value.trim()));
+// Sakelar mode demo. Checkbox, jadi tidak ikut pola .value di bawah.
+const demo = $("demo");
+demo.checked = localStorage.getItem("qs_demo") === "1";
+demo.addEventListener("change", e =>
+  localStorage.setItem("qs_demo", e.target.checked ? "1" : "0"));
+
 ["src","rlat","rlng","racc"].forEach(k => {
   const el = $(k), v = localStorage.getItem("qs_" + k);
   if (v) el.value = v;
@@ -352,7 +436,11 @@ async function verifikasi(payload){
       (AMAN ? "" : " Ini akibat koneksi tidak aman."));
     return;
   }
-  const body = Object.assign({payload, device_anon_id: dev}, loc);
+  // include_tlv hanya diminta di mode demo: bedahnya hampir empat kali
+  // lipat ukuran tanggapan normal, dan tidak ada gunanya bagi pengguna
+  // yang cuma mau tahu aman atau tidak.
+  const body = Object.assign(
+    {payload, device_anon_id: dev, include_tlv: demo.checked}, loc);
   const head = {"Content-Type":"application/json"};
   const key = $("apikey").value.trim();
   if (key) head["X-API-Key"] = key;
@@ -405,20 +493,78 @@ function tampilkan(d){
       "dengan nama di tokonya sebelum memasukkan PIN.";
   } else nb.style.display = "none";
 
+  // Kota menyusul nama, bukan NMID: keduanya klaim yang bisa dicocokkan
+  // pengguna dengan tokonya, sedangkan NMID tidak bisa dicocokkan dengan
+  // apa pun di dunia nyata. Ditampilkan apa adanya dari payload —
+  // membaguskan huruf besar-kecilnya berarti menyunting klaim yang justru
+  // sedang kami suruh periksa sendiri.
   const m = d.merchant || {};
   $("merchant").innerHTML =
     '<span class="nm">' + esc(m.name || "Merchant tidak dikenal") + '</span>' +
-    '<span class="id">' + esc(m.nmid || "-") + '</span>' +
-    (m.city ? '<span class="id">' + esc(m.city) + '</span>' : "");
+    (m.city ? '<span class="city">' + esc(m.city) + '</span>' : "") +
+    '<span class="id">' + esc(m.nmid || "-") + '</span>';
 
-  // reasons yang ditampilkan, bukan risk_score: angka tidak bisa
-  // dijelaskan ke pengguna, kalimatnya bisa.
+  // `reasons` adalah penjelasan UTAMA, dan selalu ditampilkan: kalimat
+  // bisa dipertanggungjawabkan ke pengguna maupun regulator, angka
+  // tidak. Angkanya ikut tampil di chip di bawah, tapi hanya dengan
+  // skalanya — lihat Keputusan 44.
   $("reasons").innerHTML = (d.reasons || []).map(x => "<li>" + esc(x) + "</li>").join("");
 
-  const L = d.layers || {};
-  $("meta").innerHTML =
-    chip("Lokasi", L.location) + chip("Perilaku", L.behavior) +
-    chip("Skor", d.risk_score) + chip("Waktu", d.processing_ms + " ms");
+  // Angka tanpa skala tidak bisa dibaca: "Skor 83" sama sekali tidak
+  // memberi tahu 83 itu buruk atau bagus. Denominatornya ikut
+  // ditampilkan supaya arah angkanya jelas tanpa penjelasan lisan.
+  //
+  // SATU angka, bukan tiga. Rincian per-lapisan (`layers`) dan
+  // `processing_ms` sengaja TIDAK ditampilkan lagi:
+  //
+  //   `layers` adalah alat AUDIT. Ia menjawab "dari lapisan mana skor
+  //   ini datang" — pertanyaan milik PJP dan auditor, bukan milik orang
+  //   yang sedang berdiri di depan warung. Dan dua angka telanjang di
+  //   sebelah "Risiko 0 dari 100" justru gampang dibaca TERBALIK:
+  //   "Lokasi 0" terdengar seperti gagal, padahal itu hasil terbaik.
+  //
+  //   `processing_ms` mengukur kecepatan kami, bukan risiko pengguna.
+  //
+  // Yang dibutuhkan pengguna untuk mengambil keputusan sudah ada di
+  // atasnya dalam bentuk kalimat: `reasons`. Kedua field tetap utuh di
+  // tanggapan API untuk PJP, dan dikunci test_contract.py.
+  $("meta").innerHTML = chip("Risiko", d.risk_score + " dari 100");
+
+  // Biaya di luar nominal — tag 55/56/57. Tidak diskor, jadi ia tidak
+  // muncul di `reasons`; tapi orang yang hendak memasukkan PIN berhak
+  // tahu stikernya meminta tambahan. Pengungkapan, sama seperti
+  // penanda replay di bawahnya.
+  const fee = $("fee"), F = d.fees || {};
+  if (F.present) {
+    let besaran = "";
+    if (F.fixed) besaran = " sebesar <b>Rp" + esc(F.fixed) + "</b>";
+    else if (F.percent) besaran = " sebesar <b>" + esc(F.percent) + "%</b>";
+    fee.style.display = "";
+    fee.innerHTML = "Kode ini meminta biaya di luar nominal transaksi" +
+      besaran + ". <b>" + esc(F.label || "Biaya layanan") + ".</b>";
+  } else fee.style.display = "none";
+
+  // Bedah TLV. Dirender dari apa yang SERVER parse, bukan hasil parsing
+  // ulang di halaman — kalau keduanya suatu saat menyimpang, panel ini
+  // harus menampilkan bukti yang jadi dasar putusan, bukan tafsiran
+  // halaman atas payload yang sama.
+  const tl = $("tlv"), entri = d.tlv || [];
+  if (entri.length) {
+    const baris = e => '<div class="tlvrow' + (e.induk ? ' anak' : '') + '">' +
+      '<span class="t">' + esc(e.tag) + '</span>' +
+      '<span class="n">' + esc(String(e.length)) + '</span>' +
+      '<span class="l">' + esc(e.label) + '</span>' +
+      '<span class="v">' + esc(e.value) + '</span></div>';
+    let html = "";
+    entri.forEach(e => {
+      html += baris(e);
+      (e.children || []).forEach(a =>
+        html += baris(Object.assign({induk: true}, a)));
+    });
+    $("tlvbody").innerHTML = html;
+    tl.style.display = "";
+    tl.open = false;          // tertutup tiap pemindaian baru
+  } else tl.style.display = "none";
 
   const rp = $("replay");
   if (d.location_source === "replay") {
@@ -445,18 +591,86 @@ function tampilkan(d){
   // Inilah yang membuat kalimat "PIN-nya tidak pernah dimasukkan" punya
   // gambar. Tanpa layar ini, juri hanya mendengar klaimnya.
   terakhir = d;
-  const lanjut = $("btnLanjut");
-  if (lanjut) lanjut.remove();
-  const tombol = document.createElement("button");
-  tombol.id = "btnLanjut";
-  tombol.className = "btn" + (d.action === "cooling_off" ? " ghost" : "");
-  tombol.style.margin = "0 18px 18px";
-  tombol.style.width = "calc(100% - 36px)";
-  tombol.textContent = d.action === "cooling_off"
-    ? "Lihat apa yang terjadi berikutnya"
-    : "Lanjut ke pembayaran";
-  tombol.onclick = () => bukaPembayaran(d);
-  $("result").appendChild(tombol);
+  pasangTombolLanjut(d);
+}
+
+// Lama menahan sebelum pembayaran dibuka. Cukup untuk memaksa satu
+// kalimat terbaca, belum cukup lama untuk membuat orang menyerah dan
+// berhenti memakai Q-Shield sama sekali — gesekan yang ditinggalkan
+// pengguna tidak melindungi siapa pun.
+const TAHAN_MS = 1200;
+
+function namaMerchant(d){
+  const m = d.merchant || {};
+  return m.name || m.nmid || "merchant tidak dikenal";
+}
+
+function pasangTombolLanjut(d){
+  const lama = $("btnLanjut"); if (lama) lama.remove();
+  const ket = $("btnLanjutKet"); if (ket) ket.remove();
+
+  const t = document.createElement("button");
+  t.id = "btnLanjut";
+  t.style.margin = "0 18px 18px";
+  t.style.width = "calc(100% - 36px)";
+
+  if (d.action === "cooling_off") {
+    // Tidak ada yang perlu ditahan di sini: tombol ini tidak
+    // meneruskan pembayaran, ia memperlihatkan bahwa pembayarannya
+    // dihentikan. Menyuruh menahan untuk "membayar" ke merchant yang
+    // barusan ditolak justru menyesatkan.
+    t.className = "btn ghost";
+    t.textContent = "Lihat apa yang terjadi berikutnya";
+    t.onclick = () => bukaPembayaran(d);
+    $("result").appendChild(t);
+    return;
+  }
+
+  t.className = "btn hold";
+  t.innerHTML = '<span class="fill"></span><span class="lbl">' +
+    'Tahan untuk membayar ke <b>' + esc(namaMerchant(d)) + '</b></span>';
+
+  const isi = t.querySelector(".fill");
+  let mulai = 0, raf = null, jalan = false;
+
+  const batal = () => {
+    jalan = false;
+    if (raf) { cancelAnimationFrame(raf); raf = null; }
+    isi.style.width = "0";
+  };
+  const tik = () => {
+    if (!jalan) return;
+    const p = Math.min(1, (performance.now() - mulai) / TAHAN_MS);
+    isi.style.width = (p * 100) + "%";
+    if (p >= 1) { batal(); bukaPembayaran(d); return; }
+    raf = requestAnimationFrame(tik);
+  };
+  const tahan = () => {
+    if (jalan) return;
+    jalan = true; mulai = performance.now(); raf = requestAnimationFrame(tik);
+  };
+
+  t.addEventListener("pointerdown", e => { e.preventDefault(); tahan(); });
+  ["pointerup", "pointercancel", "pointerleave"].forEach(
+    ev => t.addEventListener(ev, batal));
+  // Papan ketik: spasi/enter yang ditahan memicu keydown berulang,
+  // jadi ini hold sungguhan — bukan satu ketukan yang dikecualikan
+  // diam-diam dan menjadikan seluruh gesekan ini hiasan.
+  t.addEventListener("keydown", e => {
+    if (e.key === " " || e.key === "Enter") { e.preventDefault(); tahan(); }
+  });
+  t.addEventListener("keyup", batal);
+  // Dan klik biasa tidak membuka apa pun.
+  t.addEventListener("click", e => e.preventDefault());
+
+  const k = document.createElement("div");
+  k.id = "btnLanjutKet";
+  k.className = "holdhint";
+  k.textContent = "Tahan sampai penuh. Sebelum menahan, cocokkan nama di " +
+    "atas dengan nama toko tempat Anda berdiri.";
+
+  $("result").appendChild(t);
+  $("result").appendChild(k);
 }
 
 // --- alur bayar tiruan ---------------------------------------------

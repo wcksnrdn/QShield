@@ -109,6 +109,11 @@ W_ATTESTATION_FAILED = 30
 NMID_LENGTH = 15
 NMID_PREFIX = "ID"
 
+# Kode negara EMVCo (tag 58): ISO 3166-1 alpha-2, selalu dua huruf —
+# untuk negara mana pun, bukan hanya Indonesia. Itulah yang membuatnya
+# aman diperiksa di sini; lihat Kontradiksi 4.
+COUNTRY_CODE_LENGTH = 2
+
 # Tag wajib EMVCo Merchant Presented Mode.
 MANDATORY_TAGS = ("00", "53", "58", "59", "63")
 
@@ -266,6 +271,43 @@ def _structural_signals(parsed) -> list:
                     f"Format Merchant ID tidak sesuai standar QRIS "
                     f"('{nmid}' — seharusnya {NMID_PREFIX} + "
                     f"{NMID_LENGTH - len(NMID_PREFIX)} digit)"
+                ),
+            ))
+
+    # --- Kontradiksi 4: kode negara cacat bentuk --------------------
+    #
+    # Parser sudah lama mengambil tag 58 (`emvco.py` -> `parsed.country`)
+    # dan `MANDATORY_TAGS` sudah menuntut KEHADIRANNYA, tapi NILAINYA
+    # tidak pernah dibaca siapa pun. Payload dengan tag 58 hadir tapi
+    # cacat lolos tanpa sinyal apa pun. Itu yang ditutup di sini.
+    #
+    # Yang diperiksa BENTUKNYA, bukan negaranya. Godaan besarnya adalah
+    # menuntut tag 58 == "ID", dan itu sengaja TIDAK dilakukan: QRIS
+    # punya keterhubungan lintas negara, dan kami belum memverifikasi
+    # bagaimana tag ini diisi pada skema itu. Cek kebijakan yang keliru
+    # di sini berbobot W_STRUCTURAL dan memaksa `anomaly` — ia akan
+    # menghukum payload sah dengan bobot penuh, persis kelas positif
+    # palsu yang membuat Keputusan 13 membuang sebuah sinyal.
+    #
+    # Bentuknya aman diperiksa justru karena TIDAK bergantung pada
+    # negaranya: alpha-2 selalu dua huruf, di mana pun. Dua kelonggaran
+    # yang disengaja — spasi pengapit ditoleransi karena sebagian
+    # penerbit memadkan nilainya, dan huruf kecil dibiarkan lolos
+    # karena itu penyimpangan penulisan, bukan kontradiksi, dan tidak
+    # sebanding dengan bobot 70.
+    negara = parsed.country
+    if negara is not None:
+        bersih = negara.strip()
+        if (len(bersih) != COUNTRY_CODE_LENGTH
+                or not bersih.isascii()
+                or not bersih.isalpha()):
+            out.append(Signal(
+                name="malformed_country",
+                weight=W_STRUCTURAL,
+                hard=True,
+                reason=(
+                    f"Kode negara tidak sesuai standar EMVCo "
+                    f"('{negara}' — seharusnya {COUNTRY_CODE_LENGTH} huruf)"
                 ),
             ))
 

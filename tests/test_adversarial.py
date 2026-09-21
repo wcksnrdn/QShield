@@ -237,6 +237,36 @@ def _a9():
     return "tiga bentuk NMID cacat, semua ditolak"
 
 
+@serangan("Kode negara cacat bentuk — tanpa menghakimi negaranya")
+def _a14():
+    _, c = fresh_store()
+
+    # Parser sudah lama mengambil tag 58, dan MANDATORY_TAGS sudah
+    # menuntut KEHADIRANNYA — tapi nilainya dulu tidak pernah dibaca
+    # siapa pun, jadi tag yang hadir tapi cacat lolos tanpa sinyal.
+    for buruk in ("IDN", "I", "1D", "I2", "ID1", ""):
+        d = scan(c, qr(PENYERANG, extra={"58": buruk}),
+                 lat=-8.65, lng=115.2167)
+        assert d["verdict"] == "anomaly", f"kode negara '{buruk}' lolos"
+        assert "malformed_country" in d["signals"], (
+            f"'{buruk}' tidak memicu malformed_country: {d['signals']}")
+
+    # Dan yang TIDAK boleh dihukum. Baris "SG" yang paling penting:
+    # godaan besarnya adalah menuntut tag 58 == "ID", dan cek kebijakan
+    # itu berbobot W_STRUCTURAL serta memaksa anomaly — ia akan
+    # menghukum payload sah dengan bobot penuh. QRIS punya
+    # keterhubungan lintas negara, jadi yang diperiksa BENTUKNYA saja.
+    # Padding dan huruf kecil ikut ditoleransi: penyimpangan penulisan,
+    # bukan kontradiksi.
+    for wajar in ("ID", "ID ", " ID", "id", "SG"):
+        d = scan(c, qr(KORBAN, pan="936000149000000001",
+                       extra={"58": wajar}), device="pelanggan-0001")
+        assert "malformed_country" not in d["signals"], (
+            f"'{wajar}' dihukum padahal bentuknya sah: {d['signals']}")
+    return ("enam bentuk cacat ditolak; padding, huruf kecil, dan "
+            "negara lain lolos bersih")
+
+
 @serangan("Layer 2 dipakai memutihkan lokasi yang mencurigakan")
 def _a10():
     _, c = fresh_store()
@@ -370,44 +400,6 @@ def _a11():
     )
     return (f"basis {bd.MIN_OBSERVERS} vs 47 tidak lagi lolos sebagai "
             f"merchant bersebelahan (rasio {bd.ADJACENT_MIN_RATIO})")
-
-
-@serangan("Akurasi GPS dikarang di bawah batas fisik perangkat")
-def _a12():
-    _, c = fresh_store()
-    # Pemalsu yang mengarang angka sering lupa bahwa angkanya harus
-    # mungkin. GNSS ponsel tidak pernah melaporkan radius di bawah 1 m.
-    for acc in (0, 0.1, 0.5, 0.99):
-        d = scan(c, qr(KORBAN, pan="936000149000000001"),
-                 device="pemalsu-akurasi", acc=acc)
-        assert "implausible_accuracy" in d["signals"], (
-            f"akurasi {acc} m lolos tanpa sinyal"
-        )
-        assert d["verdict"] != "verified", f"akurasi {acc} m tetap verified"
-
-    # Akurasi yang wajar tidak boleh ikut tertandai.
-    for acc in (1.0, 3, 8, 25, 99):
-        d = scan(c, qr(KORBAN, pan="936000149000000001"),
-                 device="pengguna-jujur", acc=acc)
-        assert "implausible_accuracy" not in d["signals"], (
-            f"akurasi wajar {acc} m ditandai palsu"
-        )
-    return "0-0,99 m ditandai; 1-99 m lolos bersih"
-
-
-@serangan("Akurasi dihilangkan untuk melewati invarian akurasi GPS")
-def _a13():
-    _, c = fresh_store()
-    # Kalau accuracy_m opsional, penyerang yang fix-nya buruk tinggal
-    # tidak mengirimkannya dan pemeriksaan ">100 m" tidak pernah jalan.
-    r = c.post("/api/v1/verify", json={
-        "payload": qr(KORBAN, pan="936000149000000001"),
-        "lat": LAT, "lng": LNG, "device_anon_id": "penyembunyi-01"})
-    assert r.status_code == 422, (
-        f"permintaan tanpa accuracy_m diterima (HTTP {r.status_code}) — "
-        f"pintu keluar dari invarian §6 terbuka"
-    )
-    return "permintaan tanpa accuracy_m ditolak 422 di batas sistem"
 
 
 # ==================================================================

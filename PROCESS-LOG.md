@@ -1268,6 +1268,523 @@ Dicatat terbuka; sebagian menjadi isi *Pathway*.
 
 ---
 
+## Keputusan 35 — Tag wajib diperiksa isinya, tapi hanya bentuknya
+
+**Yang ditemukan.** `MANDATORY_TAGS` menuntut tag 58 (kode negara) HADIR,
+dan `emvco.py` sudah lama mengekspos `parsed.country`. Tapi nilainya
+tidak pernah dibaca oleh siapa pun — nol konsumen di `behavior.py`
+maupun `binding.py`. Payload dengan tag 58 hadir tapi cacat (`"IDN"`,
+`"I"`, `"1D"`, string kosong) lolos tanpa sinyal apa pun, padahal
+payload yang tag 58-nya HILANG kena `missing_mandatory_tags` berbobot 70.
+Pemeriksaan kehadiran tanpa pemeriksaan isi adalah setengah pemeriksaan.
+
+**Godaan yang ditolak.** Perbaikan yang paling kelihatan benar adalah
+menuntut tag 58 == `"ID"`. QRIS standar Indonesia, jadi apa lagi?
+
+Itu tidak dilakukan, dan alasannya sama dengan Keputusan 13. QRIS punya
+keterhubungan lintas negara, dan kami **belum memverifikasi** bagaimana
+tag ini diisi pada skema itu. Sinyal ini berbobot `W_STRUCTURAL` = 70
+dan `hard=True` — ia memaksa `anomaly` seketika. Cek kebijakan yang
+keliru di sini tidak menghasilkan peringatan ringan; ia menghukum
+payload sah dengan bobot penuh. Itu persis kelas positif palsu yang
+menghancurkan aset A4.
+
+**Keputusan:** yang diperiksa BENTUKNYA, bukan negaranya. ISO 3166-1
+alpha-2 selalu dua huruf — untuk negara mana pun — sehingga cek bentuk
+tidak bergantung sama sekali pada negara yang diklaim. Sinyal
+`malformed_country`, bobot `W_STRUCTURAL`, `hard=True`, sejajar dengan
+`malformed_nmid`.
+
+Dua kelonggaran yang disengaja, keduanya untuk menekan positif palsu:
+
+| Masukan | Perlakuan | Alasan |
+|---|---|---|
+| `"ID "`, `" ID"` | lolos | sebagian penerbit memadkan nilai; itu bukan kecacatan |
+| `"id"` | lolos | penyimpangan penulisan, bukan kontradiksi — tidak sebanding dengan bobot 70 |
+| `"SG"` | lolos | bentuknya sah; menghakimi negaranya justru keputusan yang ditolak di atas |
+| `"IDN"`, `"I"`, `"1D"`, `""` | `anomaly` | mustahil diterbitkan acquirer mana pun yang patuh |
+
+**Catatan.** Baris `"SG"` di `test_adversarial.py` bukan sekadar
+kelengkapan — ia yang mengunci keputusan ini. Tanpanya, orang berikutnya
+yang merasa cek ini "kurang ketat" bisa menambahkan `== "ID"` tanpa satu
+pun test yang menolak.
+
+---
+
+## Keputusan 36 — Skrip yang crash lebih buruk daripada skrip yang tidak ada
+
+`scripts/calibrate_layer2.py` sudah lama rusak: baris 59 dan 103
+memanggil `bh.SCAN_BURST_WINDOW_MIN`, konstanta yang ikut dihapus
+bersama sinyal lonjakan pemindaian di Keputusan 13. Kodenya dibiarkan,
+konstantanya tidak.
+
+Yang membuatnya serius bukan crash-nya, melainkan **letaknya**. Crash
+terjadi di bagian 1 — bagian yang menguji sinyal yang sudah mati — dan
+membunuh bagian 2 dan 3 di bawahnya, yang masih sahih. Bagian 3 itulah
+yang menghasilkan angka **0 positif palsu dari 20.000 payload sah**,
+angka yang dikutip `THREAT-MODEL.md` T7 dan T14 sebagai bukti, dan yang
+jadi satu-satunya dasar `W_STRUCTURAL` = 70 di tabel parameter.
+
+Jadi selama berkas itu rusak, bukti untuk bobot Layer 2 terberat **tidak
+bisa direproduksi** — sementara `README.md` tetap mengiklankannya sebagai
+bisa dijalankan. Untuk proyek yang seluruh nilainya bersandar pada
+"setiap angka bisa ditunjuk dasarnya", itu kerusakan yang jauh lebih
+besar daripada ukuran bug-nya.
+
+**Keputusan:** bagian 1 dibuang seluruhnya — fungsi `puncak_jendela`,
+konstanta yatimnya (`PROFIL`, `JAM_BUKA`, `AMBANG_DIUJI`,
+`HARI_DISIMULASI`), dan import `math` yang sudah mati. Bukan
+dikomentari, bukan ditambal: sinyalnya memang sudah dibuang di Keputusan
+13, dan tabel yang membatalkannya sudah tersimpan di sana. Berkasnya
+menyusut 191 -> 99 baris, dan dua bagian yang tersisa berjalan lagi.
+
+**Catatan.** Pelajaran yang lebih luas: menghapus sebuah sinyal berarti
+menghapus kalibrasinya juga. Keputusan 13 menghapus kolom skema dan kode
+sinyalnya, tapi melewatkan skrip yang mengukurnya — dan tidak ada yang
+menyadarinya karena tidak ada satu pun test yang menjalankan skrip
+kalibrasi. Skrip kalibrasi memang tidak dijalankan `preflight.py`; itu
+disengaja (lambat), tapi konsekuensinya adalah kelas bug ini tidak
+punya jaring pengaman sama sekali.
+
+---
+
+## Keputusan 37 — Gerbang yang buta tidak boleh mengaku hijau
+
+`pyproject.toml` tidak pernah mendeklarasikan dependensi test.
+`fastapi.testclient` menarik `starlette.testclient`, yang menuntut
+`httpx2` saat diimpor — jadi `pip install -e .` di mesin bersih
+menghasilkan repo yang **sepuluh suite-nya tidak bisa dijalankan sama
+sekali**, termasuk `test_invariants.py`.
+
+Yang lebih buruk ditemukan saat menelusurinya: `scripts/preflight.py`
+mendaftarkan pemeriksaan suite sebagai `wajib=False`. Telusuri sampai
+akhir dan hasilnya — kalau seluruh test gagal, statusnya masuk
+`gagal_opsional`, dicetak sebagai catatan lunak, lalu:
+
+```python
+if gagal_opsional:
+    print(f"Siap, dengan {gagal_opsional} catatan opsional di atas.")
+    sys.exit(0)
+```
+
+**Di mesin bersih, gerbang pra-demo mencetak "Siap" dan keluar 0 padahal
+nol test pernah berjalan.** Dan karena `_c6` hanya memeriksa
+`returncode != 0`, ia tidak bisa membedakan "invarian §2 jebol" dari
+"modul gagal diimpor". Keduanya jadi catatan opsional yang sama.
+
+**Keputusan:** tiga perubahan.
+
+1. `pyproject.toml` mendapat extra `test = ["httpx2"]`; `README.md`
+   menyuruh `pip install -e '.[test]'`.
+2. `_c6` jadi `wajib=True`. README sudah menyebut `test_invariants.py`
+   sebagai syarat sebelum commit apa pun yang menyentuh penilaian —
+   gerbang yang memperlakukannya sebagai catatan opsional bertentangan
+   dengan dokumennya sendiri.
+3. `_c6` membedakan "tidak bisa dijalankan" dari "merah", dan yang
+   pertama memberi perintah perbaikannya langsung di pesan gagal. Suite
+   merah memberi tahu sesuatu; suite yang tidak pernah jalan tidak
+   memberi tahu apa pun, dan itu justru keadaan yang paling berbahaya
+   untuk dilaporkan sebagai hijau.
+
+**Catatan.** Tidak ada CI di repo ini (`.github/` tidak ada), jadi
+`preflight.py` adalah satu-satunya hal yang pernah menjalankan suite
+secara otomatis. Itu membuat klasifikasi `wajib` pada satu dekorator
+menanggung beban yang jauh lebih besar daripada kelihatannya.
+
+---
+
+## Keputusan 38 — Dua salinan test yang sama menghitung diri dua kali
+
+Ditemukan saat menambahkan `_a14`: `tests/test_adversarial.py` memuat
+**dua salinan byte-identik** `_a12` (akurasi dikarang) dan `_a13`
+(akurasi dihilangkan), beserta komentar header bagiannya. Kecelakaan
+salin-tempel.
+
+Dekorator `@serangan` menjalankan fungsinya saat impor dan menambahkan
+hasilnya ke `_hasil`, jadi kedua salinan benar-benar dijalankan dan
+keduanya ikut terhitung. Laporan akhirnya mengklaim "Seluruh 19
+skenario" padahal skenario berbedanya hanya 17.
+
+Tidak ada pertahanan yang bocor — kedua test itu memang lolos. Yang
+bocor adalah **angkanya**, dan angka itu dikutip `README.md` sebagai
+klaim cakupan. Menghitung pekerjaan yang sama dua kali lalu
+melaporkannya sebagai cakupan adalah bentuk kecil dari hal yang
+`THREAT-MODEL.md` §6 berusaha keras hindari.
+
+**Keputusan:** salinan kedua (38 baris) dihapus. Dengan `_a14` yang
+baru, jumlahnya kini **18 skenario berbeda**, dan `README.md`
+diperbarui dari angka 13 yang sudah lama basi.
+
+---
+
+## Keputusan 39 — Jejak audit sempat berbohong soal integritas perangkat
+
+Ditemukan saat membangun fixture seam SDK, bukan oleh test mana pun —
+dan itu bagian dari ceritanya.
+
+`verify()` punya tiga cabang yang masing-masing menulis jejak auditnya
+sendiri: mock location, akurasi buruk, dan jalur utama. Dua yang
+terakhir meneruskan `status_integritas` ke `audit.record_verdict()`.
+Cabang mock location tidak — jadi parameternya jatuh ke nilai bawaan
+`"not_provided"`.
+
+Akibatnya terbalik dari yang seharusnya. Peristiwa integritas **paling
+serius** yang sistem ini punya — GPS yang diakui palsu, satu-satunya
+kondisi yang membuat putusan lokasi ditolak sama sekali — tercatat di
+jejak audit seolah pemeriksaannya **tidak pernah dijalankan**.
+
+Tanggapan ke klien selalu benar (`"failed"`); hanya jejaknya yang
+keliru. Dan justru jejak itulah yang dipakai auditor merekonstruksi
+insiden — aset A5, ancaman A5 di `THREAT-MODEL.md`. Auditor yang
+menyaring log mencari perangkat bermasalah akan melewatkan setiap
+peristiwa mock location.
+
+**Keputusan:** argumennya diteruskan, dan `test_hardening.py` mendapat
+pemeriksaan yang menjalankan KEEMPAT keadaan integritas melalui ketiga
+cabang, lalu menuntut tanggapan dan jejak audit sepakat. Bug ini lolos
+selama ini karena test yang ada memeriksa tanggapan, bukan kesesuaian
+tanggapan dengan jejaknya.
+
+**Catatan.** Pelajaran yang lebih luas: parameter opsional dengan nilai
+bawaan yang masuk akal (`device_integrity="not_provided"`) membuat
+pemanggilan yang lupa mengisinya gagal secara diam-diam, bukan berisik.
+Di fungsi yang dipanggil dari beberapa cabang, bawaan yang "aman" justru
+menyembunyikan cabang yang terlewat.
+
+---
+
+## Keputusan 40 — SDK dapat tempatnya sebelum kodenya ada
+
+Penulis SDK Android bekerja di mesin lain. Yang ia punya dari proyek ini
+hanya isi repo — jadi repo harus cukup untuk bekerja tanpa bertanya.
+
+`INTEGRATION.md` §3 sudah mendefinisikan kontrak `device_integrity`
+sejak Keputusan 31, tapi ia dokumen untuk PJP, bukan untuk orang yang
+sedang menulis kode. Yang kurang tiga hal: contoh yang tidak bisa basi,
+cara memvalidasi keluaran SDK tanpa server hidup, dan pernyataan
+eksplisit soal di mana kunci API tinggal.
+
+**Keputusan:** `sdk/` berisi seam-nya.
+
+- `sdk/contract/` — delapan fixture permintaan/tanggapan, satu untuk
+  **setiap** tier aksi dan **setiap** status integritas. DIHASILKAN dari
+  kode oleh `scripts/sdk_contract.py generate`, tidak diketik tangan.
+- `scripts/sdk_contract.py check` — memvalidasi payload keluaran SDK
+  terhadap model pydantic sungguhan, offline, dengan pesan yang menyebut
+  penyebab khas Android-nya alih-alih melempar `422`.
+- `tests/test_sdk_contract.py` — membangun ulang fixture di memori dan
+  membandingkannya dengan yang di repo. Fixture basi tidak bisa lolos
+  diam-diam; pola yang sama dengan `test_frontend.py`.
+
+**Temuan yang memicu §1 dokumen itu.** Kunci Q-Shield mewakili PJP,
+bukan orang, jadi ia milik server. SDK yang memanggil Q-Shield langsung
+harus memanggang kunci itu ke dalam APK — dan APK bisa dibongkar. Kunci
+bocor bukan cuma membocorkan putusan: ia memberi penyerang kemampuan
+`POST /api/v1/merchants` atas nama PJP itu. Jalur produksinya
+aplikasi -> backend PJP -> Q-Shield, dan itu keputusan yang harus
+diambil **sebelum** lapisan jaringan SDK ditulis, bukan sesudah.
+
+**Catatan.** Satu aturan di seam ini tidak bisa ditegakkan backend sama
+sekali: aplikasi tidak boleh memutuskan `attested` sendiri, karena Play
+Integrity mengembalikan token yang harus diverifikasi di server. Q-Shield
+tidak punya cara mendeteksi pelanggarannya — rantai kepercayaannya
+memang berhenti di PJP (T34). Karena itu `sdk_contract.py check`
+memperingatkannya setiap kali melihat `attested: true`. Peringatan bukan
+penegakan, dan dokumennya menyebut perbedaan itu terus terang.
+
+---
+
+## Keputusan 41 — Tag biaya diparse dan diungkapkan, tapi tidak diskor
+
+Datang dari usulan mengadopsi sebuah TLV inspector QRIS sumber terbuka
+sebagai "layer forensik". Usulannya ditolak, tapi perbandingannya
+menghasilkan satu temuan nyata.
+
+**Kenapa bukan layer.** Layer di sistem ini didefinisikan oleh
+pertanyaan yang dijawabnya — Layer 1 "apakah merchant ini yang
+seharusnya di sini", Layer 2 "apakah artefaknya berperilaku seperti QR
+sah". Sebuah decoder menjawab "apa isi QR ini", dan itu bukan pertanyaan
+ketiga: itu MASUKAN bagi Layer 2, dan `emvco.py` sudah persis langkah
+tersebut. Uji yang lebih tajam: decoder tidak menghasilkan putusan sama
+sekali, jadi ia bahkan tidak bisa dikalibrasi dengan ukuran Keputusan
+13. Menamainya "Layer 3" berarti memberi nama baru pada komponen yang
+sudah ada.
+
+**Yang ternyata memang kurang.** Perbandingan field demi field
+menunjukkan `emvco.py` adalah SUPERSET dari tool itu — kecuali tag
+**55, 56, 57** (indikator tip/biaya layanan, nominal tetap, persentase).
+Ketiganya tidak pernah diparse sama sekali.
+
+**Keputusan:** diparse, diungkapkan di tanggapan sebagai objek `fees`,
+dan **tidak diskor**.
+
+Bagian "tidak diskor" itu yang disengaja, bukan kemalasan. Godaannya
+jelas: stiker yang diam-diam menambah biaya terdengar seperti penipuan.
+Tapi kami belum memverifikasi apakah biaya layanan pada QR **statis**
+itu kontradiksi terhadap spec QRIS atau justru sah. Sinyal struktural
+berbobot 70 dan `hard=True` — ia memaksa `anomaly` seketika. Kalau
+ternyata sah, kami menghukum payload yang benar dengan bobot penuh.
+Urutan yang sama dengan tag 58 di Keputusan 35: ungkapkan dulu, skor
+belakangan kalau ada dasarnya.
+
+| Kondisi | Perlakuan |
+|---|---|
+| tag 55/56/57 ada | muncul di `fees`, `present: true` |
+| pengaruh ke `risk_score` | **nol** |
+| pengaruh ke `signals` | **nol** |
+| tampilan pengguna | notice netral, hanya dirender bila `present` |
+
+Dikunci dua arah: `test_contract.py` "Tag biaya diungkapkan" menuntut
+`risk_score`, `layers`, `action`, dan `signals` TIDAK bergerak pada tiga
+bentuk biaya; `test_frontend.py` menuntut notice-nya bersyarat dan
+warnanya bukan warna alarm.
+
+**Catatan soal warnanya.** Notice-nya sengaja netral, bukan amber.
+Pelajaran Keputusan 29 berlaku persis: sesuatu yang bukan tuduhan tidak
+boleh tampil seperti peringatan, atau peringatan sungguhan ikut
+diabaikan. Dan karena ia hanya dirender bila tag-nya ada, biaya
+visualnya nol pada mayoritas pemindaian.
+
+**Yang TIDAK diambil dari usulan itu, dan alasannya.** Mengimpor kode
+tool tersebut ke `web/index.html` ditolak: halaman itu dikunci pada nol
+permintaan ke luar dan nol build step oleh `test_frontend.py`, parsing
+sisi klien tidak bisa jadi dasar putusan karena bisa dibohongi
+pengguna, dan kapabilitasnya sudah ada di server dalam bentuk yang lebih
+lengkap.
+
+**Batasan yang diakui.** Jejak audit tetap tidak mencatat payload mentah
+(alasannya di docstring `audit.py` — PAN merchant ada di sana). Artinya
+penyidik tetap tidak bisa memeriksa ulang byte QR setelah kejadian.
+Kalau nilai forensik itu diinginkan, bentuk yang bertahan terhadap
+keberatan aslinya adalah mencatat HASH payload, bukan payloadnya.
+Belum dikerjakan.
+
+---
+
+## Keputusan 42 — Panel forensik TLV: opt-in di kontrak, mode demo di UI
+
+Kelanjutan Keputusan 41. Usulan "layer forensik" ditolak sebagai layer,
+tapi satu bagian idenya memang berharga: menjawab **"apa yang sistem
+baca sehingga memutuskan begini"** — pertanyaan SESUDAH putusan, bukan
+masukan baginya.
+
+**Dua jalan, dan yang lebih murah ditolak.** Halaman scanner sudah
+memegang payload-nya (ia yang memindai), jadi ia bisa mem-parse TLV
+sendiri di JS tanpa menyentuh kontrak sama sekali. Itu ditolak: yang
+akan tampil adalah apa yang HALAMAN baca, dan kalau suatu saat kedua
+parser menyimpang, panel itu menampilkan bukti yang **bukan dasar
+putusannya**. Untuk alat forensik, selisih itu persis hal yang tidak
+boleh ada. Jadi bedahnya datang dari server, satu sumber kebenaran.
+
+**Opt-in, bukan selalu.** Diukur: tanggapan normal 533 byte, dengan
+bedah TLV 1984 byte — hampir empat kali lipat. Memaksakannya ke setiap
+panggilan PJP berarti membebani jalur panas demi fitur yang hanya
+dipakai demo. Karena itu `include_tlv` opsional dengan bawaan `false`;
+field `tlv` SELALU ada di tanggapan tapi kosong, supaya bentuk
+tanggapan tidak berubah-ubah antar panggilan.
+
+**Tidak ada paparan baru.** Bedah TLV memuat PAN merchant di tag 26.
+Tapi `payload` adalah field WAJIB di permintaan — pemanggil selalu sudah
+memegangnya, jadi ini hanya menguraikan yang sudah ia kirim sendiri.
+Berbeda dengan jejak audit, yang soal PENYIMPANAN dan tetap menolak
+payload mentah dengan alasan yang sama.
+
+**Mode demo di UI.** Panelnya `<details>`, tertutup secara bawaan, dan
+hanya dirender kalau sakelar "Mode demo" di setelan menyala. Sakelar itu
+juga yang menentukan apakah permintaan menyertakan `include_tlv` —
+jadi tanpa mode demo, server tidak mengirim apa pun, bukan mengirim lalu
+disembunyikan CSS. Pengguna biasa tidak pernah melihat panel ini:
+jawaban atas pertanyaan yang tidak ditanyakan hanya jadi kebisingan.
+
+**Yang dikunci.**
+
+| Test | Menuntut |
+|---|---|
+| `test_contract.py` "_k11" | bawaan `[]`; bentuk entri; tag 26 terurai; urutan = kemunculan; `verdict`/`action`/`risk_score`/`layers`/`signals` **identik** dengan dan tanpa flag |
+| `test_frontend.py` "_f17" | `include_tlv` terikat sakelar demo; panel `<details>` tertutup ulang tiap pemindaian; isi TLV di-escape |
+
+**Catatan soal escaping.** Nilai TLV berasal dari payload yang
+dikendalikan penyerang dan masuk lewat `innerHTML`. Ia di-escape, dan
+testnya menuntut itu — panel forensik yang bisa dijadikan jalur XSS
+akan jadi ironi yang mahal.
+
+---
+
+## Keputusan 43 — Membayar menuntut ditahan, dan namanya ada di tombolnya
+
+Tombol tunggal "Lanjut ke pembayaran" mengandaikan pengguna membaca
+kartu hasil sebelum menekannya. Seluruh modus stiker palsu justru
+bergantung pada anggapan sebaliknya: orang menekan sebelum membaca.
+
+**Keputusan:** tombolnya jadi **tombol tahan** berdurasi `TAHAN_MS` =
+1200 ms, dengan isian progres, dan labelnya menyebut ke siapa uang akan
+mengalir — "Tahan untuk membayar ke **WARUNG BU SRI**". Nama merchantnya
+ada DI tombolnya supaya tidak bisa terlewat.
+
+**Yang dibeli di sini bukan bukti, melainkan perhatian.** Nama itu
+berasal dari tag 59, yang justru dikendalikan penyerang — stiker palsu
+tetap bisa menuliskan nama yang benar. Karena itu keterangan di bawah
+tombol menyuruh mencocokkannya dengan toko tempat pengguna berdiri:
+pemeriksaan yang tidak bergantung pada data kami sama sekali.
+
+Tiga hal yang dikunci `test_frontend.py`, dan masing-masing punya
+alasannya:
+
+| Dikunci | Kenapa |
+|---|---|
+| tidak ada `onclick` di jalur bayar | satu ketukan tidak boleh cukup; kalau ada, gesekan ini cuma hiasan |
+| `keydown`/`keyup` ada | tanpanya pengguna papan ketik terkunci keluar sepenuhnya |
+| `TAHAN_MS` >= 800 | tahanan yang terlalu singkat tidak sempat dibaca |
+
+1200 ms dipilih sebagai kompromi yang **tidak** dikalibrasi: cukup untuk
+memaksa satu kalimat terbaca, belum cukup lama untuk membuat orang
+menyerah. Gesekan yang ditinggalkan pengguna tidak melindungi siapa pun.
+
+**Pengecualian yang disengaja:** tier `cooling_off` TIDAK memakai tombol
+tahan. Tombol di sana tidak meneruskan pembayaran — ia memperlihatkan
+bahwa pembayarannya dihentikan. Menyuruh "tahan untuk membayar" ke
+merchant yang barusan ditolak justru menyesatkan.
+
+**Yang belum dikerjakan.** Tombol `step_up` ("Saya sudah cocokkan,
+lanjut") masih satu ketukan, padahal itu satu-satunya tempat pengguna
+sengaja menerobos peringatan sungguhan — kandidat terkuat berikutnya.
+
+---
+
+## Keputusan 44 — Kartu hasil: satu angka bersekala, klaim dipisah dari putusan
+
+Baris chip di kartu hasil dulu memuat empat hal sekaligus:
+`Lokasi 83 · Perilaku 0 · Skor 83 · Waktu 2,8 ms`. Tiga masalah
+sekaligus, dan ketiganya soal keterbacaan, bukan penilaian.
+
+**1. Angka tanpa skala tidak bisa dibaca.** "Skor 83" sama sekali tidak
+memberi tahu 83 itu buruk atau bagus. Sekarang: **"Risiko 83 dari 100"**
+— denominatornya ikut, jadi arah angkanya jelas tanpa penjelasan lisan.
+
+**2. `processing_ms` mengukur kecepatan kami, bukan risiko pengguna.**
+Itu metrik developer, dan di kartu yang sama ia bersaing dengan angka
+yang benar-benar perlu dibaca. Dihapus dari tampilan; field-nya tetap
+di tanggapan API untuk PJP.
+
+**3. Rincian per-lapisan gampang dibaca TERBALIK.** Pada jalur bahagia
+chip-nya berbunyi `Lokasi 0` dan `Perilaku 0` — dan "nol" terdengar
+seperti gagal, padahal itu hasil terbaik. `layers` adalah alat AUDIT:
+ia menjawab "dari lapisan mana skor ini datang", pertanyaan milik PJP
+dan auditor, bukan milik orang yang sedang berdiri di depan warung.
+Dihapus dari tampilan pengguna; tetap utuh di tanggapan API dan di
+jejak audit, dikunci `test_contract.py` di tingkat skema maupun respons.
+
+Yang dibutuhkan pengguna untuk mengambil keputusan sudah ada di atasnya
+dalam bentuk kalimat: `reasons`.
+
+**Klaim stiker tidak boleh mewarisi otoritas putusan.** Nama kota (tag
+60) dulu dirender dengan gaya monospace yang sama persis dengan NMID,
+sehingga nama tempat tampil seperti identifier teknis. Sempat diusulkan
+menaikkannya ke baris chip, sejajar angka risiko. Itu ditolak:
+
+| | Asalnya | Sifatnya |
+|---|---|---|
+| `risk_score` | dihitung Q-Shield | kesimpulan kami |
+| tag 60 (kota) | payload stiker | klaim, bebas ditulis penyerang |
+
+Menaruh keduanya di baris yang sama dengan bobot visual identik membuat
+string yang dikendalikan penyerang tampil seperti sudah diverifikasi.
+Kota tetap di baris nama merchant — keduanya klaim dari payload yang
+sama — tapi tipografinya diperbaiki jadi teks biasa. Ia jadi hal KEDUA
+yang bisa dicocokkan pengguna dengan dunia nyata, menguatkan keterangan
+di tombol tahan (Keputusan 43).
+
+Ditampilkan **apa adanya**, huruf besar semua sesuai payload:
+membaguskan huruf besar-kecilnya berarti menyunting klaim yang justru
+sedang kami suruh periksa sendiri.
+
+`test_frontend.py` mengunci pemisahan itu secara struktural — kalau
+suatu saat kota dipindah ke baris chip putusan, testnya gagal dengan
+pesan yang menjelaskan kenapa.
+
+**Panduan ke PJP ikut disesuaikan, karena tadinya bertentangan.**
+`INTEGRATION.md` dan `API.md` dulu menulis "tampilkan `reasons`, JANGAN
+`risk_score`" — padahal klien acuan kami sendiri kini menampilkan
+angkanya. Kontradiksi itu lahir dari perumusan yang terlalu kasar:
+yang sebenarnya dilarang bukan angkanya, melainkan angka TELANJANG.
+Rumusan barunya: `reasons` selalu ditampilkan; `risk_score` boleh ikut
+tapi wajib dengan skalanya; `layers` dan `processing_ms` tidak pernah
+sampai ke pengguna akhir.
+
+---
+
+## Keputusan 45 — Tiket verifikasi: mengikat, bukan memaksa
+
+**Celah yang dilaporkan.** Aplikasi memanggil `/verify`, menerima
+putusan, lalu selesai — tidak ada apa pun yang menghubungkan jawaban itu
+dengan transaksi yang benar-benar dieksekusi. Dua akibat yang diusulkan:
+(1) putusannya bisa diabaikan, (2) yang diperiksa belum tentu yang
+dibayar.
+
+**Hanya satu dari keduanya bisa ditutup Q-Shield, dan itu harus
+dikatakan.** Sebuah tiket hanya berguna kalau ada yang MEMERIKSANYA.
+Yang mengeksekusi pembayaran adalah PJP, lalu switch QRIS; Q-Shield
+tidak ada di jalur itu. PJP yang mengabaikan `cooling_off` akan
+mengabaikan tiketnya juga — **tiket tidak menciptakan penegak di tempat
+yang tidak punya penegak.** Penegakan sungguhan menuntut switch atau
+acquirer menolak menyelesaikan transaksi tanpa tiket sah: perubahan
+tingkat infrastruktur, bukan tingkat pustaka. Tercatat sebagai R12.
+
+Celah kedua nyata dan ditutup. Tiket mengikat putusan ke sidik jari
+payload; pihak yang mengeksekusi menghitung ulang dan menuntutnya cocok.
+"Verifikasi QR A, bayar QR B" jadi ketahuan.
+
+**Kapan tiket benar-benar berguna.** Persis ketika verifikasi dan
+eksekusi **tidak berbagi state tepercaya**:
+
+| Topologi | Batas kepercayaan | Nilai tiket |
+|---|---|---|
+| backend PJP verify + eksekusi, satu sesi | tidak ada | kecil — backend bisa mengikat sendiri |
+| backend verify lalu stateless; aplikasi kirim ulang payload | ada | **besar** |
+| aplikasi panggil `/verify`, backend eksekusi | ada | **besar** |
+| verify service ≠ payment service di internal PJP | ada | **besar** |
+
+**HMAC, bukan tanda tangan asimetris.** `hmac` dan `hashlib` ada di
+pustaka standar — `auth.py` bahkan sudah mengimpor keduanya. RS256
+menuntut `cryptography`, dependensi native berat, plus PKI dan
+distribusi kunci publik. Proyek ini punya tiga dependensi runtime dan
+nol berkas data; satu field tidak sebanding dengan harga itu.
+
+Kuncinya diturunkan dari hash kunci API yang sudah tersimpan:
+`HMAC(sha256_kunci, "qshield-ticket-v1")`. Q-Shield memilikinya, PJP
+bisa menurunkannya sendiri — **nol kunci baru untuk didistribusikan.**
+
+**Dua harga yang dibayar, keduanya dicatat sebagai risiko residual.**
+
+1. **R11** — simetris berarti bahan kuncinya ada di konfigurasi. Bocornya
+   `QSHIELD_API_KEYS` kini bukan cuma membocorkan verifier, tapi memberi
+   kemampuan menandatangani tiket atas nama PJP itu. Ini **melemahkan
+   properti yang diklaim README**, dan klaim itu ikut dikoreksi, bukan
+   dibiarkan.
+2. Simetris juga berarti PJP bisa memalsukan tiketnya sendiri — tidak ada
+   non-repudiation terhadap PJP. Yang dipertahankan adalah pertahanan
+   terhadap **pihak ketiga** (malware di antara aplikasi dan backend),
+   dan itu tepat sasaran celah kedua.
+
+**R13 — replay dalam masa berlaku.** Tiketnya stateless dan tidak
+disimpan, jadi QR yang sama bisa dieksekusi dua kali dalam 90 detik.
+Idempotensi transaksi milik PJP; sejalan dengan R2 yang memang di luar
+jangkauan. Diuji secara eksplisit di `test_ticket.py` sebagai
+**batasan**, bukan dibiarkan jadi asumsi diam-diam.
+
+**Invarian §8 berlaku di dalam tiket juga.** Klaimnya hanya `v`, `fp`,
+`verdict`, `action`, `nmid`, `client`, `iat`, `exp` — nol koordinat, nol
+`device_anon_id`, dan payload hanya sebagai sha256. Alasan yang sama
+kenapa `audit.py` menolak mencatat payload mentah: PAN merchant.
+Diuji — tiket yang bocor tidak boleh memberi tahu siapa memindai di mana.
+
+**Bingkai yang dipakai di seluruh dokumen, dan yang tidak.**
+Yang ditulis: *"hasil verifikasi terikat pada QR yang diperiksa."*
+Yang TIDAK pernah ditulis: *"aplikasi tidak bisa mengabaikannya."*
+Klaim kedua tidak benar, dan juri teknis akan menemukannya.
+
+---
+
 ## Parameter yang dapat dikalibrasi
 
 Semua berada di `binding.py`, sengaja tidak ditanam di dalam logika.
@@ -1285,12 +1802,16 @@ Layer 2 di `behavior.py`:
 
 | Parameter | Nilai | Alasan |
 |---|---|---|
-| `W_STRUCTURAL` | 70 | kontradiksi spec, bukan kemiripan statistik — 0 positif palsu dari 20.000 payload sah |
+| `W_STRUCTURAL` | 70 | kontradiksi spec, bukan kemiripan statistik — 0 positif palsu dari 20.000 payload sah. Dipakai `static_qr_with_amount`, `missing_mandatory_tags`, `malformed_nmid`, dan `malformed_country` (Keputusan 35) |
 | `W_TAG_ORDER` | 15 | sidik jari encoding, **belum tervalidasi lapangan** |
 | `W_CRC_CASE` | 10 | idem |
 | `SOFT_FINGERPRINT_CAP` | 25 | sekumpulan sinyal lemah tidak boleh menumpuk jadi setara satu bukti kuat |
 | `W_ANOMALY_BASE` | 12 | berskala dengan jumlah percobaan, pola yang sama dengan Keputusan 4 |
 | `W_ANOMALY_CAP` | 30 | sendirian tidak pernah cukup mencapai `cooling_off` |
+
+Tag yang diparse tapi **sengaja tidak diberi bobot sama sekali**: 55, 56,
+57 (biaya layanan) dan 61 (kode pos). Diungkapkan di tanggapan, tidak
+pernah menyentuh penilaian — lihat Keputusan 41.
 
 Nilai-nilai ini adalah titik awal untuk demo, bukan hasil kalibrasi lapangan.
 Yang sudah punya dasar empiris: presisi geohash (`calibrate_geo.py`), bobot

@@ -1,0 +1,52 @@
+{
+  "_keterangan": "accuracy_m > 100 -> Layer 1 tidak dijalankan. Sistem menolak memberi putusan lokasi; itu fitur, bukan kegagalan.",
+  "permintaan": {
+    "accuracy_m": 250.0,
+    "device_anon_id": "11111111-2222-4333-8444-555555555555",
+    "device_integrity": {
+      "attested": true,
+      "mock_location": false,
+      "platform": "android",
+      "rooted": false
+    },
+    "lat": -6.914744,
+    "lng": 107.60981,
+    "payload": "00020101021126660014ID.CO.QRIS.WWW01189360001490000000010215ID10243654789120303UMI5204581253033605802ID5913WARUNG BU SRI6007BANDUNG6105402576304E671"
+  },
+  "status_http": 200,
+  "tanggapan": {
+    "action": "warn",
+    "device_integrity": "attested",
+    "fees": {
+      "fixed": null,
+      "indicator": null,
+      "label": null,
+      "percent": null,
+      "present": false
+    },
+    "layers": {
+      "behavior": 0,
+      "location": 40
+    },
+    "location_source": "live",
+    "merchant": {
+      "city": "BANDUNG",
+      "criteria": "Usaha Mikro",
+      "is_static": true,
+      "name": "WARUNG BU SRI",
+      "nmid": "ID1024365478912"
+    },
+    "processing_ms": 0,
+    "reasons": [
+      "Akurasi lokasi rendah (250 m) — verifikasi lokasi tidak dapat dilakukan"
+    ],
+    "risk_score": 40,
+    "signals": [
+      "low_gps_accuracy"
+    ],
+    "ticket_expires_in": 90,
+    "tlv": [],
+    "verdict": "unknown",
+    "verification_ticket": "<base64url-klaim>.<base64url-hmac-sha256>"
+  }
+}
