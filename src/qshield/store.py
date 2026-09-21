@@ -843,6 +843,52 @@ class Store:
                 (binding_id,)).fetchall()
         return {r["ap_hash"] for r in baris}
 
+    def locate_by_ap(self, ap_hashes, min_overlap: float):
+        """Jangkar mana yang sidik jari WiFi-nya paling cocok dengan pemindaian ini.
+
+        Kebalikan arah dari ap_fingerprint(): di sana kita sudah tahu
+        jangkarnya dan ingin membandingkan; di sini justru jangkarnya yang
+        dicari. Dipakai ketika GPS tidak bisa dipercaya — di dalam ruko,
+        basement, atau lantai atas — sehingga koordinat tidak bisa
+        menunjukkan tempatnya.
+
+        Titik akses lebih sulit dipalsukan daripada koordinat: memalsukan
+        GPS cukup satu sakelar di opsi pengembang, sedangkan memalsukan
+        daftar titik akses menuntut kehadiran fisik di jangkauan radio
+        yang sama.
+
+        Kembalikan (binding, irisan). Binding None kalau tidak ada yang
+        cukup meyakinkan.
+        """
+        diamati = {str(a)[:64] for a in (ap_hashes or ())}
+        if len(diamati) < bh.AP_MIN_KNOWN:
+            return None, 0.0
+
+        tanda = ",".join("?" * len(diamati))
+        with self._lock:
+            kandidat = self.conn.execute(
+                f"""SELECT binding_id, COUNT(*) AS irisan
+                    FROM binding_ap WHERE ap_hash IN ({tanda})
+                    GROUP BY binding_id""",
+                tuple(diamati)).fetchall()
+
+            terbaik, skor_terbaik = None, 0.0
+            for k in kandidat:
+                total = self.conn.execute(
+                    "SELECT COUNT(*) AS n FROM binding_ap WHERE binding_id = ?",
+                    (k["binding_id"],)).fetchone()["n"]
+                gabungan = len(diamati) + total - k["irisan"]
+                skor = k["irisan"] / gabungan if gabungan else 0.0
+                if skor > skor_terbaik:
+                    terbaik, skor_terbaik = k["binding_id"], skor
+
+            if terbaik is None or skor_terbaik < min_overlap:
+                return None, skor_terbaik
+
+            baris = self.conn.execute(
+                "SELECT * FROM bindings WHERE id = ?", (terbaik,)).fetchone()
+        return (_row_to_binding(baris) if baris else None), skor_terbaik
+
     def learn_features(self, parsed, nmid: str) -> None:
         """Catat ciri merchant ini ke sebaran yang dipelajari."""
         from . import profile as pf

@@ -2239,6 +2239,68 @@ skema — mekanisme yang sama menjawab dua kebuntuan yang berbeda.
 
 ---
 
+## Keputusan 53 — Sidik jari WiFi dipakai saat GPS tidak berguna
+
+Klaim terakhir di naskah pitch yang belum punya kenyataannya: *"stays
+reliable even indoors, where GPS alone tends to drift"*.
+
+**Yang salah sebelumnya.** Invarian §6 menolak menilai jangkar ketika
+akurasi GPS di atas 100 m, dan jalur itu berhenti di situ: semua
+pemindaian akurasi rendah menghasilkan `warn` datar. Stiker asli dan
+stiker tukar diperlakukan **sama persis**. Padahal di dalam ruko,
+basement, dan lantai atas — tempat akurasi GPS memang jatuh — justru
+di situ stiker tukar paling mudah dipasang tanpa terlihat.
+
+Sidik jari WiFi sudah dikumpulkan, disimpan, dan dibandingkan sejak
+Layer 2. Ia hanya tidak pernah dibaca di satu jalur yang paling
+membutuhkannya.
+
+**Kalibrasi dari data lapangan sungguhan.** Empat merchant, 31–32 titik
+akses masing-masing, dikumpulkan tim dengan aplikasi native:
+
+| | irisan Jaccard |
+|---|---|
+| tempat sama (jarak 1–3 m) | 0,66 – 0,80 |
+| tempat berbeda (116 km) | 0,00 |
+
+`AP_LOCATE_MIN_OVERLAP = 0.45` duduk di celah itu dengan margin ke dua
+arah: masih mengenali setelah 45% titik akses berganti, masih jauh di
+atas nol.
+
+**Batasan yang diakui.** Korpusnya belum memuat kasus tengah — tempat
+BERBEDA yang BERDEKATAN, misalnya ruko sebelah atau lantai atas yang
+berbagi titik akses. Keempat sampel "tempat sama" itu benar-benar satu
+titik, dan pembandingnya berjarak 116 km.
+
+Karena itu sidik jari WiFi **tidak pernah dipakai memberi `proceed`**.
+Ia hanya menaikkan kecurigaan dan memberi konteks. Merchant sah di
+dalam ruangan tetap berhenti di `warn`. Batasan ini diuji sebagai
+skenario adversarial supaya tidak berubah diam-diam.
+
+**Bobot.** `W_AP_FOREIGN_NMID = 25`, ditambahkan ke 40 dasar jalur
+akurasi rendah, menghasilkan 65 → `step_up`. Sengaja bukan
+`cooling_off`: pelajaran dari R11 dan R12 adalah tuduhan palsu terhadap
+pedagang sah mahal harganya, dan kasus ruko sebelah persis akan
+terlihat seperti ini sampai terukur.
+
+**Invarian §6 tetap utuh.** Jangkar GPS tetap tidak dinilai pada jalur
+ini. Yang ditambahkan saluran bukti yang berbeda — titik akses tidak
+bergantung pada akurasi GPS sama sekali.
+
+Titik akses juga lebih sulit dipalsukan daripada koordinat: memalsukan
+GPS cukup satu sakelar di opsi pengembang, memalsukan daftar titik
+akses menuntut kehadiran fisik di jangkauan radio yang sama.
+
+**Hasil.** Di dalam ruangan dengan GPS 400 m:
+
+| pemindaian | sebelum | sesudah |
+|---|---|---|
+| QR sah, WiFi cocok | warn | warn + tempat dikenali |
+| QR tukar, WiFi cocok | warn | **step_up, anomaly** |
+| QR apa pun, tanpa WiFi | warn | warn (tidak dihukum) |
+
+---
+
 ## Hasil pengujian
 
 ```
@@ -2335,6 +2397,15 @@ Semua berada di `binding.py`, sengaja tidak ditanam di dalam logika.
 | `ADJACENT_MIN_DEVICES` | 8 | perangkat berbeda yang membuktikan lapak nyata (`calibrate_kehadiran.py`) |
 | `INCUMBENT_PROOF_HOURS` | 1,0 | bukti QR lama masih terpindai, artinya tidak tertutup |
 | `W_RELOCATED` | 25 | bobot pedagang yang terbukti pindah (`calibrate_relokasi.py`) |
+
+Sidik jari WiFi di `behavior.py`:
+
+| Parameter | Nilai | Alasan |
+|---|---|---|
+| `AP_MIN_KNOWN` | 4 | sidik jari terlalu tipis tidak dipakai menilai |
+| `AP_MIN_OVERLAP` | 0,15 | di bawah ini dianggap tempat berbeda |
+| `AP_LOCATE_MIN_OVERLAP` | 0,45 | mengenali tempat; dari data lapangan 0,66–0,80 sama vs 0,00 beda |
+| `W_AP_FOREIGN_NMID` | 25 | 40 + 25 = 65 → step_up, sengaja bukan cooling_off |
 
 Layer 2 di `behavior.py`:
 

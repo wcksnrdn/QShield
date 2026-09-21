@@ -176,6 +176,33 @@ W_PRINTED_NAME_MISMATCH = 45
 # sidik jari yang cukup besar.
 AP_MIN_KNOWN = 4          # titik akses minimum sebelum sidik jari dipakai
 AP_MIN_OVERLAP = 0.15     # irisan di bawah ini dianggap tempat berbeda
+# Irisan minimum untuk MENGENALI tempat, bukan sekadar tidak menolaknya.
+#
+# Diukur dari sidik jari lapangan sungguhan yang dikumpulkan tim:
+#
+#     tempat sama (jarak 1-3 m)    irisan 0,66 - 0,80
+#     tempat berbeda (116 km)      irisan 0,00
+#
+# Ambang 0,45 duduk di celah itu dengan margin ke dua arah: masih
+# mengenali walau 45% titik akses berganti sejak sidik jarinya dibuat,
+# dan masih jauh di atas nol.
+#
+# BATASAN YANG DIAKUI. Korpusnya belum memuat kasus tengah — tempat
+# BERBEDA yang BERDEKATAN, misalnya ruko sebelah atau lantai atas, yang
+# berbagi sebagian titik akses. Angka ini akan berubah begitu kasus itu
+# terukur. Karena itu sidik jari WiFi TIDAK PERNAH dipakai memberi
+# proceed; ia hanya dipakai menaikkan kecurigaan dan memberi konteks.
+AP_LOCATE_MIN_OVERLAP = 0.45
+# Bobot ketika sidik jari WiFi mengenali sebuah tempat, tapi QR yang
+# dipindai milik merchant LAIN. Ditambahkan ke 40 dasar jalur akurasi
+# rendah, menghasilkan 65 -> step_up.
+#
+# Sengaja step_up, bukan cooling_off. Pelajaran dari R11: tuduhan palsu
+# terhadap pedagang sah mahal harganya, dan korpus sidik jari ini belum
+# memuat kasus beda-tempat-tapi-berdekatan — ruko sebelah yang berbagi
+# titik akses persis akan terlihat seperti ini. Meminta verifikasi
+# adalah tindakan yang benar untuk bukti sekuat ini; memblokir belum.
+W_AP_FOREIGN_NMID = 25
 W_AP_MISMATCH = 30
 
 # --- Integritas perangkat ------------------------------------------

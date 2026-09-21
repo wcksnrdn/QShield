@@ -718,6 +718,41 @@ def verify(req: VerifyRequest, request: Request):
             ],
             signals=["low_gps_accuracy"],
         )
+        # GPS tidak bisa dipercaya, tapi titik akses di sekitar masih
+        # bisa. Inilah keadaan di dalam ruko, basement, dan lantai atas —
+        # dan justru di situ koordinat paling sering menyesatkan.
+        #
+        # Titik akses lebih sulit dipalsukan daripada koordinat:
+        # memalsukan GPS cukup satu sakelar di opsi pengembang,
+        # memalsukan daftar titik akses menuntut kehadiran fisik di
+        # jangkauan radio yang sama.
+        #
+        # Yang TIDAK dilakukan di sini: memberi proceed. Sidik jari WiFi
+        # dipakai menaikkan kecurigaan dan memberi konteks, tidak pernah
+        # menerbitkan kepercayaan. Invarian §6 tetap utuh — jangkar GPS
+        # tetap tidak dinilai; yang dipakai saluran bukti yang berbeda.
+        sumber_lokasi = req.location_source
+        if req.ambient_wifi and req.ambient_wifi.ap_hashes:
+            cocok, irisan = store.locate_by_ap(
+                req.ambient_wifi.ap_hashes, bh.AP_LOCATE_MIN_OVERLAP)
+            if cocok is not None:
+                sumber_lokasi = "wifi"
+                if cocok.nmid == nmid:
+                    low.reasons.insert(0,
+                        f"Tempat ini dikenali dari {len(req.ambient_wifi.ap_hashes)} "
+                        f"jaringan WiFi di sekitar ({irisan:.0%} cocok) dan "
+                        f"memang tercatat atas merchant ini")
+                    low.signals.append("ambient_wifi_confirms_place")
+                elif cocok.is_established:
+                    low.risk_score += bh.W_AP_FOREIGN_NMID
+                    low.status = bd.ANOMALY
+                    low.action = bd._action_for(low.risk_score)
+                    low.reasons.insert(0,
+                        f"Jaringan WiFi di sekitar mengenali tempat ini sebagai "
+                        f"{cocok.merchant_name or cocok.nmid} ({irisan:.0%} cocok), "
+                        f"tapi kode yang dipindai milik merchant lain")
+                    low.signals.append("ambient_wifi_foreign_nmid")
+
         struktural = bh.evaluate(parsed, state=None,
                                  accuracy_m=req.accuracy_m, has_coords=True,
                                  integrity=di)
@@ -725,7 +760,7 @@ def verify(req: VerifyRequest, request: Request):
         elapsed = round((time.perf_counter() - started) * 1000, 2)
         audit.record_verdict(
             low, nmid, req.lat, req.lng,
-            {"location": 40, "behavior": struktural.score},
+            {"location": low.risk_score, "behavior": struktural.score},
             elapsed, req.accuracy_m, parsed.merchant_name,
             req.location_source, client_id, status_integritas,
         )
@@ -735,8 +770,9 @@ def verify(req: VerifyRequest, request: Request):
             risk_score=low.risk_score,
             reasons=low.reasons,
             signals=low.signals,
-            layers=LayerScores(location=40, behavior=struktural.score),
-            location_source=req.location_source,
+            layers=LayerScores(location=low.risk_score,
+                               behavior=struktural.score),
+            location_source=sumber_lokasi,
             device_integrity=status_integritas,
             merchant=MerchantOut(
                 nmid=nmid,
