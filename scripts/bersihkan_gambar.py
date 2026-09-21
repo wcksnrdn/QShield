@@ -22,7 +22,6 @@ kota yang cocok dengan tempatnya.
 """
 
 import os
-import shutil
 import sqlite3
 import sys
 from datetime import datetime
@@ -154,8 +153,16 @@ def main(argv):
 
     cadangan = os.path.join(
         AKAR, f"qshield.db.cadangan-{datetime.now():%Y%m%d-%H%M%S}")
+    # VACUUM INTO, bukan menyalin berkasnya.
+    #
+    # Basis data ini berjalan dengan WAL: perubahan terbaru bisa masih
+    # berada di qshield.db-wal dan belum masuk ke berkas utama. Menyalin
+    # qshield.db saja menghasilkan cadangan yang SOBEK — merekam keadaan
+    # lama sambil tampak utuh. Sudah terjadi: sebuah cadangan memuat 13
+    # binding padahal basis datanya berisi 8, dan selisih itu baru
+    # ketahuan saat dibandingkan.
+    db.execute("VACUUM INTO ?", (cadangan,))
     db.close()
-    shutil.copy2(db_path, cadangan)
     db = sqlite3.connect(db_path)
 
     db.execute(f"DELETE FROM observations WHERE binding_id IN ({tanda_i})", ids)

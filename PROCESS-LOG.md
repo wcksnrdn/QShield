@@ -2361,6 +2361,62 @@ wajib memakai `QSHIELD_DB` ke berkas sementara, tanpa kecuali.
 
 ---
 
+## Keputusan 66 — Rahasia tiket menulis di luar kunci, dan satu pengamatan hilang
+
+Ditemukan saat menggabungkan cabang `qshieldrev-v1` ke `main`. Seluruh
+test di cabang itu lolos; yang menangkapnya adalah test kapasitas milik
+`main`, yang tidak ada di cabangnya.
+
+**Gejalanya.** `observations 199, harusnya 200` pada 200 permintaan
+serentak. Satu pengamatan hilang tanpa galat.
+
+**Sebabnya.** `Store.ticket_secret()` menanyakan rahasia ke basis data
+pada SETIAP permintaan, dan saat belum ada, menulis barisnya —
+**tanpa memegang `self._lock`**. Satu-satunya method penulis di
+`store.py` yang berada di luar kunci; 27 lainnya memegangnya.
+
+Di bawah konkurensi, tulisan itu menyelip ke dalam transaksi
+`BEGIN IMMEDIATE` milik `record()` dan membatalkan salah satunya.
+
+Docstring-nya menyebut "pola yang sama dengan garam device_ref", dan di
+situlah kekeliruannya: `_ensure_salt()` dipanggil **sekali di
+`__init__`**, sebelum ada permintaan apa pun. `ticket_secret()`
+dipanggil **tiap permintaan**. Polanya mirip, konteks pemanggilannya
+tidak.
+
+**Perbaikannya** mengikuti pola yang sebenarnya: diselesaikan sekali di
+`__init__` menjadi `self._ticket_secret`, dan method-nya hanya membaca
+dari memori. Lebih benar sekaligus lebih cepat — nol query per
+permintaan. Diuji lima kali berturut: 200/200.
+
+Ini pengulangan Keputusan 12 dalam bentuk lain. Pelajarannya bukan
+"jangan lupa kunci", melainkan: **method yang dipanggil per-permintaan
+tunduk pada aturan berbeda dari method yang dipanggil saat
+inisialisasi**, dan docstring yang menyamakan keduanya menyembunyikan
+perbedaan itu.
+
+---
+
+## Keputusan 67 — Cadangan basis data WAL tidak boleh disalin berkasnya
+
+Ditemukan saat memverifikasi korpus setelah penggabungan. Cadangan
+pra-merge memuat 13 binding, sedangkan basis datanya berisi 8.
+
+Bukan kehilangan data — cadangannya yang **sobek**. Basis data ini
+berjalan dengan WAL, sehingga perubahan terbaru bisa masih berada di
+`qshield.db-wal` dan belum masuk ke berkas utama. `cp qshield.db`
+menyalin berkas utama saja, menghasilkan salinan keadaan LAMA yang
+tampak utuh.
+
+Cadangan yang tampak utuh tapi merekam keadaan lain adalah kelas
+kegagalan yang sama dengan Keputusan 50: merusak diam-diam, dan baru
+ketahuan ketika dibutuhkan.
+
+`scripts/bersihkan_gambar.py` kini memakai `VACUUM INTO`, yang
+menghormati WAL dan menghasilkan satu berkas konsisten.
+
+---
+
 ## Hasil pengujian
 
 ```

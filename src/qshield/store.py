@@ -323,6 +323,7 @@ class Store:
             try:
                 self.conn.executescript(SCHEMA)
                 self._salt = self._ensure_salt()
+                self._ticket_secret = self._ensure_ticket_secret()
                 self._migrate()
                 break
             except sqlite3.OperationalError as exc:
@@ -370,9 +371,20 @@ class Store:
         dengannya TIDAK bisa diverifikasi PJP mana pun — dan memang
         tidak perlu: di mode demo tidak ada PJP.
 
-        Pola yang sama dengan garam device_ref: dibangkitkan sekali,
-        disimpan, stabil sepanjang umur basis data.
+        Diselesaikan SEKALI di __init__, seperti garam device_ref, dan
+        di sini hanya dibaca dari memori.
+
+        Versi pertama menanyakannya ke basis data pada SETIAP permintaan
+        dan menulis barisnya tanpa memegang `self._lock` — satu-satunya
+        method di berkas ini yang menulis di luar kunci. Di bawah 200
+        permintaan serentak, tulisan itu menyelip ke dalam transaksi
+        BEGIN IMMEDIATE milik record() dan satu pengamatan hilang:
+        199 dari 200. Ditangkap oleh test kapasitas, bukan oleh review.
         """
+        return self._ticket_secret
+
+    def _ensure_ticket_secret(self) -> str:
+        """Ambil atau bangkitkan rahasia tiket. Dipanggil sekali, di __init__."""
         baris = self.conn.execute(
             "SELECT value FROM meta WHERE key = ?", (TICKET_KEY,)).fetchone()
         if baris:
