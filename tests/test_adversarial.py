@@ -883,6 +883,85 @@ def _a31():
             f"pendaftaran tetap lebih otoritatif")
 
 
+@serangan("Stiker tukar di dalam ruangan, GPS tidak berguna")
+def _a32():
+    """Serangan yang sebelumnya tidak bisa dilihat sama sekali.
+
+    Di dalam ruko, basement, atau lantai atas, akurasi GPS jatuh ke
+    ratusan meter. Invarian §6 menolak menilai jangkar dari koordinat
+    seburuk itu, dan sebelumnya jalur itu berhenti di situ: SEMUA
+    pemindaian akurasi rendah menghasilkan `warn` datar, baik stikernya
+    asli maupun tukar.
+
+    Titik akses di sekitar tidak terpengaruh akurasi GPS, dan lebih
+    sulit dipalsukan: memalsukan koordinat cukup satu sakelar di opsi
+    pengembang, memalsukan daftar titik akses menuntut kehadiran fisik
+    di jangkauan radio yang sama.
+    """
+    s, c = fresh_store()
+    bid = s.conn.execute("SELECT id FROM bindings WHERE nmid = ?",
+                         (KORBAN,)).fetchone()["id"]
+    ap = [f"{i:032x}" for i in range(32)]
+    s.learn_ap(bid, ap)
+
+    def dalam_ruangan(payload, wifi):
+        body = {"payload": payload, "lat": LAT, "lng": LNG,
+                "device_anon_id": "korban-dalam-ruangan", "accuracy_m": 400.0}
+        if wifi:
+            body["ambient_wifi"] = {"ap_hashes": wifi}
+        return c.post("/api/v1/verify", json=body).json()
+
+    tukar = dalam_ruangan(qr(PENYERANG), ap)
+    assert tukar["verdict"] == "anomaly", (
+        f"stiker tukar lolos di dalam ruangan sebagai {tukar['verdict']}")
+    assert tukar["action"] in ("step_up", "cooling_off"), (
+        f"friksi cuma {tukar['action']}")
+    assert tukar["location_source"] == "wifi"
+
+    # Merchant sah di tempat yang sama tidak boleh ikut kena.
+    sah = dalam_ruangan(qr(KORBAN), ap)
+    assert sah["verdict"] != "anomaly", "merchant sah ikut tertuduh"
+    assert "ambient_wifi_confirms_place" in sah["signals"]
+
+    # Klien yang tidak mengirim WiFi sama sekali tidak boleh dihukum.
+    tanpa = dalam_ruangan(qr(PENYERANG), None)
+    assert tanpa["action"] == "warn", (
+        f"klien tanpa WiFi dihukum: {tanpa['action']}")
+
+    return (f"tukar {tukar['action']} / sah {sah['action']} / "
+            f"tanpa WiFi {tanpa['action']} — sebelumnya ketiganya warn datar")
+
+
+@serangan("Sidik jari WiFi dipakai MEMBERI kepercayaan", ditahan=False)
+def _a33():
+    """Batasan yang disengaja, diuji agar tidak berubah diam-diam.
+
+    Sidik jari WiFi hanya menaikkan kecurigaan, tidak pernah
+    menerbitkan kepercayaan. Merchant sah di dalam ruangan tetap
+    berhenti di `warn`, bukan `proceed`, walau titik aksesnya cocok
+    100%.
+
+    Alasannya ada di korpus: pengukuran lapangan baru memuat tempat
+    SAMA (irisan 0,66-0,80) dan tempat SANGAT JAUH (0,00). Kasus tengah
+    — ruko sebelah yang berbagi titik akses — belum terukur. Sampai itu
+    ada, WiFi tidak boleh jadi dasar memberi izin.
+    """
+    s, c = fresh_store()
+    bid = s.conn.execute("SELECT id FROM bindings WHERE nmid = ?",
+                         (KORBAN,)).fetchone()["id"]
+    ap = [f"{i:032x}" for i in range(32)]
+    s.learn_ap(bid, ap)
+    d = c.post("/api/v1/verify", json={
+        "payload": qr(KORBAN), "lat": LAT, "lng": LNG,
+        "device_anon_id": "pelanggan-dalam-ruangan", "accuracy_m": 400.0,
+        "ambient_wifi": {"ap_hashes": ap}}).json()
+    assert d["action"] == "warn", (
+        f"WiFi menerbitkan kepercayaan: {d['action']}")
+    return ("DISENGAJA: WiFi cocok 100% tetap berhenti di warn — kasus "
+            "beda-tempat-berdekatan belum terukur, jadi belum boleh "
+            "jadi dasar memberi izin")
+
+
 print("=" * 72)
 print("SUITE ADVERSARIAL")
 print("=" * 72)

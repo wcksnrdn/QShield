@@ -7,15 +7,20 @@ dengan menjalankan atau membaca kodenya, bukan dari ingatan.
 
 ## Ringkasan
 
-| | Jumlah |
-|---|---|
-| Akurat | 8 |
-| Perlu diperhalus | 2 |
-| **Tidak ada di sistem** | **8** |
+**Diperbarui 20 September 2026.** Audit pertama menemukan delapan klaim
+yang tidak ada di sistem. Tim memutuskan menyesuaikan sistem ke naskah,
+bukan sebaliknya, karena naskah itu sudah lolos juri.
 
-Delapan klaim terakhir bukan soal istilah. Semuanya menyebut kemampuan
-yang tidak pernah ada — dan beberapa di antaranya **tidak mungkin ada**
-pada PoC berbasis web.
+| | Audit pertama | Sekarang |
+|---|---|---|
+| Akurat | 8 | 8 |
+| Perlu diperhalus | 2 | 2 |
+| Tidak ada di sistem | **8** | **0** |
+
+Kedelapan-delapannya sudah dibangun dan diuji. Dua di antaranya menuntut
+kalimat yang lebih tepat — bukan karena kemampuannya tidak ada,
+melainkan karena kalimat aslinya menjanjikan lebih dari yang dilakukan.
+Rinciannya di bawah.
 
 ---
 
@@ -57,78 +62,115 @@ naskah baru di bawah.
 
 ---
 
-## Yang tidak ada di sistem
+## Yang dibangun sejak audit pertama
 
-Delapan ini harus dihapus atau diganti sebelum 3 Oktober.
+Kedelapan klaim di bawah dulu tidak ada. Sekarang ada, dengan
+penunjuk buktinya masing-masing.
 
-### 1. "hashed WiFi BSSIDs"
+### 1. "hashed WiFi BSSIDs" — ADA
 
-**Tidak ada sama sekali.** Diperiksa: `bssid` dan `ssid` nol
-kemunculan di seluruh kode.
+Aplikasi native meng-hash BSSID dengan SHA-256 di sisi klien; yang
+mentah tidak pernah meninggalkan perangkat. Server menyimpannya per
+binding di tabel `binding_ap`, membandingkannya di
+`behavior._ap_signals()`, dan mencari jangkar dari sidik jarinya di
+`store.locate_by_ap()`.
 
-Ini yang paling serius, karena **tidak mungkin ada** pada PoC berbasis
-web — browser tidak menyediakan API untuk memindai WiFi, dan memang
-tidak akan pernah, karena itu sidik jari lokasi yang kuat.
+Korpus lapangan sungguhan sudah terkumpul: empat merchant, 31–32 titik
+akses masing-masing.
 
-Catatan kalian sendiri mencatatnya sebagai kebutuhan MASA DEPAN:
-*"Perlu ambient WiFi fingerprinting — tidak tersedia di browser,
-karenanya PoC ini berbasis web dan MVP memerlukan SDK native."*
+**Bisa diperagakan.** Pindai di dalam ruangan, tunjukkan
+`location_source: "wifi"` di tanggapan.
 
-### 2. "stays reliable even indoors, where GPS alone tends to drift"
+### 2. "stays reliable even indoors" — ADA, tapi kalimatnya perlu tepat
 
-Konsekuensi dari klaim di atas, dan **berlawanan dengan perilaku
-sebenarnya**. Invarian §6 justru **menolak memberi putusan** ketika
-akurasi GPS di atas 100 m — persis kondisi dalam ruangan.
+Jalur akurasi rendah kini membaca sidik jari WiFi. Diukur dari data
+lapangan tim:
 
-Itu bukan kelemahan yang perlu ditutupi. Itu fitur, dan jawaban yang
-lebih baik: *"when the signal is too poor to trust, we refuse to give a
-verdict rather than guess."*
+| | irisan Jaccard |
+|---|---|
+| tempat sama (1–3 m) | 0,66 – 0,80 |
+| tempat berbeda (116 km) | 0,00 |
 
-### 3. "unsupervised ML models"
+Sebelumnya semua pemindaian akurasi rendah menghasilkan `warn` datar —
+stiker asli dan stiker tukar diperlakukan sama persis. Sekarang stiker
+tukar di dalam ruangan naik ke `step_up` dengan alasan yang menyebut
+nama merchant yang seharusnya ada di tempat itu.
 
-Tidak ada model apa pun. Lihat `KLARIFIKASI-ML.md`.
+**Yang belum, dan jangan diklaim:** WiFi tidak pernah dipakai MEMBERI
+izin. Merchant sah di dalam ruangan tetap berhenti di `warn`, bukan
+`proceed`. Sebabnya jujur — korpusnya baru memuat tempat sama dan
+tempat sangat jauh; kasus tengah, ruko sebelah yang berbagi titik
+akses, belum terukur. Itu diuji sebagai batasan yang disengaja di
+`test_adversarial.py`.
 
-### 4. "transaction velocity"
+Kalimat yang aman dan tetap kuat:
 
-Pernah ada, lalu **dibuang setelah dikalibrasi** (Keputusan 13).
-Alasannya terukur: membangun reputasi palsu butuh 3 perangkat dalam 24
-jam, jadi serangannya pelan. Ambang mana pun yang menangkapnya menandai
-100% warung laris.
+> *"Indoors, where GPS drifts to hundreds of metres, we fall back to
+> the ambient WiFi fingerprint — so we can still tell whether this
+> sticker belongs in this place."*
 
-Menyebutnya sekarang bukan cuma keliru — itu menyebut sesuatu yang
-kalian **sengaja tolak dengan data**.
+Itu benar seluruhnya, dan justru lebih menarik: ia menyebut mekanisme,
+bukan janji.
 
-### 5. "account age"
+### 3. "unsupervised ML models" — ADA, dengan istilah yang tepat
 
-Tidak ada. Sistem tidak pernah melihat akun pengguna — invarian §8
-melarang identitas pengguna di skema mana pun.
+`profile.py` mempelajari sebaran ciri merchant dari korpus dan menandai
+profil yang langka; `area_city` dan `issuer_dialect` mempelajari
+kebiasaan wilayah dan penerbit. Semuanya tanpa label, tanpa data
+latih — pembelajaran statistik tak terawasi dalam arti sebenarnya.
 
-### 6. "first-time beneficiaries"
+Yang TIDAK ada: jaringan saraf, bobot terlatih, berkas model. Kalau
+juri bertanya "modelnya apa", jawaban yang benar adalah sebaran
+empiris, bukan arsitektur. Rinciannya di `KLARIFIKASI-ML.md`.
 
-Tidak ada, dan menuntut data penerima transfer yang hanya dimiliki PJP.
+### 4–7. Sinyal transfer manual — ADA
 
-### 7. "active call telemetry"
+`transfer.py` memuat keempatnya sebagai field `TransferTelemetry`:
 
-Tidak ada. Mendeteksi korban sedang ditelepon menuntut izin akses
-panggilan — yang tidak tersedia di browser, dan akan menjadi masalah
-privasi besar kalau ada.
+| klaim | field |
+|---|---|
+| transaction velocity | `transfers_last_hour` |
+| account age | `beneficiary_account_age_days` |
+| first-time beneficiaries | `first_time_beneficiary` |
+| active call telemetry | `call_active` |
 
-### 8. "catching the pattern of someone being guided through a scam in
-real time"
+Dikalibrasi supaya tidak ada sinyal tunggal yang mencapai `step_up`
+sendirian: 1,4% gesekan pada transfer sah, 89,6% pola penipuan
+tertangkap.
 
-Konsekuensi dari nomor 4–7. Tidak ada satu pun sinyalnya.
+**Batasan yang harus disebut kalau ditanya:** angka itu dari model
+sebaran, bukan data transaksi sungguhan — Q-Shield tidak punya akses ke
+data PJP. Yang dibangun adalah lapisannya; kalibrasi sungguhan menunggu
+integrasi.
+
+### 8. "pola korban yang sedang dipandu penipu" — ADA
+
+`transfer.evaluate()` menggabungkan keempat sinyal di atas. Pola yang
+dicarinya: penerima baru, rekening muda, panggilan sedang aktif,
+transfer beruntun dalam satu jam. Itu bentuk khas korban yang sedang
+dituntun lewat telepon.
 
 ---
 
-## Kenapa ini penting diperbaiki sekarang
+## Kenapa ketepatan kalimat tetap menentukan
 
 Track ini **Secure Digital Payments**, dan jurinya termasuk Kaspersky.
 Pertanyaan "tunjukkan WiFi fingerprinting-nya" bukan pertanyaan yang
 mustahil muncul — itu justru hal yang menarik perhatian orang keamanan.
 
-Dan risikonya bukan sekadar satu klaim gugur. Sekali satu kemampuan
-terbukti tidak ada, juri akan menguji ulang **semua** klaim lain —
-termasuk delapan yang benar-benar akurat dan kuat.
+Sekarang pertanyaan itu bisa dijawab dengan demo. Yang berubah bukan
+cuma status klaimnya, tapi posisi kalian saat ditanya.
+
+Tetap ada satu hal yang tidak berubah: **sekali satu klaim terbukti
+lebih besar dari kenyataannya, juri akan menguji ulang semua klaim
+lain** — termasuk yang benar-benar kuat. Karena itu dua kalimat di
+bagian 2 dan 3 tetap harus diperhalus. Bukan karena kemampuannya tidak
+ada, melainkan karena kalimat aslinya menjanjikan sedikit lebih banyak
+daripada yang bisa ditunjukkan.
+
+Menyebut batasan sendiri lebih dulu juga menguntungkan. Suite
+adversarial kalian memuat enam serangan yang **diakui belum ditahan**,
+dan itu satu-satunya alasan angka-angka lainnya layak dipercaya.
 
 ---
 
