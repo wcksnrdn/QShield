@@ -3015,6 +3015,78 @@ Klaim kedua tidak benar, dan juri teknis akan menemukannya.
 
 ---
 
+## Keputusan 68 — Tiket akhirnya punya gambarnya, dan jejaknya
+
+Keputusan 65 membangun tiketnya. Tapi pemeriksaannya tidak ada di mana
+pun yang terlihat: halaman scanner MENERIMA tiket lalu membuangnya, dan
+tidak ada endpoint untuk memeriksanya. Mekanismenya terbukti di test,
+tapi tidak bisa diperagakan.
+
+Persis posisi yang sama dengan Keputusan 32, ketika "The PIN was never
+entered" masih berupa klaim yang didengar juri tanpa gambarnya.
+
+**Tiga hal ditambahkan.**
+
+1. **`POST /api/v1/tickets/verify`.** Ini yang dilakukan backend PJP di
+   titik eksekusi. Jadi endpoint karena kuncinya tinggal di server —
+   halaman tidak boleh memegangnya — dan supaya integrator di bahasa
+   apa pun punya jalur yang sama.
+
+   `payload` di sana **WAJIB**, dan itu keputusannya. Tanpa payload
+   yang hendak dibayar, pemeriksaan hanya membuktikan tiketnya asli —
+   bukan bahwa ia menyangkut QR yang sedang dieksekusi. Menjadikannya
+   opsional berarti menyediakan cara memakai endpoint yang TERASA benar
+   tapi tidak menutup celah apa pun, dan itu kesalahan yang paling
+   mungkin dilakukan integrator. Ditutup di batas sistem, bukan lewat
+   peringatan di dokumen — pola yang sama dengan `accuracy_m` di
+   Keputusan 23.
+
+   Tiket tidak sah dijawab **200 dengan `valid: false`**, bukan 4xx.
+   "Tidak sah" adalah jawaban yang benar atas pertanyaan yang sah, dan
+   klien yang memperlakukan non-200 sebagai gangguan jaringan lalu
+   mencoba lagi tidak boleh diam-diam melewatkan penolakan.
+
+2. **Peragaan serangan di mode demo.** Tombol "Tukar QR diam-diam" yang
+   mengubah payload yang akan DIBAYAR — bukan yang sudah diverifikasi.
+   Persis posisi malware: sesudah pemeriksaan, sebelum eksekusi.
+
+   Penukarannya disimulasikan, dan itu harus disebut. Begitu kamera
+   membaca stiker, payload-nya sudah di memori aplikasi; serangan
+   sungguhannya terjadi DI DALAM aplikasi. Menukar kertas di panggung
+   tidak memperagakan apa pun. Karena itu tombolnya ditandai simulasi,
+   dan hanya hidup di mode demo.
+
+   Saat ditolak, layar PIN **tidak pernah dirender** — bukan
+   disembunyikan CSS. Pola yang sama dengan `cooling_off`, dan diuji
+   dengan cara yang sama. Layarnya menampilkan kedua sidik jari
+   berdampingan, supaya yang terlihat adalah MEKANISMENYA, bukan
+   sekadar kata "ditolak".
+
+3. **`payload_fp` di jejak audit.** Ini menutup §8 no. 8, dan
+   pembuktiannya konkret: dua QR dengan NMID sama tapi nomor rekening
+   berbeda — stiker asli dan stiker yang dicetak ulang, ancaman T6 —
+   sebelumnya meninggalkan baris audit yang **identik byte per byte**.
+   Penyidik tidak punya cara membedakannya setelah kejadian.
+
+   Yang dicatat tetap HASH, bukan payloadnya: alasan yang sama kenapa
+   `audit.py` menolak payload mentah sejak awal, yaitu PAN merchant di
+   dalamnya. Sidik jarinya satu arah, jadi nomor rekening tidak bisa
+   dipulihkan darinya. Invarian §8 tidak tersentuh.
+
+**Satu test dipertajam, bukan dilonggarkan.** `test_frontend.py` "_f13"
+dulu menuntut TIDAK ADA `onclick` di seluruh cabang tombol tahan, dan
+tombol simulasi serangan melanggarnya. Yang dimaksud test itu
+sebenarnya adalah tombol BAYARNYA tidak boleh punya handler klik, jadi
+assertion-nya dipersempit ke `t.onclick` DAN ditambah pemeriksaan bahwa
+jalur ke pembayaran hanya bisa dicapai dari penghitung durasi tahanan.
+Cakupannya bertambah, bukan berkurang.
+
+**Yang masih tidak berubah.** Tiket tetap MENGIKAT, bukan memaksa (R15).
+Endpoint ini memudahkan pemeriksaan; ia tidak membuat siapa pun wajib
+memeriksa.
+
+---
+
 ## Parameter yang dapat dikalibrasi
 
 Semua berada di `binding.py`, sengaja tidak ditanam di dalam logika.

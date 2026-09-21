@@ -113,6 +113,9 @@ JALUR = {
     # Ditambahkan 16 Sep 2026 — Layer 2 jalur transfer manual. ADITIF.
     "/api/v1/assess-transfer",
     "/api/v1/beneficiary-reports",
+    # Ditambahkan 21 Sep 2026 bersama tiket verifikasi. Dipakai di titik
+    # EKSEKUSI pembayaran, bukan saat memindai.
+    "/api/v1/tickets/verify",
 }
 
 _hasil = []

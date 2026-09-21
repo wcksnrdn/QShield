@@ -210,6 +210,82 @@ def _t7():
     return "tiket yang sama lolos 3x — didokumentasikan, bukan diperbaiki diam-diam"
 
 
+@cek("Endpoint pemeriksa menolak dipakai tanpa payload")
+def _t8():
+    # Kesalahan paling mungkin dilakukan integrator: memeriksa tanda
+    # tangan tapi lupa mencocokkan payload, sehingga terasa benar tapi
+    # tidak menutup celah apa pun. Ditutup di batas sistem, bukan lewat
+    # peringatan di dokumen.
+    c = klien()
+    d = minta(c, qr(), "tiket-endp-0001")
+    t = d["verification_ticket"]
+
+    r = c.post("/api/v1/tickets/verify", json={"ticket": t})
+    assert r.status_code == 422, (
+        f"permintaan tanpa payload diterima (HTTP {r.status_code}) — "
+        f"cara memakai endpoint yang tidak menutup apa pun jadi mungkin")
+
+    sama = c.post("/api/v1/tickets/verify",
+                  json={"ticket": t, "payload": qr()})
+    assert sama.status_code == 200 and sama.json()["valid"] is True
+
+    beda = c.post("/api/v1/tickets/verify", json={
+        "ticket": t, "payload": qr(PALSU, "936000149099999999")})
+    # 200 dengan valid:false, BUKAN 4xx: "tidak sah" adalah jawaban yang
+    # benar atas pertanyaan yang sah. Klien yang memperlakukan non-200
+    # sebagai gangguan jaringan lalu mencoba lagi tidak boleh diam-diam
+    # melewatkan penolakan.
+    assert beda.status_code == 200, (
+        f"penolakan dikirim sebagai HTTP {beda.status_code}; klien bisa "
+        f"salah memperlakukannya sebagai gangguan jaringan")
+    assert beda.json()["valid"] is False
+    assert beda.json()["detail"], "penolakan tanpa alasan yang bisa dibaca"
+    return "payload wajib; QR ditukar -> 200 valid:false dengan alasan"
+
+
+@cek("Jejak audit membedakan dua QR yang NMID-nya sama")
+def _t9():
+    import io as _io
+    import json as _json
+    import logging as _logging
+
+    from qshield import audit
+    from qshield.ticket import payload_fingerprint
+
+    c = klien()
+    log = audit.get_logger()
+
+    def rekam(p, dev):
+        buf = _io.StringIO()
+        h = _logging.StreamHandler(buf)
+        h.setFormatter(_logging.Formatter("%(message)s"))
+        log.addHandler(h)
+        try:
+            minta(c, p, dev)
+        finally:
+            log.removeHandler(h)
+        baris = [b for b in buf.getvalue().strip().split("\n") if b]
+        return _json.loads(baris[0])
+
+    # NMID sama, nomor rekening berbeda: stiker yang dicetak ulang ke
+    # rekening penipu. Tanpa payload_fp kedua baris audit ini IDENTIK,
+    # dan penyidik tidak punya cara membedakannya setelah kejadian.
+    asli = qr()
+    ulang = qr(pan="936000149099999999")
+    a, b = rekam(asli, "audit-fp-00001"), rekam(ulang, "audit-fp-00002")
+
+    assert a["nmid"] == b["nmid"], "prasyarat: NMID harus sama"
+    assert a["payload_fp"] != b["payload_fp"], (
+        "dua QR berbeda meninggalkan sidik jari yang sama di jejak audit")
+    assert a["payload_fp"] == payload_fingerprint(asli)
+    assert len(a["payload_fp"]) == 64, "bukan sha256 hex"
+
+    # Dan yang dicatat tetap HASH, bukan payloadnya — alasan yang sama
+    # kenapa audit.py menolak payload mentah: PAN merchant.
+    assert asli not in _json.dumps(a), "payload mentah bocor ke jejak audit"
+    return "NMID sama, sidik jari berbeda; payload mentah tetap tidak dicatat"
+
+
 print("=" * 70)
 print("TIKET VERIFIKASI")
 print("=" * 70)

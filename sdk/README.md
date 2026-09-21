@@ -61,6 +61,7 @@ field yang sama.
 | Pemetaan 4 tier ke UI | **bagianmu** | `INTEGRATION.md` §2 |
 | Penerbitan tiket verifikasi | **selesai** | `src/qshield/ticket.py` |
 | Pemeriksaan tiket saat eksekusi | **bagianmu / backend PJP** | §6 |
+| Endpoint pemeriksa tiket | **selesai** | `POST /api/v1/tickets/verify` |
 
 ---
 
@@ -243,6 +244,13 @@ fun kunciTiket(bahanRahasia: String): ByteArray {
 // tandaHarap = base64url(HmacSHA256(kunciTiket, badan))
 // Bandingkan dengan MessageDigest.isEqual(), BUKAN ==.
 ```
+
+**Atau panggil endpointnya.** `POST /api/v1/tickets/verify` dengan
+`{ticket, payload}` melakukan pemeriksaan yang sama di sisi server —
+dan `payload` di sana **wajib**, jadi langkah 4 tidak bisa dilewati.
+Endpoint itu menuntut `X-API-Key`, jadi berlaku batasan §1 yang sama:
+kalau kuncinya tidak boleh ada di APK, yang memanggilnya adalah backend
+PJP, bukan SDK.
 
 **Empat langkah, dan yang keempat yang menentukan:**
 
