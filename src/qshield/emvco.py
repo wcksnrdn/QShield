@@ -37,6 +37,85 @@ MERCHANT_CRITERIA = {
     "URE": "Usaha Regular",
 }
 
+# Tag 55 — "Tip or Convenience Indicator" EMVCo MPM. Nilainya menentukan
+# tag mana yang membawa besarannya: "02" -> tag 56 (nominal tetap),
+# "03" -> tag 57 (persentase). "01" tidak membawa besaran sama sekali;
+# pembayar yang mengisinya.
+#
+# DIPARSE DAN DIUNGKAPKAN, TIDAK DISKOR. Kami belum memverifikasi
+# apakah biaya layanan pada QR STATIS itu kontradiksi terhadap spec
+# QRIS atau justru sah — dan menghukum sesuatu yang ternyata sah
+# berbobot W_STRUCTURAL berarti memaksa `anomaly` pada payload yang
+# benar. Pola yang sama dengan `postal_code` dan dengan kehati-hatian
+# pada tag 58 di Keputusan 35: ungkapkan dulu, skor belakangan kalau
+# ada dasarnya.
+TIP_INDICATOR = {
+    "01": "Pembayar diminta memasukkan tip",
+    "02": "Biaya layanan nominal tetap",
+    "03": "Biaya layanan persentase",
+}
+
+
+# --- Keterangan tag, untuk bedah TLV -------------------------------
+#
+# Dipakai HANYA untuk menjelaskan payload ke manusia; tidak satu pun
+# dibaca oleh penilaian. Tag yang tidak ada di sini tetap ditampilkan
+# apa adanya — penerbit yang memakai tag di luar daftar justru yang
+# menarik untuk dilihat, jadi ia tidak boleh disembunyikan.
+TAG_LABELS = {
+    "00": "Indikator format payload",
+    "01": "Metode inisiasi (11 statis, 12 dinamis)",
+    "52": "Kategori merchant (MCC)",
+    "53": "Mata uang transaksi",
+    "54": "Nominal transaksi",
+    "55": "Indikator tip / biaya layanan",
+    "56": "Biaya layanan nominal tetap",
+    "57": "Biaya layanan persentase",
+    "58": "Kode negara",
+    "59": "Nama merchant",
+    "60": "Kota merchant",
+    "61": "Kode pos",
+    "62": "Data tambahan",
+    "63": "Checksum CRC16",
+    "64": "Template bahasa merchant",
+}
+
+# Sub-tag berbeda artinya tergantung induknya, jadi petanya dipisah
+# per konteks — bukan satu peta datar yang akan salah label.
+SUBTAG_LABELS = {
+    "akun": {
+        "00": "Pengenal global penyelenggara (GUID)",
+        "01": "PAN / nomor akun merchant",
+        "02": "Merchant ID nasional (NMID)",
+        "03": "Kriteria usaha merchant",
+    },
+    "62": {
+        "01": "Nomor tagihan",
+        "02": "Nomor ponsel",
+        "03": "Label toko",
+        "04": "Nomor loyalitas",
+        "05": "Label referensi",
+        "06": "Label pelanggan",
+        "07": "Label terminal",
+        "08": "Tujuan transaksi",
+        "09": "Permintaan data konsumen tambahan",
+    },
+    "64": {
+        "00": "Preferensi bahasa",
+        "01": "Nama merchant (alternatif)",
+        "02": "Kota merchant (alternatif)",
+    },
+}
+
+
+def tag_label(tag: str) -> str:
+    """Keterangan tag tingkat atas."""
+    if tag in TAG_LABELS:
+        return TAG_LABELS[tag]
+    if tag in MERCHANT_TEMPLATE_TAGS:
+        return f"Informasi akun merchant (template {tag})"
+    return "Tag di luar daftar standar"
+
 
 class ParseError(Exception):
     """Payload tidak sesuai struktur TLV EMVCo."""
@@ -114,6 +193,36 @@ class QrisPayload:
         return self.tags.get("58")
 
     @property
+    def tip_indicator(self) -> Optional[str]:
+        """Tag 55 mentah. Lihat TIP_INDICATOR untuk artinya."""
+        return self.tags.get("55")
+
+    @property
+    def tip_label(self) -> Optional[str]:
+        kode = self.tip_indicator
+        if kode is None:
+            return None
+        # Kode tak dikenal dikembalikan apa adanya, bukan dibuang:
+        # penerbit yang memakai nilai di luar spec justru yang menarik
+        # untuk dilihat auditor.
+        return TIP_INDICATOR.get(kode, kode)
+
+    @property
+    def fee_fixed(self) -> Optional[str]:
+        """Tag 56 — besaran biaya layanan tetap."""
+        return self.tags.get("56")
+
+    @property
+    def fee_percent(self) -> Optional[str]:
+        """Tag 57 — besaran biaya layanan dalam persen."""
+        return self.tags.get("57")
+
+    @property
+    def has_fee(self) -> bool:
+        """Payload meminta biaya di luar nominal transaksi."""
+        return any(t in self.tags for t in ("55", "56", "57"))
+
+    @property
     def primary_account(self) -> Optional[MerchantAccount]:
         for acc in self.accounts:
             if acc.is_qris and acc.nmid:
@@ -180,6 +289,48 @@ class QrisPayload:
             return MERCHANT_CRITERIA.get(acc.criteria, acc.criteria)
         return None
 
+    def breakdown(self) -> list:
+        """Bedah TLV untuk dibaca manusia, termasuk tag bersarang.
+
+        FORENSIK, BUKAN PENILAIAN. Tidak ada yang membaca hasil ini
+        selain tampilan — ia menjawab "apa yang sistem baca sehingga
+        memutuskan begini", bukan menghasilkan putusan apa pun.
+
+        Urutannya urutan kemunculan di payload, bukan urut tag:
+        `parse_tlv` menyisipkan sesuai kemunculan dan dict Python
+        mempertahankannya. Urutan asli itu justru yang menarik secara
+        forensik — sinyal `noncanonical_tag_order` membacanya juga.
+        """
+        keluar = []
+        for tag, nilai in self.tags.items():
+            entri = {
+                "tag": tag,
+                "length": len(nilai),
+                "value": nilai,
+                "label": tag_label(tag),
+                "children": [],
+            }
+            if tag in NESTED_TAGS:
+                konteks = "akun" if tag in MERCHANT_TEMPLATE_TAGS else tag
+                peta = SUBTAG_LABELS.get(konteks, {})
+                try:
+                    sub = parse_tlv(nilai)
+                except ParseError:
+                    # Bersarang tapi tidak bisa dipecah: tampilkan apa
+                    # adanya sebagai daun. Menyembunyikannya justru
+                    # membuang bukti bahwa isinya cacat.
+                    sub = {}
+                for st, sv in sub.items():
+                    entri["children"].append({
+                        "tag": st,
+                        "length": len(sv),
+                        "value": sv,
+                        "label": peta.get(st, "Sub-tag di luar daftar standar"),
+                        "children": [],
+                    })
+            keluar.append(entri)
+        return keluar
+
     def summary(self) -> dict:
         return {
             "nmid": self.nmid,
@@ -192,6 +343,9 @@ class QrisPayload:
             "amount": self.amount,
             "currency": self.currency,
             "country": self.country,
+            "tip_indicator": self.tip_indicator,
+            "fee_fixed": self.fee_fixed,
+            "fee_percent": self.fee_percent,
             "crc_valid": self.crc_valid,
         }
 

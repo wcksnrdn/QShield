@@ -320,7 +320,6 @@ def _f12():
     # Tombol lanjut berubah kalimat saat dihentikan — pengguna tidak
     # boleh disodori tombol yang seolah bisa meneruskan pembayaran.
     assert "Lihat apa yang terjadi berikutnya" in SCRIPT
-    assert "Lanjut ke pembayaran" in SCRIPT
     return f"asli -> {asli['action']} (PIN), palsu -> {palsu['action']} (tanpa PIN)"
 
 
@@ -408,6 +407,208 @@ def _f14():
     beda = json.loads(hasil.stdout.strip())
     assert not beda, f"parser menyimpang: {beda[:3]}"
     return f"{len(kasus)} payload, kedua parser sepakat"
+
+@cek("Membayar menuntut ditahan, dan namanya ada di tombolnya")
+def _f13():
+    import re as _re
+
+    badan = _re.search(r'function pasangTombolLanjut\(d\)\{(.+?)\n\}',
+                       SCRIPT, _re.S).group(1)
+    tahan = badan.split('t.className = "btn hold"')[1]
+
+    # Satu ketukan tidak boleh cukup. Kalau tombolnya punya onclick yang
+    # membuka pembayaran, seluruh gesekan ini cuma hiasan.
+    assert "onclick" not in tahan, (
+        "jalur bayar masih punya onclick — satu ketukan masih cukup")
+    assert "pointerdown" in tahan, "tidak ada gerakan tahan sama sekali"
+    assert "keydown" in tahan and "keyup" in tahan, (
+        "papan ketik tidak punya jalur tahan — pengguna keyboard terkunci")
+
+    # Tahanannya harus cukup lama untuk sempat dibaca.
+    ms = int(_re.search(r"const TAHAN_MS = (\d+)", SCRIPT).group(1))
+    assert ms >= 800, f"tahanan {ms} ms terlalu singkat untuk membaca nama"
+
+    # Yang ditahan adalah pembayaran KE SIAPA — nama merchantnya ikut
+    # di label, bukan kata generik "pembayaran".
+    assert "Tahan untuk membayar ke" in tahan, "label tidak menyebut tindakannya"
+    assert "namaMerchant(d)" in tahan, "nama merchant tidak ikut di tombol"
+
+    # Nama itu berasal dari QR, yang dikendalikan penyerang. Jadi
+    # tombolnya tidak boleh berhenti di situ: pengguna harus disuruh
+    # mencocokkannya dengan dunia nyata.
+    assert "cocokkan nama" in badan.lower(), (
+        "tidak menyuruh mencocokkan nama dengan toko tempat pengguna berdiri")
+
+    # Dan namanya di-escape — ia masuk lewat innerHTML.
+    assert "esc(namaMerchant(d))" in tahan, (
+        "nama merchant dari QR masuk innerHTML tanpa di-escape")
+
+    # cooling_off TIDAK memakai tombol tahan: tombolnya tidak meneruskan
+    # pembayaran, jadi "tahan untuk membayar" di sana menyesatkan.
+    cool = badan.split('if (d.action === "cooling_off")')[1].split(
+        't.className = "btn hold"')[0]
+    assert "Tahan untuk membayar" not in cool
+    return f"tahan {ms} ms, nama merchant di label, klik biasa tidak cukup"
+
+
+@cek("Pengguna dapat SATU angka bersekala; rinciannya tinggal di API")
+def _f14():
+    import re as _re
+    meta = _re.search(r'\$\("meta"\)\.innerHTML =(.+?);', SCRIPT, _re.S).group(1)
+
+    # "Skor 83" tidak bisa dibaca tanpa tahu 83 dari berapa.
+    assert "risk_score" in meta, "skor risiko tidak ditampilkan"
+    assert "dari 100" in meta, "skor tampil tanpa nilai maksimumnya"
+
+    # Rincian per-lapisan adalah alat audit, bukan bahan keputusan
+    # pengguna — dan "Lokasi 0" gampang dibaca terbalik sebagai gagal,
+    # padahal 0 justru hasil terbaik. processing_ms mengukur kecepatan
+    # kami, bukan risiko pengguna.
+    for bocor in ("layers", "processing_ms"):
+        assert bocor not in meta, (
+            f"{bocor} kembali ke tampilan pengguna — itu alat audit, "
+            f"dan angkanya gampang dibaca terbalik")
+
+    # Tapi keduanya TETAP ada di tanggapan: PJP memakainya, dan
+    # test_contract.py menguncinya di tingkat skema maupun respons.
+    d = klien().post("/api/v1/verify", json={
+        "payload": qr(), "device_anon_id": "frontend-skor-01",
+        "lat": LAT, "lng": LNG, "accuracy_m": 8.0}).json()
+    assert "processing_ms" in d, "processing_ms hilang dari kontrak API"
+    assert set(d["layers"]) == {"location", "behavior"}, (
+        "rincian layer hilang dari kontrak API")
+    assert 0 <= d["risk_score"] <= 100, "skor di luar skala 0-100"
+    return "satu chip 'N dari 100'; layers & processing_ms tinggal di API"
+
+
+@cek("Klaim stiker dan putusan Q-Shield tidak dicampur")
+def _f15():
+    import re as _re
+
+    # Kota (tag 60) diteruskan apa adanya dari payload: tidak pernah
+    # dinilai, tidak pernah dibandingkan dengan koordinat. Ia KLAIM,
+    # setara nama merchant.
+    d = klien().post("/api/v1/verify", json={
+        "payload": qr(), "device_anon_id": "frontend-kota-01",
+        "lat": LAT, "lng": LNG, "accuracy_m": 8.0}).json()
+    assert d["merchant"]["city"] == "BANDUNG", (
+        f"kota tidak diteruskan dari tag 60: {d['merchant']['city']!r}")
+
+    baris = _re.search(r'\$\("merchant"\)\.innerHTML =(.+?);', SCRIPT,
+                       _re.S).group(1)
+    meta = _re.search(r'\$\("meta"\)\.innerHTML =(.+?);', SCRIPT, _re.S).group(1)
+
+    # Kota tinggal bersama nama merchant, BUKAN di baris chip putusan.
+    # Kalau ia naik ke sana, string yang dikendalikan penyerang tampil
+    # dengan bobot visual yang sama seperti angka yang kami hitung.
+    assert "m.city" in baris, "kota tidak lagi tampil bersama nama merchant"
+    assert "city" not in meta, (
+        "kota naik ke baris putusan — klaim stiker mewarisi otoritas "
+        "angka yang dihitung Q-Shield")
+
+    # Dan ia tidak lagi menyamar jadi identifier teknis.
+    assert 'class="city"' in baris, "kota tidak punya gaya sendiri"
+    kota = _re.search(r"m\.city \? '<span class=\"(\w+)\"", baris).group(1)
+    assert kota != "id", "kota masih memakai gaya monospace milik NMID"
+
+    gaya = HTML[HTML.index("<style>"):HTML.index("</style>")]
+    blok = _re.search(r"\.merchant \.city\{([^}]+)\}", gaya).group(1)
+    assert "monospace" not in blok, "kota masih dirender monospace"
+
+    # Ditampilkan apa adanya: menyunting huruf besar-kecilnya berarti
+    # mengubah klaim yang justru sedang disuruh diperiksa pengguna.
+    assert "toUpperCase" not in baris and "toLowerCase" not in baris, (
+        "klaim kota disunting sebelum ditampilkan")
+    return "kota sebaris nama (klaim), baris chip murni putusan"
+
+
+@cek("Biaya layanan diungkapkan ke pengguna, netral dan bersyarat")
+def _f16():
+    import re as _re
+    c = klien()
+
+    def minta(extra, dev):
+        acct = emvco.build_tlv({
+            "00": "ID.CO.QRIS.WWW", "01": "936000149000000001",
+            "02": NMID, "03": "UMI"})
+        f = {"00": "01", "01": "11", "26": acct, "52": "5812", "53": "360",
+             "58": "ID", "59": "WARUNG BU SRI", "60": "BANDUNG", "61": "40257"}
+        f.update(extra or {})
+        return c.post("/api/v1/verify", json={
+            "payload": emvco.build(f), "lat": LAT, "lng": LNG,
+            "device_anon_id": dev, "accuracy_m": 8.0}).json()
+
+    polos = minta(None, "fe-biaya-000")
+    berbiaya = minta({"55": "03", "57": "2.50"}, "fe-biaya-001")
+    assert polos["fees"]["present"] is False
+    assert berbiaya["fees"]["present"] is True
+    assert berbiaya["fees"]["percent"] == "2.50"
+
+    # Halaman membacanya, dan hanya merendernya kalau memang ada —
+    # mayoritas pemindaian tidak membawa tag ini, jadi biaya visualnya
+    # nol di kasus normal.
+    blok = _re.search(r'const fee = \$\("fee"\)(.+?)else fee\.style\.display',
+                      SCRIPT, _re.S).group(1)
+    assert "F.present" in blok, "notice biaya tidak bersyarat"
+    assert 'id="fee"' in HTML, "wadah biaya tidak ada di markup"
+
+    # Netral, BUKAN alarm. Pelajaran Keputusan 29: yang bukan tuduhan
+    # tidak boleh tampil seperti peringatan, atau peringatan sungguhan
+    # ikut diabaikan.
+    gaya = HTML[HTML.index("<style>"):HTML.index("</style>")]
+    css = _re.search(r"\.fee\{([^}]+)\}", gaya).group(1)
+    for alarm in ("240,116,44", "229,72,77"):   # amber & merah
+        assert alarm not in css, f"notice biaya memakai warna alarm {alarm}"
+    assert "var(--bg2)" in css, "notice biaya tidak memakai latar netral"
+
+    # Dan yang terpenting: pengungkapan, bukan skor.
+    assert berbiaya["risk_score"] == polos["risk_score"], (
+        "tag biaya menggeser skor — itu bukan pengungkapan lagi")
+    assert berbiaya["signals"] == polos["signals"]
+    return "muncul hanya bila ada; netral; skor tidak bergerak"
+
+
+@cek("Panel TLV hanya hidup di mode demo, dan tidak mengubah putusan")
+def _f17():
+    import re as _re
+    c = klien()
+
+    def minta(flag, dev):
+        return c.post("/api/v1/verify", json={
+            "payload": qr(), "lat": LAT, "lng": LNG,
+            "device_anon_id": dev, "accuracy_m": 8.0,
+            "include_tlv": flag}).json()
+
+    mati = minta(False, "fe-tlv-mati-01")
+    hidup = minta(True, "fe-tlv-hidup-1")
+    assert mati["tlv"] == [] and hidup["tlv"], "include_tlv tidak berfungsi"
+
+    # Halaman hanya meminta bedahnya kalau sakelar demo menyala —
+    # bukan selalu lalu disembunyikan lewat CSS.
+    assert 'id="demo"' in HTML, "tidak ada sakelar mode demo di setelan"
+    badan = _re.search(r'const body = Object\.assign\((.+?)\);', SCRIPT,
+                       _re.S).group(1)
+    assert "include_tlv: demo.checked" in badan, (
+        "permintaan tidak mengikat include_tlv pada sakelar demo")
+
+    # Panelnya ada di markup, memakai <details> supaya tertutup secara
+    # bawaan tanpa JS — pengguna biasa tidak pernah melihat isinya.
+    assert '<details class="tlv"' in HTML, "panel TLV bukan elemen lipat"
+    assert 'id="tlvbody"' in HTML, "wadah isi panel TLV tidak ada"
+    blok = _re.search(r'const tl = \$\("tlv"\)(.+?)const rp =', SCRIPT,
+                      _re.S).group(1)
+    assert "entri.length" in blok, "panel tidak bersyarat pada isi tlv"
+    assert "tl.open = false" in blok, (
+        "panel tidak tertutup ulang tiap pemindaian baru")
+
+    # Nilai TLV masuk lewat innerHTML dan berasal dari payload yang
+    # dikendalikan penyerang — wajib di-escape.
+    assert blok.count("esc(") >= 4, "isi TLV tidak di-escape sebelum dirender"
+
+    # Forensik, bukan penilaian.
+    for k in ("verdict", "action", "risk_score", "signals"):
+        assert hidup[k] == mati[k], f"include_tlv menggeser {k}"
+    return f"{len(hidup['tlv'])} entri di mode demo; putusan tidak bergerak"
 
 
 print("=" * 70)

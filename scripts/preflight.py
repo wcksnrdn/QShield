@@ -212,7 +212,7 @@ def _c7():
     return f"berlaku untuk {ip}, dan masih hidup"
 
 
-@periksa("Seluruh suite pengujian hijau", wajib=False)
+@periksa("Seluruh suite pengujian hijau")
 def _c6():
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join(
@@ -222,7 +222,16 @@ def _c6():
     # menentukan hasilnya.
     env.pop("QSHIELD_AUTH", None)
     env.pop("QSHIELD_RATE_LIMIT", None)
+    # Dua kegagalan yang WAJIB dibedakan. Suite yang MERAH memberi tahu
+    # sesuatu: ada invarian yang jebol. Suite yang tidak bisa dijalankan
+    # sama sekali tidak memberi tahu apa pun — dan versi sebelumnya
+    # melaporkan keduanya sebagai catatan opsional yang sama, sehingga
+    # preflight mencetak "Siap" dan keluar 0 di mesin yang nol test-nya
+    # pernah berjalan. Gerbang yang buta tidak boleh mengaku hijau.
+    TAK_BISA_JALAN = ("ModuleNotFoundError", "ImportError",
+                      "requires the httpx")
     gagal = []
+    tak_jalan = []
     berkas = sorted(f for f in os.listdir(os.path.join(AKAR, "tests"))
                     if f.startswith("test_") and f.endswith(".py"))
     for t in berkas:
@@ -230,7 +239,16 @@ def _c6():
             [sys.executable, os.path.join(AKAR, "tests", t)],
             capture_output=True, env=env, cwd=AKAR)
         if r.returncode != 0:
-            gagal.append(t)
+            keluaran = (r.stderr or b"").decode("utf-8", "replace")
+            if any(p in keluaran for p in TAK_BISA_JALAN):
+                tak_jalan.append(t)
+            else:
+                gagal.append(t)
+    assert not tak_jalan, (
+        f"{len(tak_jalan)} suite TIDAK BISA dijalankan "
+        f"({', '.join(tak_jalan)}) — dependensi test belum terpasang. "
+        f"Ini bukan test yang merah, ini test yang tidak pernah jalan:\n"
+        f"           pip install -e '.[test]'")
     assert not gagal, f"gagal: {', '.join(gagal)}"
     return f"{len(berkas)} suite lolos"
 

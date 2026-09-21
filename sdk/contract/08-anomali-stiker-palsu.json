@@ -1,0 +1,53 @@
+{
+  "_keterangan": "NMID berbeda di jangkar mapan -> cooling_off. Fixture untuk menguji tier paling keras di UI SDK.",
+  "permintaan": {
+    "accuracy_m": 8.5,
+    "device_anon_id": "11111111-2222-4333-8444-555555555555",
+    "device_integrity": {
+      "attested": true,
+      "mock_location": false,
+      "platform": "android",
+      "rooted": false
+    },
+    "lat": -6.914744,
+    "lng": 107.60981,
+    "payload": "00020101021126660014ID.CO.QRIS.WWW01189360001490000000020215ID10998877665540303UMI5204581253033605802ID5913WARUNG BU SRI6007BANDUNG61054025763049058"
+  },
+  "status_http": 200,
+  "tanggapan": {
+    "action": "cooling_off",
+    "device_integrity": "attested",
+    "fees": {
+      "fixed": null,
+      "indicator": null,
+      "label": null,
+      "percent": null,
+      "present": false
+    },
+    "layers": {
+      "behavior": 0,
+      "location": 84
+    },
+    "location_source": "live",
+    "merchant": {
+      "city": "BANDUNG",
+      "criteria": "Usaha Mikro",
+      "is_static": true,
+      "name": "WARUNG BU SRI",
+      "nmid": "ID1099887766554"
+    },
+    "processing_ms": 0,
+    "reasons": [
+      "Merchant ID berbeda dari 48 pengamatan sebelumnya di lokasi ini",
+      "Lokasi ini konsisten terdaftar sebagai WARUNG BU SRI"
+    ],
+    "risk_score": 84,
+    "signals": [
+      "nmid_changed_at_anchor"
+    ],
+    "ticket_expires_in": 90,
+    "tlv": [],
+    "verdict": "anomaly",
+    "verification_ticket": "<base64url-klaim>.<base64url-hmac-sha256>"
+  }
+}

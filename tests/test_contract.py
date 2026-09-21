@@ -37,6 +37,10 @@ PERMINTAAN_WAJIB = {
 }
 PERMINTAAN_OPSIONAL = {
     "location_source",
+    # Ditambahkan 21 Sep 2026. Opsional dan bawaannya False: bedah TLV
+    # hampir 4x ukuran tanggapan normal, jadi ia opt-in dan klien lama
+    # tidak terbebani sama sekali.
+    "include_tlv",
     # Ditambahkan 11 Sep 2026. ADITIF dan opsional dengan sengaja:
     # klien web tidak akan pernah bisa mengisinya, dan menjadikannya
     # wajib berarti mengunci seluruh klien web keluar.
@@ -50,6 +54,7 @@ PERMINTAAN_TIPE = {
     "device_integrity": "object",
     "printed_label": "object",
     "ambient_wifi": "object",
+    "include_tlv": "boolean",
     "payload": "string",
     "lat": "number",
     "lng": "number",
@@ -66,6 +71,17 @@ TANGGAPAN_FIELD = {
     "signals": "array",
     "layers": "object",
     "merchant": "object",
+    # Ditambahkan 21 Sep 2026. ADITIF pada tanggapan — API.md
+    # membolehkannya tanpa naik versi, dan klien wajib mengabaikan
+    # field yang tidak dikenalnya.
+    "fees": "object",
+    # Selalu ADA, kosong kecuali diminta — bentuk tanggapan tidak
+    # boleh berubah-ubah antar panggilan.
+    "tlv": "array",
+    # Ditambahkan 21 Sep 2026. Putusan yang ditandatangani dan diikat
+    # ke sidik jari payload — MENGIKAT, bukan memaksa.
+    "verification_ticket": "string",
+    "ticket_expires_in": "integer",
     "location_source": "string",
     # Pengungkapan, bukan skor: "not_provided" berarti pemeriksaan
     # integritas tidak pernah dijalankan, bukan dijalankan lalu lolos.
@@ -75,6 +91,7 @@ TANGGAPAN_FIELD = {
 
 LAYERS_FIELD = {"location": "integer", "behavior": "integer"}
 MERCHANT_FIELD = {"nmid", "name", "city", "criteria", "is_static"}
+FEES_FIELD = {"indicator", "label", "fixed", "percent", "present"}
 
 # Kosakata tertutup. Menambah nilai di sini adalah perubahan kontrak:
 # klien memetakan nilai-nilai ini ke UI, dan nilai tak dikenal membuat
@@ -219,7 +236,11 @@ def _k4():
     assert set(merchant["properties"]) == MERCHANT_FIELD, (
         f"blok merchant berubah: {set(merchant['properties'])}"
     )
-    return f"{len(TANGGAPAN_FIELD)} field + layers + merchant"
+    fees = SKEMA["components"]["schemas"]["FeeOut"]
+    assert set(fees["properties"]) == FEES_FIELD, (
+        f"blok fees berubah: {set(fees['properties'])}"
+    )
+    return f"{len(TANGGAPAN_FIELD)} field + layers + merchant + fees"
 
 
 @cek("Kosakata verdict/action/location_source tertutup")
@@ -387,9 +408,151 @@ def _k6():
         f"status integritas asing: {d['device_integrity']}")
     assert set(d["layers"]) == set(LAYERS_FIELD)
     assert set(d["merchant"]) == MERCHANT_FIELD
+    assert set(d["fees"]) == FEES_FIELD
     assert isinstance(d["risk_score"], int) and 0 <= d["risk_score"] <= 100
     assert isinstance(d["reasons"], list) and d["reasons"], "reasons kosong"
     return f"{d['verdict']}/{d['action']}, {len(d)} field cocok"
+
+
+@cek("Tag biaya diungkapkan, dan tidak pernah menyentuh penilaian")
+def _k10():
+    import tempfile
+    from datetime import datetime, timedelta, timezone
+
+    from fastapi.testclient import TestClient
+
+    from qshield import api, auth, emvco
+    from qshield.limits import RateLimiter
+    from qshield.store import Store
+
+    NOW = datetime.now(timezone.utc)
+    LAT, LNG, NMID = -6.914744, 107.609810, "ID1024365478912"
+    api.store = Store(os.path.join(tempfile.mkdtemp(), "biaya.db"))
+    api.clients = auth.ClientRegistry(spec="", auth_setting="off")
+    api.limiter = RateLimiter(max_requests=10_000, window_seconds=60)
+    api.store.seed_binding(
+        nmid=NMID, lat=LAT, lng=LNG, merchant_name="WARUNG BU SRI",
+        observer_count=47, first_seen=NOW - timedelta(days=180),
+        last_seen=NOW - timedelta(hours=6))
+    c = TestClient(api.app)
+
+    def minta(extra, dev):
+        acct = emvco.build_tlv({
+            "00": "ID.CO.QRIS.WWW", "01": "936000149000000001",
+            "02": NMID, "03": "UMI"})
+        f = {"00": "01", "01": "11", "26": acct, "52": "5812", "53": "360",
+             "58": "ID", "59": "WARUNG BU SRI", "60": "BANDUNG", "61": "40257"}
+        f.update(extra or {})
+        return c.post("/api/v1/verify", json={
+            "payload": emvco.build(f), "lat": LAT, "lng": LNG,
+            "device_anon_id": dev, "accuracy_m": 12.0}).json()
+
+    dasar = minta(None, "kontrak-biaya-000")
+    assert dasar["fees"]["present"] is False, "tanpa tag biaya harus False"
+
+    # Tag 55/56/57 DIPARSE dan diungkapkan...
+    kasus = [
+        ({"55": "01"}, "01", None, None),
+        ({"55": "02", "56": "2000"}, "02", "2000", None),
+        ({"55": "03", "57": "2.50"}, "03", None, "2.50"),
+    ]
+    for i, (extra, ind, tetap, persen) in enumerate(kasus):
+        d = minta(extra, f"kontrak-biaya-{i:03d}")
+        f = d["fees"]
+        assert f["present"] is True, f"{extra}: present harusnya True"
+        assert f["indicator"] == ind, f"{extra}: indicator {f['indicator']}"
+        assert f["fixed"] == tetap and f["percent"] == persen, f"{extra}: {f}"
+        assert f["label"], f"{extra}: label kosong"
+
+        # ...tapi TIDAK diskor. Ini bagian terpenting yang dikunci di
+        # sini: kami belum memverifikasi apakah biaya layanan pada QR
+        # STATIS itu kontradiksi terhadap spec QRIS. Menghukumnya
+        # berarti memaksa `anomaly` pada payload yang mungkin sah —
+        # kelas positif palsu yang membuat Keputusan 13 membuang sebuah
+        # sinyal. Pengungkapan, bukan skor.
+        assert d["risk_score"] == dasar["risk_score"], (
+            f"{extra} menggeser risk_score {dasar['risk_score']} -> "
+            f"{d['risk_score']} — tag biaya tidak boleh diskor")
+        assert d["layers"] == dasar["layers"], f"{extra} menggeser layers"
+        assert d["action"] == dasar["action"], f"{extra} menggeser tier"
+        assert d["signals"] == dasar["signals"], (
+            f"{extra} memunculkan sinyal baru: {d['signals']}")
+
+    return f"{len(kasus)} bentuk biaya terungkap; skor & sinyal tidak bergerak"
+
+
+@cek("Bedah TLV opt-in, dan tidak pernah menyentuh penilaian")
+def _k11():
+    import tempfile
+    from datetime import datetime, timedelta, timezone
+
+    from fastapi.testclient import TestClient
+
+    from qshield import api, auth, emvco
+    from qshield.limits import RateLimiter
+    from qshield.store import Store
+
+    NOW = datetime.now(timezone.utc)
+    LAT, LNG, NMID = -6.914744, 107.609810, "ID1024365478912"
+    api.store = Store(os.path.join(tempfile.mkdtemp(), "tlv.db"))
+    api.clients = auth.ClientRegistry(spec="", auth_setting="off")
+    api.limiter = RateLimiter(max_requests=10_000, window_seconds=60)
+    api.store.seed_binding(
+        nmid=NMID, lat=LAT, lng=LNG, merchant_name="WARUNG BU SRI",
+        observer_count=47, first_seen=NOW - timedelta(days=180),
+        last_seen=NOW - timedelta(hours=6))
+    c = TestClient(api.app)
+
+    acct = emvco.build_tlv({
+        "00": "ID.CO.QRIS.WWW", "01": "936000149000000001",
+        "02": NMID, "03": "UMI"})
+    payload = emvco.build({
+        "00": "01", "01": "11", "26": acct, "52": "5812", "53": "360",
+        "58": "ID", "59": "WARUNG BU SRI", "60": "BANDUNG", "61": "40257"})
+
+    def minta(flag, dev):
+        b = {"payload": payload, "lat": LAT, "lng": LNG,
+             "device_anon_id": dev, "accuracy_m": 12.0}
+        if flag is not None:
+            b["include_tlv"] = flag
+        return c.post("/api/v1/verify", json=b).json()
+
+    # Bawaannya MATI — klien lama tidak pernah kebagian beban ini.
+    bawaan = minta(None, "kontrak-tlv-0000")
+    assert bawaan["tlv"] == [], "include_tlv tidak default False"
+    mati = minta(False, "kontrak-tlv-0001")
+    assert mati["tlv"] == [], "include_tlv=False masih mengirim bedah"
+
+    hidup = minta(True, "kontrak-tlv-0002")
+    assert hidup["tlv"], "include_tlv=True tidak mengirim apa pun"
+
+    # Bentuk tiap entri, termasuk yang bersarang.
+    KUNCI = {"tag", "length", "value", "label", "children"}
+    for e in hidup["tlv"]:
+        assert set(e) == KUNCI, f"entri TLV berubah bentuk: {set(e)}"
+        assert e["length"] == len(e["value"]), (
+            f"tag {e['tag']}: length {e['length']} != panjang value")
+        for a in e["children"]:
+            assert set(a) == KUNCI, f"sub-entri berubah bentuk: {set(a)}"
+
+    # Tag 26 harus terurai jadi GUID/PAN/NMID/kriteria.
+    t26 = next((e for e in hidup["tlv"] if e["tag"] == "26"), None)
+    assert t26 is not None, "tag 26 tidak ada di bedah"
+    anak = {a["tag"] for a in t26["children"]}
+    assert {"00", "01", "02", "03"} <= anak, f"tag 26 tidak terurai: {anak}"
+
+    # Urutan bedah = urutan kemunculan di payload, bukan urut tag.
+    # Itu yang menarik secara forensik, dan `noncanonical_tag_order`
+    # membaca urutan yang sama.
+    urut = [e["tag"] for e in hidup["tlv"]]
+    assert urut[0] == "00" and urut[-1] == "63", f"urutan bedah aneh: {urut}"
+
+    # Yang paling penting: FORENSIK, bukan penilaian.
+    for k in ("verdict", "action", "risk_score", "layers", "signals"):
+        assert hidup[k] == mati[k], (
+            f"include_tlv menggeser {k}: {mati[k]} -> {hidup[k]} — "
+            f"bedah TLV tidak boleh menyentuh putusan")
+    return f"{len(hidup['tlv'])} entri saat diminta; 0 saat tidak; putusan identik"
 
 
 # --- Laporan -------------------------------------------------------

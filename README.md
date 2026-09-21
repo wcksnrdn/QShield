@@ -82,6 +82,8 @@ python3 tests/test_contract.py                 # kunci bentuk API v1
 python3 tests/test_frontend.py                 # kecocokan halaman dengan API
 python3 tests/test_registration.py             # pendaftaran merchant + penyalahgunaannya
 python3 tests/test_transfer.py                 # Layer 2 jalur transfer manual
+python3 tests/test_sdk_contract.py             # seam SDK native tidak basi
+python3 tests/test_ticket.py                   # tiket: pengikatan, pemalsuan, kedaluwarsa
 PYTHONPATH=scripts python3 tests/test_api.py   # test_api.py mengimpor scripts/seed.py
 
 python3 scripts/calibrate_geo.py               # presisi geohash
@@ -107,10 +109,15 @@ src/qshield/     package utama — import sebagai `qshield` setelah `pip install
   profile.py       model kelangkaan tak-terawasi (unsupervised)
   store.py         persistensi SQLite
   auth.py          autentikasi klien PJP (kunci disimpan sebagai hash)
+  ticket.py        tiket verifikasi — mengikat putusan ke QR yang diperiksa
   limits.py        pembatasan laju (memori, tanpa menyimpan IP)
   audit.py         jejak audit terstruktur tanpa PII
   api.py           endpoint FastAPI
   web/index.html   scanner — satu berkas, tanpa build step
+sdk/             tempat SDK native masuk — kontrak, fixture, checklist
+  README.md         seam SDK <-> backend; baca §1 sebelum menulis kode
+  contract/         fixture permintaan/tanggapan, DIHASILKAN dari kode
+  android/          kode SDK Android
 scripts/         skrip yang dijalankan langsung, bukan bagian dari package
   seed.py             isi data demo, cetak QR asli & palsu
   make_qr.py          cetak prop QR + verifikasi keterbacaan (OpenCV)
@@ -127,6 +134,7 @@ scripts/         skrip yang dijalankan langsung, bukan bagian dari package
   calibrate_decay.py  kalibrasi peluruhan jejak serangan
   fieldkit.py         kumpulkan & analisis data lapangan
   diagnose.py         bongkar kenapa satu pemindaian berakhir begitu
+  sdk_contract.py     hasilkan fixture seam SDK, atau validasi payload SDK
 tests/           test_*.py — dijalankan langsung (bukan lewat pytest)
 ```
 
@@ -150,6 +158,7 @@ yang juga mengimpor `scripts/seed.py` secara langsung.
 | `PITCH-AUDIT.md` | audit naskah pitch ke kode + naskah pengganti |
 | `PANDUAN-SCAN.md` | tatacara mengumpulkan QRIS: korpus payload vs survei lokasi |
 | `PROMPT-ANDROID.md` | prompt siap kirim untuk agent Android Studio |
+| `sdk/README.md` | seam untuk penulis SDK native: kontrak, fixture, checklist |
 
 ## Sebelum demo
 
@@ -319,6 +328,11 @@ Tiga sifat yang disengaja:
 - **Kunci disimpan sebagai hash.** Konfigurasi yang bocor tidak langsung
   memberi penyerang kunci yang bisa dipakai, dan kunci mentah tidak
   pernah masuk log — bahkan saat autentikasi gagal.
+
+  Satu pengecualian yang disebut terus terang: sejak tiket verifikasi
+  ada, hash tersimpan itu juga jadi bahan kunci penandatanganan. Jadi
+  konfigurasi yang bocor **bisa** dipakai memalsukan tiket atas nama PJP
+  itu. Tercatat sebagai R14 di `THREAT-MODEL.md`.
 - **Kuota dihitung per klien, bukan per IP.** Ini yang menutup batasan R8:
   di balik NAT seluruh ruangan berbagi satu alamat.
 
@@ -356,6 +370,17 @@ Contoh permintaan:
 }
 ```
 
+Setiap tanggapan membawa `verification_ticket` — putusan yang
+ditandatangani dan **diikat ke sidik jari payload** yang diperiksa,
+berlaku 90 detik. Gunanya menutup jeda antara "diperiksa" dan
+"dieksekusi": tanpa itu, aplikasi bisa memverifikasi QR A lalu membayar
+ke QR B.
+
+Ia **mengikat**, bukan **memaksa** — Q-Shield tidak berada di jalur
+eksekusi pembayaran dan tidak bisa menolak apa pun di sana. Batasannya
+tercatat sebagai R15 dan R16 di `THREAT-MODEL.md`, dan algoritma
+pemeriksaannya di `API.md`.
+
 Contoh tanggapan:
 
 ```json
@@ -368,9 +393,33 @@ Contoh tanggapan:
   ],
   "signals": ["nmid_changed_at_anchor"],
   "layers": { "location": 83, "behavior": 0 },
+  "merchant": {
+    "nmid": "ID1099887766554", "name": "WARUNG BU SRI",
+    "city": "BANDUNG", "criteria": "Usaha Mikro", "is_static": true
+  },
+  "fees": {
+    "indicator": null, "label": null,
+    "fixed": null, "percent": null, "present": false
+  },
+  "tlv": [],
+  "verification_ticket": "eyJhY3Rpb24iOi...gwQ",
+  "ticket_expires_in": 90,
+  "location_source": "live",
+  "device_integrity": "not_provided",
   "processing_ms": 2.8
 }
 ```
 
 `layers` memisahkan sumbangan tiap lapisan supaya bisa ditelusuri dari mana
-skornya datang — `location` untuk Layer 1, `behavior` untuk Layer 2.
+skornya datang — `location` untuk Layer 1, `behavior` untuk Layer 2. Ia
+alat **audit**, bukan bahan keputusan pengguna: halaman scanner sengaja
+tidak menampilkannya (Keputusan 44).
+
+Tiga field terakhir adalah **pengungkapan, bukan skor** — tidak satu pun
+menyentuh penilaian:
+
+| Field | Isi |
+|---|---|
+| `fees` | biaya di luar nominal yang diminta payload (tag 55/56/57) |
+| `tlv` | bedah TLV per tag; kosong kecuali permintaan menyetel `include_tlv` |
+| `device_integrity` | `not_provided` berarti pemeriksaan tidak pernah dijalankan, bukan dijalankan lalu lolos |

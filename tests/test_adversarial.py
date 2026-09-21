@@ -244,6 +244,36 @@ def _a9():
     return "tiga bentuk NMID cacat, semua ditolak"
 
 
+@serangan("Kode negara cacat bentuk — tanpa menghakimi negaranya")
+def _a14():
+    _, c = fresh_store()
+
+    # Parser sudah lama mengambil tag 58, dan MANDATORY_TAGS sudah
+    # menuntut KEHADIRANNYA — tapi nilainya dulu tidak pernah dibaca
+    # siapa pun, jadi tag yang hadir tapi cacat lolos tanpa sinyal.
+    for buruk in ("IDN", "I", "1D", "I2", "ID1", ""):
+        d = scan(c, qr(PENYERANG, extra={"58": buruk}),
+                 lat=-8.65, lng=115.2167)
+        assert d["verdict"] == "anomaly", f"kode negara '{buruk}' lolos"
+        assert "malformed_country" in d["signals"], (
+            f"'{buruk}' tidak memicu malformed_country: {d['signals']}")
+
+    # Dan yang TIDAK boleh dihukum. Baris "SG" yang paling penting:
+    # godaan besarnya adalah menuntut tag 58 == "ID", dan cek kebijakan
+    # itu berbobot W_STRUCTURAL serta memaksa anomaly — ia akan
+    # menghukum payload sah dengan bobot penuh. QRIS punya
+    # keterhubungan lintas negara, jadi yang diperiksa BENTUKNYA saja.
+    # Padding dan huruf kecil ikut ditoleransi: penyimpangan penulisan,
+    # bukan kontradiksi.
+    for wajar in ("ID", "ID ", " ID", "id", "SG"):
+        d = scan(c, qr(KORBAN, pan="936000149000000001",
+                       extra={"58": wajar}), device="pelanggan-0001")
+        assert "malformed_country" not in d["signals"], (
+            f"'{wajar}' dihukum padahal bentuknya sah: {d['signals']}")
+    return ("enam bentuk cacat ditolak; padding, huruf kecil, dan "
+            "negara lain lolos bersih")
+
+
 @serangan("Layer 2 dipakai memutihkan lokasi yang mencurigakan")
 def _a10():
     _, c = fresh_store()

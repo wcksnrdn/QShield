@@ -108,7 +108,8 @@ bukan sekadar gangguan UX.
 | T4 | Priming pelan di lokasi kosong lalu klaim `verified` | P2 | Butuh `MIN_OBSERVERS`=3 **dan** `MIN_AGE_HOURS`=24; status tetap `unknown` sampai keduanya terpenuhi | `test_adversarial.py` (30 device boneka) |
 | T5 | Ketiadaan bukti dikonversi jadi kepercayaan | P2 | `unknown` tidak pernah menghasilkan `proceed`, dijaga struktural di `_floor_action()` | `test_invariants.py` #2 |
 | T6 | Stiker dicetak ulang dengan CRC yang benar | P1, P3 | CRC valid tidak menyelamatkan; jangkar yang menangkap. Layer 2 menambah deteksi kontradiksi struktural | `test_adversarial.py` "CRC ditambal"; "NMID dipalsukan" |
-| T7 | Payload dibangkitkan ulang oleh generator penyerang | P3 | Sinyal struktural Layer 2: QR statis membawa nominal, tag wajib hilang, NMID cacat bentuk — 0 positif palsu dari 20.000 payload sah | `calibrate_layer2.py` bagian 3 |
+| T7 | Payload dibangkitkan ulang oleh generator penyerang | P3 | Sinyal struktural Layer 2: QR statis membawa nominal, tag wajib hilang, NMID cacat bentuk — 0 positif palsu dari 20.000 payload sah | `calibrate_layer2.py` bagian 2 |
+| T40 | Tag wajib hadir tapi isinya cacat, lolos karena hanya kehadirannya diperiksa | P3 | Nilai tag 58 diperiksa BENTUKNYA (alpha-2, dua huruf) — bukan negaranya, supaya keterhubungan QRIS lintas negara tidak dihukum | `test_adversarial.py` "Kode negara cacat bentuk" |
 
 ### 5.2 Terhadap ketersediaan (A2)
 
@@ -135,6 +136,9 @@ bukan sekadar gangguan UX.
 | T32 | Perangkat di-root / aplikasi dimodifikasi | P3 | Dilaporkan klien native lewat `device_integrity`; `rooted` dan `attested: false` diberi skor | `test_contract.py` "Integritas perangkat opsional" |
 | T33 | GPS dipalsukan di perangkat yang melaporkan jujur | P3 | `mock_location: true` menolak memberi putusan lokasi sama sekali — perlakuan yang sama dengan akurasi buruk, karena masalahnya sama | `test_contract.py` "Integritas perangkat opsional" |
 | T34 | Klien berbohong soal integritasnya sendiri | P3 | Tidak bisa dicegah Q-Shield. `attested` bermakna hanya karena PJP memverifikasinya di sisi mereka dan mempertanggungkannya lewat kunci API — kepercayaan pada PJP, bukan pada perangkat | `INTEGRATION.md` §3 |
+| T41 | Verifikasi QR A, lalu eksekusi pembayaran ke QR B | P3, P5 | Tiket verifikasi mengikat putusan ke sidik jari payload; pihak yang mengeksekusi menghitung ulang dan menuntutnya cocok | `test_ticket.py` "SERANGAN: verifikasi QR A, bayar QR B" |
+| T42 | Tiket dicuri, dirusak, atau dipakai lewat masa berlaku | P3, P5 | HMAC-SHA256 + `compare_digest`; TTL 90 detik; tiket dari masa depan ditolak | `test_ticket.py` "Tiket rusak, palsu, dan kedaluwarsa" — 5 bentuk serangan |
+| T43 | Jejak audit salah melabeli peristiwa integritas, sehingga auditor melewatkannya | — (bug, bukan serangan) | Ketiga cabang `verify()` wajib meneruskan status integritas yang sama dengan tanggapannya; dulu cabang mock location jatuh ke bawaan `not_provided` | `test_hardening.py` "Jejak audit mencatat status integritas yang SEBENARNYA" — 4 keadaan × 3 cabang |
 | T14 | Sinyal yang menandai merchant sah sebagai penyerang | — | Konstanta wajib punya dasar empiris; sinyal yang gagal kalibrasi dibuang, bukan dipaksakan | `calibrate_layer2.py` — sinyal lonjakan pemindaian dibuang |
 
 ### 5.4 Terhadap privasi (A3)
@@ -181,6 +185,9 @@ diam-diam mengklaim bisa menahan hal-hal di bawah ini.
 | R6 | ~~Merchant keliling~~ **DITUTUP** | — | Ditandai `is_mobile` saat pendaftaran; ikatan lokasi tidak berlaku, dan bindingnya tidak mengklaim lokasi yang disinggahi | Ditangani |
 | R7 | **Sidik jari encoding belum tervalidasi lapangan** | Belum punya korpus payload QRIS asli dari berbagai acquirer | Kumpulkan korpus lewat `fieldkit.py` | **Dipersempit.** Dialek penerbit kini dipelajari per prefiks PAN dan dibandingkan per payload; profilnya hanya terbentuk untuk penerbit yang generatornya konsisten |
 | R8 | ~~Rate limit per-IP kasar di balik NAT~~ **DITUTUP** | — | Kuota kini dikunci ke `client_id` hasil autentikasi, bukan alamat | Klien di balik NAT tidak lagi saling menghabiskan kuota |
+| R14 | **Konfigurasi yang bocor kini bisa memalsukan tiket** | Kunci tiket diturunkan dari hash kunci API yang tersimpan, supaya tidak ada kunci baru yang perlu didistribusikan. Harganya: bocornya `QSHIELD_API_KEYS` tidak lagi sekadar membocorkan verifier — ia memberi kemampuan menandatangani tiket atas nama PJP itu | Tanda tangan asimetris (kunci privat terpisah, tidak pernah ada di konfigurasi) saat `cryptography` sudah layak ditarik sebagai dependensi | **Sedang** — melemahkan properti yang diklaim README, tapi penyerang yang memegang kunci API sudah bisa memanggil `/verify` atas nama PJP itu |
+| R15 | **Tiket tidak bisa MEMAKSA siapa pun** | Yang mengeksekusi pembayaran adalah PJP; Q-Shield tidak ada di jalur itu. PJP yang mengabaikan `cooling_off` akan mengabaikan tiketnya juga | Penegakan sungguhan menuntut switch/acquirer menolak menyelesaikan transaksi tanpa tiket sah — tingkat infrastruktur, bukan tingkat pustaka | **Diakui.** Tiket MENGIKAT, tidak memaksa; klaim sebaliknya tidak pernah dibuat di dokumen mana pun |
+| R16 | **Tiket bisa di-replay dalam masa berlakunya** | Stateless dan tidak disimpan, jadi QR yang sama bisa dieksekusi dua kali dalam 90 detik | Idempotensi transaksi milik PJP; sejalan dengan R2 yang memang di luar jangkauan | Rendah — diuji dan didokumentasikan (`test_ticket.py` "Yang TIDAK diklaim") |
 | R10 | **Penyerang yang menang balapan cold start** | **Dimitigasi sebagian.** `ADJACENT_MIN_RATIO` = 0,10 menuntut basis pengamat sebanding sebelum pengecualian koeksistensi berlaku; serangan modal minimum (3 device) tidak lagi lolos. Penyerang yang mengeluarkan >5 device masih lolos | Penutupan penuh lewat R1; R9 sudah ditutup dan mempersempit populasi penyerang jadi PJP terdaftar | Sedang — biaya penyerang naik, celah belum tertutup |
 | R11 | ~~Pedagang bersebelahan yang sah dituduh menukar stiker~~ **DITUTUP** | — | Pengecualian koeksistensi kini juga bisa diperoleh lewat bukti kehadiran fisik: `ADJACENT_MIN_DEVICES` = 8 perangkat berbeda, rentang 24 jam, DAN merchant lama harus tetap terpindai setelah penantang muncul | Kebuntuan hilang: lapak sah pulih dalam 3–5 hari. Penukaran sungguhan tetap ditahan — QR yang tertutup membuat merchant lama diam, dan itu tidak bisa dipalsukan tanpa membatalkan serangannya |
 | R12 | ~~Pedagang yang pindah lokasi dituduh menyebar stiker~~ **DITUTUP** | — | `nmid_scatter` kini bisa diganti `nmid_relocated` bila terbukti: 8 perangkat berbeda di tempat baru, semua lokasi lama sudah diam, DAN periode aktif lokasi-lokasi lama tidak pernah beririsan | Sebelumnya permanen tanpa syarat — 500 pengamat di lokasi baru dan lokasi lama berumur 10 tahun pun tidak menyembuhkan, karena cabang ini tidak menyaring binding usang. Kini pulih dalam 3 hari. Penyebaran tetap ditahan: stiker yang dipasang bersamaan punya rentang yang tumpang tindih walau jarang dipindai |
@@ -353,6 +360,16 @@ Diurutkan berdasarkan risiko, bukan usaha.
 4. **Kalibrasi lapangan seluruh parameter** — nilai sekarang titik awal demo, bukan hasil data nyata
 5. **Rotasi dan retensi log** — jejak audit tumbuh tanpa batas
 6. **Korpus payload QRIS asli** (R7) — memvalidasi sinyal sidik jari encoding
+7. **Verifikasi spec untuk tag 55-57 dan tag 58** — keduanya kini diparse
+   dan diungkapkan tapi sengaja TIDAK diskor, karena belum terverifikasi
+   apakah biaya layanan pada QR statis dan kode negara non-`ID` itu
+   menyalahi spec QRIS atau justru sah (Keputusan 35, 41)
+8. **Nilai forensik jejak audit** — payload mentah sengaja tidak dicatat
+   (PAN merchant ada di dalamnya), sehingga penyidik tidak bisa memeriksa
+   ulang byte QR setelah kejadian. Bentuk yang bertahan terhadap
+   keberatan itu adalah mencatat **hash** payload, bukan payloadnya
+9. **CI** — tidak ada `.github/`; `preflight.py` satu-satunya yang pernah
+   menjalankan suite secara otomatis (Keputusan 37)
 
 ---
 

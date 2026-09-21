@@ -10,6 +10,18 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Dibutuhkan SELURUH tests/. `fastapi.testclient` menarik
+# `starlette.testclient`, yang menuntut httpx2 saat diimpor.
+#
+# Tanpa deklarasi ini, `pip install -e .` di mesin bersih menghasilkan
+# repo yang sepuluh suite-nya tidak bisa dijalankan sama sekali —
+# termasuk test_invariants.py, yang README sebut sebagai syarat sebelum
+# commit apa pun yang menyentuh penilaian. Kegagalannya diam: modulnya
+# gagal diimpor, bukan invariannya yang jebol.
+test = [
+    "httpx2",
+]
+
 # Hanya dibutuhkan scripts/make_qr.py untuk mencetak dan memverifikasi
 # prop fisik. Sengaja dipisah supaya layanan tidak ikut menyeret OpenCV.
 props = [
