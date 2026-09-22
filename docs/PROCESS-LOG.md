@@ -2417,6 +2417,81 @@ menghormati WAL dan menghasilkan satu berkas konsisten.
 
 ---
 
+## Keputusan 69 — Mengkatalogkan QRIS menuduh pedagang di sekitarnya
+
+Dilaporkan dari lapangan, dan diagnosisnya memakai data produksi
+sungguhan. Seorang anggota tim duduk di kantornya dan mengkatalogkan
+QRIS satu per satu lewat aplikasi. Setiap pemindaian dijawab `anomaly`.
+Ia pindah ke pantry; hasilnya sama.
+
+**Yang sebenarnya terjadi.** Kantornya jatuh 2,4 meter dari jangkar Es
+Kelapa — pedagang sungguhan yang sudah `verified`. Setiap NMID asing
+yang dipindai di situ adalah tanda tangan pertukaran stiker, persis
+seperti yang dirancang. Pantry masih di dalam radius jangkar yang sama.
+
+Dan setiap pemindaian itu menandai jangkar Es Kelapa sebagai sasaran:
+enam percobaan anomali tercatat sebelum ketahuan. Pedagang sungguhan
+tertuduh oleh aktivitas yang bukan serangan.
+
+**Dua cacat yang berbeda.**
+
+Pertama, celah yang tersisa dari Keputusan 54. Penjaganya hanya
+menahan PEMBELAJARAN; pencatatan anomali berjalan terus. Pemindaian
+yang dinyatakan bukan dari lapangan tetap menandai jangkar tetangganya.
+`lokasi_tepercaya` kini ikut menjaga cabang itu.
+
+Kedua, dan ini yang mendasar: **`/verify` hanya bisa menjawab satu
+pertanyaan** — apakah stiker ini sah DI SINI. Orang yang mengkatalogkan
+tidak sedang bertanya itu, dan tidak punya cara mengatakannya.
+
+**`POST /api/v1/inspect`** menjawab pertanyaan yang berbeda: payload ini
+isinya apa, bentuknya wajar atau tidak. Tidak menerima koordinat, tidak
+menerbitkan tier aksi, tidak menerbitkan tiket — menerbitkan tiket dari
+sini berarti menyediakan cara memperoleh "izin" untuk QR yang tidak
+pernah diperiksa tempatnya.
+
+Yang dipelajari darinya hanya tingkat payload. Terukur pada skenario
+yang dilaporkan: lewat `/verify`, lima pemindaian katalog menghasilkan
+lima anomali, lima baris tantangan, lima percobaan anomali. Lewat
+`/inspect`, nol pengetahuan lokasi tersentuh sementara dialek penerbit
+naik 6→36 dan ciri merchant 8→48.
+
+---
+
+## Keputusan 70 — Radius jangkar bukan penyebabnya; resolusi GPS yang batas
+
+Dugaan pertama saat laporan di atas masuk: `ANCHOR_RADIUS_M` = 50 m
+terlalu kasar untuk ritel padat Indonesia. Diukur dengan koordinat
+sungguhan dari korpus produksi, dugaan itu **salah**.
+
+Ketiga merchant di lokasi itu berjarak 0,6 — 2,8 meter satu sama lain:
+
+| radius | hasil |
+|---|---|
+| 50 m | satu jangkar |
+| 15 m | satu jangkar |
+| 5 m | satu jangkar |
+| 3 m | satu jangkar |
+
+Memperkecil radius tidak memisahkan mereka pada nilai mana pun yang
+masuk akal. Dan memperkecilnya punya harga: akurasi GPS pada pemindaian
+itu 14–16 m, jadi radius di bawah itu akan memecah SATU pedagang
+menjadi beberapa jangkar setiap kali GPS bergeser.
+
+Sidik jari WiFi juga tidak menolong di sini, dan itu konsisten: irisan
+antar-merchant di tempat yang sama 0,66–0,80 — WiFi dengan benar
+mengatakan "tempat yang sama", tapi tidak bisa mengatakan "pedagang
+yang mana".
+
+**Kesimpulan yang jujur: pedagang yang berjarak beberapa meter tidak
+dapat dibedakan oleh sinyal fisik mana pun yang kami punya.** Itu batas
+fisik, bukan kekurangan penyetelan. Yang menanganinya adalah aturan
+koeksistensi (R11) dan pendaftaran PJP (R4) — bukan angka radius.
+
+Dicatat supaya dugaan yang sama tidak diulangi tanpa diukur lagi.
+
+---
+
 ## Hasil pengujian
 
 ```
