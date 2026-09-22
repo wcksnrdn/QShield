@@ -9,7 +9,7 @@ Verifikasi kepercayaan QRIS sebelum PIN entry, dua lapis:
 
 Keduanya bisa gagal sendiri-sendiri, jadi Layer 2 **melengkapi**, bukan
 menggantikan, putusan Layer 1. Aturan komposisinya ada di
-`binding.compose()` dan dicatat sebagai Keputusan 10 di `PROCESS-LOG.md`.
+`binding.compose()` dan dicatat sebagai Keputusan 10 di `docs/PROCESS-LOG.md`.
 
 ## Menjalankan
 
@@ -119,6 +119,14 @@ src/qshield/     package utama — import sebagai `qshield` setelah `pip install
   audit.py         jejak audit terstruktur tanpa PII
   api.py           endpoint FastAPI
   web/index.html   scanner — satu berkas, tanpa build step
+docs/            dokumen — dikelompokkan menurut siapa pembacanya
+  API.md            kontrak API v1 + kebijakan versi
+  INTEGRATION.md    panduan integrasi untuk PJP
+  DEPLOY.md         deployment, secrets, rencana migrasi basis data
+  THREAT-MODEL.md   ancaman, mitigasi, dan risiko yang masih terbuka
+  PROCESS-LOG.md    keputusan desain beserta alasannya
+  panduan/          tatacara untuk tim sendiri
+  pitch/            materi lomba + PDF yang perlu diperbarui
 sdk/             tempat SDK native masuk — kontrak, fixture, checklist
   README.md         seam SDK <-> backend; baca §1 sebelum menulis kode
   contract/         fixture permintaan/tanggapan, DIHASILKAN dari kode
@@ -137,6 +145,12 @@ scripts/         skrip yang dijalankan langsung, bukan bagian dari package
   calibrate_transfer.py kalibrasi bobot transfer manual
   calibrate_rarity.py  kalibrasi model kelangkaan
   calibrate_decay.py  kalibrasi peluruhan jejak serangan
+  calibrate_falsepos.py gesekan pada pedagang jujur
+  calibrate_tetangga.py pedagang bersebelahan (R11)
+  calibrate_kehadiran.py ambang bukti kehadiran fisik
+  calibrate_relokasi.py pedagang pindah lokasi (R12)
+  bersihkan_gambar.py  buang pengetahuan lokasi dari pemindaian gambar
+  make_android_prompt.py prompt Android Studio terisi otomatis
   fieldkit.py         kumpulkan & analisis data lapangan
   diagnose.py         bongkar kenapa satu pemindaian berakhir begitu
   sdk_contract.py     hasilkan fixture seam SDK, atau validasi payload SDK
@@ -150,20 +164,39 @@ yang juga mengimpor `scripts/seed.py` secara langsung.
 
 ## Dokumen
 
+Dikelompokkan menurut siapa yang membacanya.
+
+**Referensi teknis** — untuk siapa pun yang menyentuh kodenya
+
 | Berkas | Isi |
 |---|---|
-| `PROCESS-LOG.md` | keputusan desain, temuan, dan alasannya |
-| `THREAT-MODEL.md` | batas kepercayaan, ancaman, mitigasi + bukti testnya |
-| `API.md` | kontrak API v1 dan kebijakan versinya |
-| `DEPLOY.md` | rencana migrasi Postgres, secrets, container |
-| `INTEGRATION.md` | panduan integrasi untuk PJP, termasuk slot integritas perangkat |
-| `PDF-UPDATE.md` | teks pengganti untuk Q-Shield-Overview.pdf yang sudah basi |
-| `PITCH-PJP.md` | alasan bisnis untuk PJP + panduan pendekatan dari nol |
-| `KLARIFIKASI-ML.md` | koreksi istilah ML untuk panitia, plus panduan kapan perlu dikirim |
-| `PITCH-AUDIT.md` | audit naskah pitch ke kode + naskah pengganti |
-| `PANDUAN-SCAN.md` | tatacara mengumpulkan QRIS: korpus payload vs survei lokasi |
-| `PROMPT-ANDROID.md` | prompt siap kirim untuk agent Android Studio |
-| `sdk/README.md` | seam untuk penulis SDK native: kontrak, fixture, checklist |
+| [`docs/API.md`](docs/API.md) | kontrak API v1 dan kebijakan versinya |
+| [`docs/INTEGRATION.md`](docs/INTEGRATION.md) | panduan integrasi untuk PJP, termasuk slot integritas perangkat |
+| [`docs/DEPLOY.md`](docs/DEPLOY.md) | deployment, secrets, rencana migrasi Postgres |
+| [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) | batas kepercayaan, ancaman, mitigasi + bukti testnya |
+| [`sdk/README.md`](sdk/README.md) | seam untuk penulis SDK native: kontrak, fixture, checklist |
+
+**Riwayat keputusan** — kenapa sesuatu dibuat begitu
+
+| Berkas | Isi |
+|---|---|
+| [`docs/PROCESS-LOG.md`](docs/PROCESS-LOG.md) | tiap keputusan desain, temuan, dan alasannya |
+
+**Tatacara tim**
+
+| Berkas | Isi |
+|---|---|
+| [`docs/panduan/PANDUAN-SCAN.md`](docs/panduan/PANDUAN-SCAN.md) | cara mengumpulkan QRIS: korpus payload vs survei lokasi |
+| `docs/panduan/PROMPT-ANDROID.md` | prompt Android Studio — **dibuat oleh `scripts/make_android_prompt.py`**, tidak ada di git karena memuat alamat IP mesin pembuatnya |
+
+**Materi lomba**
+
+| Berkas | Isi |
+|---|---|
+| [`docs/pitch/PITCH-PJP.md`](docs/pitch/PITCH-PJP.md) | alasan bisnis untuk PJP + panduan pendekatan dari nol |
+| [`docs/pitch/PITCH-AUDIT.md`](docs/pitch/PITCH-AUDIT.md) | audit naskah pitch terhadap kode + naskah pengganti |
+| [`docs/pitch/KLARIFIKASI-ML.md`](docs/pitch/KLARIFIKASI-ML.md) | koreksi istilah ML untuk panitia |
+| [`docs/pitch/PDF-UPDATE.md`](docs/pitch/PDF-UPDATE.md) | teks pengganti untuk `Q-Shield-Overview.pdf` yang sudah basi |
 
 ## Sebelum demo
 
@@ -337,7 +370,7 @@ Tiga sifat yang disengaja:
   Satu pengecualian yang disebut terus terang: sejak tiket verifikasi
   ada, hash tersimpan itu juga jadi bahan kunci penandatanganan. Jadi
   konfigurasi yang bocor **bisa** dipakai memalsukan tiket atas nama PJP
-  itu. Tercatat sebagai R14 di `THREAT-MODEL.md`.
+  itu. Tercatat sebagai R14 di `docs/THREAT-MODEL.md`.
 - **Kuota dihitung per klien, bukan per IP.** Ini yang menutup batasan R8:
   di balik NAT seluruh ruangan berbagi satu alamat.
 
@@ -345,7 +378,7 @@ Untuk demo lokal jalankan dengan `QSHIELD_AUTH=off`.
 
 ## Endpoint
 
-Kontrak lengkap beserta kebijakan versinya ada di [`API.md`](API.md),
+Kontrak lengkap beserta kebijakan versinya ada di [`docs/API.md`](docs/API.md),
 dan dikunci oleh `tests/test_contract.py`.
 
 ```
@@ -384,8 +417,8 @@ ke QR B.
 
 Ia **mengikat**, bukan **memaksa** — Q-Shield tidak berada di jalur
 eksekusi pembayaran dan tidak bisa menolak apa pun di sana. Batasannya
-tercatat sebagai R15 dan R16 di `THREAT-MODEL.md`, dan algoritma
-pemeriksaannya di `API.md`.
+tercatat sebagai R15 dan R16 di `docs/THREAT-MODEL.md`, dan algoritma
+pemeriksaannya di `docs/API.md`.
 
 Contoh tanggapan:
 

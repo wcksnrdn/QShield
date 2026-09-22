@@ -843,7 +843,7 @@ def _b4():
     d = scan(c, qr(PENYERANG), device="penyerang-kaya-01")
     assert d["verdict"] == "verified", (
         "prasyarat batasan berubah — apakah R10 sudah tertutup penuh? "
-        "Perbarui THREAT-MODEL.md R10 dan catatan ini."
+        "Perbarui docs/THREAT-MODEL.md R10 dan catatan ini."
     )
 
     # Ambang biayanya harus persis seperti yang dikalibrasi.

@@ -1,7 +1,7 @@
 """
 Autentikasi klien.
 
-R9 di THREAT-MODEL.md: tanpa ini, siapa pun bisa mengirim pengamatan ke
+R9 di docs/THREAT-MODEL.md: tanpa ini, siapa pun bisa mengirim pengamatan ke
 API. Rate limiting memperlambat pencemaran basis data, tapi tidak
 menghentikan penyerang yang sabar — dan basis data binding adalah aset
 A1, inti nilai sistem.
@@ -96,7 +96,7 @@ class ClientRegistry:
 
         Konsekuensinya jujur: konfigurasi yang bocor kini bisa dipakai
         memalsukan tiket, dan itu melemahkan properti yang diklaim di
-        docstring atas. Tercatat sebagai R14 di THREAT-MODEL.md.
+        docstring atas. Tercatat sebagai R14 di docs/THREAT-MODEL.md.
         """
         return self._clients.get(client_id)
 

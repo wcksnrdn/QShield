@@ -1,7 +1,7 @@
 # Tempat SDK native masuk
 
 Dokumen ini untuk **penulis SDK Android**, bukan untuk PJP. Panduan PJP
-ada di [`../INTEGRATION.md`](../INTEGRATION.md); yang ini soal batas
+ada di [`../docs/INTEGRATION.md`](../docs/INTEGRATION.md); yang ini soal batas
 teknis antara SDK dan backend, dan cara bekerja di kedua sisi tanpa
 saling menunggu.
 
@@ -58,7 +58,7 @@ field yang sama.
 | Validator payload offline | **selesai** | `scripts/sdk_contract.py check` |
 | Pengumpulan lokasi + integritas di Android | **bagianmu** | `sdk/android/` |
 | Pemanggilan HTTP + parsing tanggapan | **bagianmu** | `sdk/android/` |
-| Pemetaan 4 tier ke UI | **bagianmu** | `INTEGRATION.md` §2 |
+| Pemetaan 4 tier ke UI | **bagianmu** | `../docs/INTEGRATION.md` §2 |
 | Penerbitan tiket verifikasi | **selesai** | `src/qshield/ticket.py` |
 | Pemeriksaan tiket saat eksekusi | **bagianmu / backend PJP** | §6 |
 | Endpoint pemeriksa tiket | **selesai** | `POST /api/v1/tickets/verify` |
@@ -285,7 +285,7 @@ Empat hal yang paling sering salah, semuanya ditangkap `check`:
 - **`device_anon_id` bukan identitas.** `UUID.randomUUID().toString()`
   yang disimpan per pemasangan. **Jangan** `ANDROID_ID`, jangan IMEI,
   jangan apa pun yang menempel pada orangnya — seluruh argumen privasi
-  di `THREAT-MODEL.md` §7 bersandar pada ini.
+  di `../docs/THREAT-MODEL.md` §7 bersandar pada ini.
 - **`payload` apa adanya.** Jangan di-trim, jangan di-decode ulang,
   jangan diubah huruf besar-kecilnya. Sinyal sidik jari encoding di
   Layer 2 membaca bentuk aslinya.
@@ -332,8 +332,8 @@ perangkat yang dikuasai penyerang adalah yang ingin kita tangkap.
 ```
 
 Q-Shield **tidak bisa mendeteksi** pelanggaran ini — rantai
-kepercayaannya memang berhenti di PJP (`INTEGRATION.md` §3, dan T34 di
-`THREAT-MODEL.md`). Karena itu satu-satunya tempat aturan ini bisa
+kepercayaannya memang berhenti di PJP (`../docs/INTEGRATION.md` §3, dan T34 di
+`../docs/THREAT-MODEL.md`). Karena itu satu-satunya tempat aturan ini bisa
 ditegakkan adalah di kepala penulis SDK, dan `sdk_contract.py check`
 akan memperingatkanmu setiap kali melihat `attested: true`.
 

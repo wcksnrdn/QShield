@@ -1,0 +1,62 @@
+# Konfigurasi Fly.io untuk Q-Shield.
+#
+# Nama app disetel saat `fly launch`; kalau bentrok, ganti di sini dan
+# di perintah berikutnya.
+app = "qshield"
+
+# Singapura: pusat data terdekat dari Indonesia. Latensi penting karena
+# Q-Shield berjalan SEBELUM PIN — pengguna menunggu hasilnya.
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  # Basis data hidup di volume, bukan di lapisan image. Nilai yang sama
+  # sudah ada di Dockerfile; ditulis ulang di sini supaya terlihat.
+  QSHIELD_DB = "/data/qshield.db"
+  QSHIELD_RATE_LIMIT = "60"
+  QSHIELD_LOG_LEVEL = "INFO"
+  # Mode survei lapangan TIDAK boleh menyala di server publik: ia
+  # membuka endpoint yang menulis berkas tanpa autentikasi penuh.
+  QSHIELD_FIELD_MODE = ""
+
+  # QSHIELD_DEVICE_SALT sengaja TIDAK disetel di sini.
+  #
+  # Garamnya sudah tersimpan di dalam basis data yang dipindahkan, dan
+  # store.py membaca env LEBIH DULU kalau ada. Menyetelnya di sini
+  # berarti garam baru menimpa yang lama, dan device_ref untuk perangkat
+  # yang sama jadi berbeda — satu HP yang pernah memindai Es Kelapa akan
+  # terhitung sebagai pengamat KEDUA. Konsensus yang sudah dikumpulkan
+  # rusak tanpa ada yang error.
+  #
+  # QSHIELD_API_KEYS juga tidak di sini: itu rahasia, disodorkan lewat
+  # `fly secrets set`, tidak pernah masuk berkas yang di-commit.
+
+[[mounts]]
+  source = "qshield_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  # Mesin TIDAK dimatikan saat menganggur.
+  #
+  # Dua alasan. Satu, start dingin menambah detik pada jalur yang
+  # klaimnya "di bawah 200 ms". Dua, dan ini yang menentukan: volume
+  # mengikat mesin ke satu host, jadi mesin yang mati bukan sekadar
+  # lambat bangun — ia satu-satunya yang memegang korpus.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/api/v1/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

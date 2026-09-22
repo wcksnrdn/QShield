@@ -13,7 +13,7 @@ Jadi diisi di sini, tiap kali dijalankan.
   python scripts/make_android_prompt.py --app-id com.namakalian.qshield
   python scripts/make_android_prompt.py --host 10.0.0.5
 
-Keluarannya PROMPT-ANDROID.md — salin seluruh isinya ke agent.
+Keluarannya docs/panduan/PROMPT-ANDROID.md — salin seluruh isinya ke agent.
 """
 
 import os
@@ -23,7 +23,7 @@ import subprocess
 import sys
 
 AKAR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-KELUARAN = os.path.join(AKAR, "PROMPT-ANDROID.md")
+KELUARAN = os.path.join(AKAR, "docs", "panduan", "PROMPT-ANDROID.md")
 APP_ID_BAWAAN = "id.qshield.scanner"
 PROYEK_ANDROID = os.path.expanduser("~/AndroidStudioProjects/QShield")
 

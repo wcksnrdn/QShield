@@ -20,6 +20,23 @@ qshield.db-shm
 # Data container
 data/
 
+# Artefak build setuptools. Pernah TERLACAK di git, dan isinya salinan
+# BASI dari src/ — pencarian kode jadi menemukan dua versi berbeda dari
+# berkas yang sama, dan yang basi terlihat sama sahnya.
+build/
+dist/
+
+# Prompt Android — DIBUAT OTOMATIS oleh scripts/make_android_prompt.py
+# dan memuat alamat IP laptop yang menjalankannya. Kalau dilacak, tiap
+# anggota tim menghasilkan diff berbeda dan saling bentrok — dan versi
+# milik orang lain justru menyesatkan, karena alamatnya bukan alamat
+# mesin yang sedang dipakai. Jalankan skripnya, jangan tarik dari git.
+docs/panduan/PROMPT-ANDROID.md
+
+# Cadangan basis data — dibuat scripts/bersihkan_gambar.py dan saat
+# migrasi. Isinya korpus lapangan, sama seperti qshield.db.
+qshield.db.cadangan-*
+
 # Sertifikat lokal — JANGAN di-commit, key.pem itu kunci privat
 certs/
 
