@@ -13,7 +13,7 @@ PEMINDAIAN. Bagian itu sudah DIBUANG bersama sinyalnya di Keputusan 13 —
 tidak ada satu pun ambang yang menangkap serangan tanpa menghukum warung
 laris, karena membangun reputasi palsu hanya butuh MIN_OBSERVERS device
 dalam rentang MIN_AGE_HOURS jam, jadi serangannya pelan, bukan meledak.
-Tabel yang membatalkannya tersimpan di PROCESS-LOG.md Keputusan 13.
+Tabel yang membatalkannya tersimpan di docs/PROCESS-LOG.md Keputusan 13.
 
 Kodenya ikut dibuang, bukan dikomentari, karena ia memanggil
 `bh.SCAN_BURST_WINDOW_MIN` yang sudah tidak ada — dan skrip yang crash

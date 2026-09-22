@@ -1,6 +1,6 @@
 """Kalibrasi celah R10: berapa mahal menutupnya?
 
-THREAT-MODEL.md R10 mencatat bahwa aturan `adjacent_merchant` memberi
+docs/THREAT-MODEL.md R10 mencatat bahwa aturan `adjacent_merchant` memberi
 pengecualian koeksistensi tanpa memeriksa apa pun selain "keduanya
 mapan". Penyerang yang menang balapan cold start lolos lewat situ.
 

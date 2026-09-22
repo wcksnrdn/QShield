@@ -1,7 +1,7 @@
 # Q-Shield untuk penyelenggara pembayaran
 
 Dokumen ini untuk kepala produk, risk, atau compliance di PJP — bukan
-untuk tim engineering. Panduan teknisnya terpisah di `INTEGRATION.md`.
+untuk tim engineering. Panduan teknisnya terpisah di `../INTEGRATION.md`.
 
 ---
 
@@ -172,7 +172,7 @@ dan lebih baik mendengarnya dari kami.
 | Merchant berjarak di bawah 15 meter | Batas presisi GPS. Dipersempit lewat penghalusan jangkar, tidak hilang |
 | Parameter belum dikalibrasi lapangan | Nilai sekarang berasal dari simulasi dan pengujian terbatas, ditandai eksplisit di kode |
 
-Dokumen ancaman lengkap beserta pengujiannya ada di `THREAT-MODEL.md`.
+Dokumen ancaman lengkap beserta pengujiannya ada di `../THREAT-MODEL.md`.
 Setiap klaim keamanan di sana menunjuk ke pengujian yang bisa Anda
 jalankan sendiri.
 
@@ -261,8 +261,8 @@ kalian justru yang membuatnya dibaca.
 | Berkas | Untuk siapa |
 |---|---|
 | `PITCH-PJP.md` | kepala produk / risk / compliance |
-| `INTEGRATION.md` | tim engineering mereka |
-| `THREAT-MODEL.md` | tim keamanan mereka |
+| `../INTEGRATION.md` | tim engineering mereka |
+| `../THREAT-MODEL.md` | tim keamanan mereka |
 | demo langsung | semua orang |
 
 Demonya jalankan **sebelum** presentasi, bukan sambil bicara:

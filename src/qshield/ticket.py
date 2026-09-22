@@ -47,7 +47,7 @@ Konsekuensinya disebut terus terang, bukan disembunyikan:
    konfigurasi yang bocor kini BISA dipakai memalsukan tiket. Itu
    melemahkan properti yang diklaim README ("konfigurasi bocor tidak
    langsung memberi kunci yang bisa dipakai") dan tercatat sebagai R14
-   di THREAT-MODEL.md.
+   di docs/THREAT-MODEL.md.
 """
 
 import base64

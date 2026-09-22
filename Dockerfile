@@ -2,7 +2,7 @@
 #
 # Catatan: untuk demo 3 Oktober, JANGAN pakai ini. Jalankan uvicorn
 # langsung di laptop. Container menambah satu lapis yang bisa gagal
-# pagi hari-H tanpa memberi keuntungan di panggung. Lihat DEPLOY.md §4.
+# pagi hari-H tanpa memberi keuntungan di panggung. Lihat docs/DEPLOY.md §4.
 
 FROM python:3.12-slim AS base
 

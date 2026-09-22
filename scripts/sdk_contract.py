@@ -265,7 +265,7 @@ def check(path):
               "server itu yang berhak\n"
               "  menyatakan true. Mengirim true langsung dari perangkat "
               "memindahkan risiko\n"
-              "  ke pengguna Anda sendiri — lihat INTEGRATION.md §3.")
+              "  ke pengguna Anda sendiri — lihat docs/INTEGRATION.md §3.")
     return 0
 
 

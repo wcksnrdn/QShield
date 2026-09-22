@@ -1506,7 +1506,7 @@ itu dibiarkan, bagian terkuat sistem ini terlihat belum ada — dan
 pitch-nya bertentangan dengan dokumennya sendiri.
 
 Berkas sumber PDF tidak ada di repo, jadi tidak bisa ditambal dari
-sini. `PDF-UPDATE.md` menggantikannya: tujuh kalimat lama dikutip apa
+sini. `pitch/PDF-UPDATE.md` menggantikannya: tujuh kalimat lama dikutip apa
 adanya beserta teks penggantinya, siap tempel ke dokumen sumber mana
 pun yang dipakai.
 
@@ -1613,7 +1613,7 @@ pembacanya tim engineering. Yang belum ada: **kenapa** sebuah
 penyelenggara mau memasangnya sama sekali — dan itu pembaca yang
 berbeda, dengan pertanyaan yang berbeda.
 
-`PITCH-PJP.md` mengisinya. Tiga keputusan penulisan yang disengaja:
+`pitch/PITCH-PJP.md` mengisinya. Tiga keputusan penulisan yang disengaja:
 
 **Membuka dengan "kami tim mahasiswa dan belum punya pelanggan".**
 Menyembunyikannya hanya menunda penemuan, dan ditemukan sendiri jauh
@@ -1665,7 +1665,7 @@ dialek penerbit, jejak percobaan serangan, dan jejak QR dinamis.
 Istilah yang tepat adalah *statistical learning dari pengamatan*.
 Yang tidak ada hanyalah classifier terlatih.
 
-`KLARIFIKASI-ML.md` berisi surat koreksinya, versi pendek untuk lisan,
+`pitch/KLARIFIKASI-ML.md` berisi surat koreksinya, versi pendek untuk lisan,
 dan — ini yang penting — **panduan kapan surat itu TIDAK perlu
 dikirim.** Kalau materi POC hanya menulis "sistem adaptif" atau
 "behavioral scoring", semuanya masih akurat, dan mengirim koreksi
@@ -1723,7 +1723,7 @@ satu klaim gugur. Sekali satu kemampuan terbukti tidak ada di track
 keamanan dengan juri Kaspersky, seluruh klaim lain akan diuji ulang —
 termasuk delapan yang benar-benar akurat dan kuat.
 
-`PITCH-AUDIT.md` memuat auditnya beserta **naskah pengganti** dengan
+`pitch/PITCH-AUDIT.md` memuat auditnya beserta **naskah pengganti** dengan
 panjang dan struktur setara, dan tiap kalimatnya punya perintah demo
 yang bisa dijalankan. Yang menarik: naskah yang akurat justru lebih
 kuat, karena angkanya spesifik dan bisa ditunjukkan — 81,9%, 2,8 ms,

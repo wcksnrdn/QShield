@@ -12,7 +12,7 @@ itu boleh terjadi, asal disengaja dan tercatat. Yang tidak boleh adalah
 terjadi tanpa ada yang menyadarinya sampai frontend rusak di depan juri.
 
 Kalau test ini gagal, tanyakan dulu: perubahannya disengaja?
-  ya    perbarui KONTRAK di bawah, catat di API.md, beri tahu frontend
+  ya    perbarui KONTRAK di bawah, catat di docs/API.md, beri tahu frontend
   tidak batalkan perubahannya
 
     python tests/test_contract.py
@@ -71,7 +71,7 @@ TANGGAPAN_FIELD = {
     "signals": "array",
     "layers": "object",
     "merchant": "object",
-    # Ditambahkan 21 Sep 2026. ADITIF pada tanggapan — API.md
+    # Ditambahkan 21 Sep 2026. ADITIF pada tanggapan — docs/API.md
     # membolehkannya tanpa naik versi, dan klien wajib mengabaikan
     # field yang tidak dikenalnya.
     "fees": "object",
@@ -577,6 +577,6 @@ print("-" * 70)
 if gagal:
     print(f"{gagal} bagian kontrak BERUBAH.")
     print("Kalau disengaja: perbarui tabel KONTRAK di berkas ini, catat di")
-    print("API.md, dan beri tahu frontend. Kalau tidak: batalkan perubahannya.")
+    print("docs/API.md, dan beri tahu frontend. Kalau tidak: batalkan perubahannya.")
     sys.exit(1)
 print(f"Kontrak v1 utuh — {len(_hasil)} bagian diperiksa.")

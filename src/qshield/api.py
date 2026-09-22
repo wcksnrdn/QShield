@@ -775,7 +775,7 @@ def periksa_tiket(req: TicketVerifyRequest, request: Request,
     memegangnya — dan supaya integrator di bahasa apa pun bisa memakai
     jalur yang sama tanpa menulis ulang HMAC. Yang punya `hmac` di
     pustaka standarnya sebaiknya memeriksanya sendiri, tanpa perjalanan
-    jaringan tambahan; algoritmanya ada di API.md.
+    jaringan tambahan; algoritmanya ada di docs/API.md.
     """
     client_id = getattr(request.state, "client_id", None)
     try:
@@ -905,7 +905,7 @@ def verify(req: VerifyRequest, request: Request):
         # location_source TIDAK disentuh di sini. Field itu digemakan dari
         # permintaan: ia menyatakan bagaimana KLIEN memperoleh posisinya,
         # bukan bagaimana server menyimpulkan tempatnya. Menimpanya
-        # mengubah arti field, bukan sekadar menambah nilai — dan API.md
+        # mengubah arti field, bukan sekadar menambah nilai — dan docs/API.md
         # sudah menyatakan `location_source` kosakata tertutup yang
         # menuntut versi baru kalau nilainya bertambah.
         #
