@@ -1045,6 +1045,87 @@ def _a34():
             f"{dialek_awal} -> {dialek} tetap dipelajari")
 
 
+@serangan("Mengkatalogkan QRIS menuduh pedagang di sekitarnya")
+def _a35():
+    """Bukan serangan — pekerjaan tim sendiri, dan itu yang membuatnya berbahaya.
+
+    Dilaporkan dari lapangan: seorang anggota tim duduk di kantornya dan
+    mengkatalogkan QRIS satu per satu lewat /verify. Setiap pemindaian
+    dijawab `anomaly`, dan setiap jawaban itu menandai jangkar pedagang
+    di sekitarnya sebagai "berkali-kali menjadi sasaran". Pedagang
+    sungguhan ikut tertuduh oleh aktivitas yang bukan serangan.
+
+    Sebabnya struktural: /verify hanya bisa menjawab "apakah stiker ini
+    sah DI SINI", dan orang yang mengkatalogkan tidak sedang bertanya
+    itu. /inspect menjawab pertanyaan yang berbeda dan tidak menyentuh
+    pengetahuan lokasi sama sekali.
+    """
+    s, c = fresh_store()
+    sebelum = {
+        t: s.conn.execute(f"SELECT COUNT(*) n FROM {t}").fetchone()["n"]
+        for t in ("bindings", "observations", "anchor_challenge")
+    }
+    anomali_awal = s.conn.execute(
+        "SELECT COALESCE(SUM(anomaly_attempts),0) n FROM bindings").fetchone()["n"]
+    dialek_awal = s.conn.execute(
+        "SELECT COUNT(*) n FROM issuer_dialect").fetchone()["n"]
+
+    for i in range(5):
+        d = c.post("/api/v1/inspect", json={
+            "payload": qr(f"ID10265030375{i:02d}", nama=f"TOKO {i}")}).json()
+        assert "merchant" in d, f"inspect gagal: {d}"
+        assert "action" not in d, "inspect menerbitkan tier aksi"
+        assert "verification_ticket" not in d, "inspect menerbitkan tiket"
+
+    for t, awal in sebelum.items():
+        kini = s.conn.execute(f"SELECT COUNT(*) n FROM {t}").fetchone()["n"]
+        assert kini == awal, f"inspect menyentuh {t}: {awal} -> {kini}"
+    anomali = s.conn.execute(
+        "SELECT COALESCE(SUM(anomaly_attempts),0) n FROM bindings").fetchone()["n"]
+    assert anomali == anomali_awal, (
+        f"inspect menandai jangkar sebagai sasaran: {anomali_awal} -> {anomali}")
+
+    dialek = s.conn.execute(
+        "SELECT COUNT(*) n FROM issuer_dialect").fetchone()["n"]
+    assert dialek > dialek_awal, (
+        "pengetahuan payload ikut diblokir — itu justru yang dikumpulkan")
+
+    return (f"nol pengetahuan lokasi tersentuh; dialek penerbit "
+            f"{dialek_awal} -> {dialek} tetap terkumpul")
+
+
+@serangan("Pemindaian gambar menandai jangkar tetangga sebagai sasaran")
+def _a36():
+    """Celah yang tersisa dari versi pertama Keputusan 54.
+
+    Penjaganya dulu hanya menahan PEMBELAJARAN. Pencatatan anomali
+    berjalan terus, jadi jangkar pedagang sungguhan tetap terhitung
+    "diserang" oleh pemindaian yang jelas-jelas dinyatakan bukan dari
+    lapangan.
+    """
+    s, c = fresh_store()
+    awal = s.conn.execute(
+        "SELECT COALESCE(SUM(anomaly_attempts),0) n FROM bindings").fetchone()["n"]
+    tantangan_awal = s.conn.execute(
+        "SELECT COUNT(*) n FROM anchor_challenge").fetchone()["n"]
+
+    for i in range(5):
+        c.post("/api/v1/verify", json={
+            "payload": qr(PENYERANG), "lat": LAT, "lng": LNG,
+            "accuracy_m": 8.0, "device_anon_id": f"katalog-{i:04d}",
+            "location_source": "replay"})
+
+    kini = s.conn.execute(
+        "SELECT COALESCE(SUM(anomaly_attempts),0) n FROM bindings").fetchone()["n"]
+    tantangan = s.conn.execute(
+        "SELECT COUNT(*) n FROM anchor_challenge").fetchone()["n"]
+    assert kini == awal, f"jangkar ditandai diserang: {awal} -> {kini}"
+    assert tantangan == tantangan_awal, (
+        f"buku tantangan tumbuh dari pemindaian gambar: "
+        f"{tantangan_awal} -> {tantangan}")
+    return "lokasi yang tidak tepercaya tidak menandai apa pun"
+
+
 print("=" * 72)
 print("SUITE ADVERSARIAL")
 print("=" * 72)

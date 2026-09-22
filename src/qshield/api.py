@@ -765,6 +765,94 @@ class TicketVerifyResponse(BaseModel):
     detail: Optional[str] = None
 
 
+class InspectRequest(BaseModel):
+    """Periksa isi satu payload. TIDAK ada lokasi, dan itu inti bedanya.
+
+    `/verify` menjawab "apakah stiker ini sah DI SINI" — pertanyaan yang
+    mustahil dijawab tanpa tahu di mana "sini". Endpoint ini menjawab
+    pertanyaan yang berbeda: "payload ini isinya apa, dan bentuknya
+    wajar atau tidak".
+
+    Dipisahkan karena menggabungkannya merusak keduanya. Seseorang yang
+    mengkatalogkan QRIS dari gambar sambil duduk di satu tempat akan
+    membuat tempat itu tampak seperti jangkar yang berkali-kali
+    diserang — dan pedagang sungguhan di sekitarnya ikut tertuduh.
+    Itu bukan skenario hipotetis; itu yang terjadi.
+    """
+
+    payload: str = Field(
+        ..., min_length=8, max_length=MAX_PAYLOAD_CHARS,
+        pattern=r"^[\x20-\x7E]+$",
+        description="string QRIS mentah; tidak ada koordinat yang diminta")
+    include_tlv: bool = Field(
+        False, description="sertakan bedah TLV di tanggapan")
+
+
+class InspectResponse(BaseModel):
+    """Hasil pemeriksaan payload.
+
+    SENGAJA tidak memuat `action`, `verdict`, maupun tiket. Tidak ada
+    putusan lokasi yang bisa diberikan tanpa lokasi, dan menerbitkan
+    tiket dari sini berarti menyediakan cara memperoleh "izin" untuk
+    QR yang tidak pernah diperiksa tempatnya.
+    """
+
+    merchant: MerchantOut
+    fees: FeeOut
+    structural_signals: list
+    structural_reasons: list
+    tlv: list = []
+    processing_ms: float
+
+
+@app.post("/api/v1/inspect", response_model=InspectResponse)
+def inspect(req: InspectRequest, request: Request):
+    """Baca satu payload QRIS. Tidak menyentuh pengetahuan lokasi.
+
+    Yang dipelajari dari sini HANYA tingkat payload — dialek penerbit
+    dan kelangkaan ciri merchant. Bentuk payload tidak berubah karena
+    difoto, jadi keduanya tetap sah dipelajari; koordinat pemindainya
+    tidak mengatakan apa pun tentang merchant dan memang tidak diminta.
+    """
+    started = time.perf_counter()
+    try:
+        parsed = emvco.parse(req.payload)
+    except emvco.ParseError as exc:
+        audit.record_rejected("parse_error", str(exc))
+        raise HTTPException(status_code=422, detail=f"Payload tidak valid: {exc}")
+    if not parsed.nmid:
+        audit.record_rejected("nmid_missing")
+        raise HTTPException(status_code=422,
+                            detail="Merchant ID tidak ditemukan dalam payload")
+
+    # has_coords=False: sinyal yang bergantung pada posisi dimatikan,
+    # bukan dijalankan dengan nilai karangan.
+    struktural = bh.evaluate(
+        parsed, state=None, has_coords=False,
+        issuer_profile=(store.dialect_profile(parsed.merchant_pan[:8])
+                        if parsed.merchant_pan and len(parsed.merchant_pan) >= 8
+                        else None),
+        feature_corpus=store.feature_corpus(),
+    )
+
+    if parsed.crc_valid:
+        store.learn_dialect(parsed, parsed.nmid)
+        store.learn_features(parsed, parsed.nmid)
+
+    elapsed = round((time.perf_counter() - started) * 1000, 2)
+    return InspectResponse(
+        merchant=MerchantOut(
+            nmid=parsed.nmid, name=parsed.merchant_name,
+            city=parsed.merchant_city, criteria=parsed.criteria_label,
+            is_static=parsed.is_static),
+        fees=_biaya(parsed),
+        structural_signals=[s.name for s in struktural.signals],
+        structural_reasons=[s.reason for s in struktural.signals],
+        tlv=_bedah(parsed, req.include_tlv),
+        processing_ms=elapsed,
+    )
+
+
 @app.post("/api/v1/tickets/verify", response_model=TicketVerifyResponse)
 def periksa_tiket(req: TicketVerifyRequest, request: Request,
                   response: Response):
@@ -1089,8 +1177,18 @@ def verify(req: VerifyRequest, request: Request):
         store.learn_dialect(parsed, nmid)
         store.learn_features(parsed, nmid)
 
-    if verdict.status == bd.ANOMALY and anchor_id is not None and (
-            set(verdict.signals) & bd.ANOMALI_LOKASI):
+    # `lokasi_tepercaya` WAJIB ikut di sini, bukan hanya di cabang
+    # pembelajaran di atas.
+    #
+    # Versi pertama Keputusan 54 hanya menahan pembelajaran, dan
+    # akibatnya terlihat di lapangan: seorang anggota tim mengkatalogkan
+    # QRIS dari gambar sambil duduk di kantor, dan tiap pemindaian
+    # menandai jangkar di sekitarnya sebagai "berkali-kali jadi sasaran".
+    # Jangkar milik pedagang sungguhan jadi tampak diserang oleh
+    # aktivitas yang bukan serangan sama sekali.
+    if (verdict.status == bd.ANOMALY and lokasi_tepercaya
+            and anchor_id is not None and (
+            set(verdict.signals) & bd.ANOMALI_LOKASI)):
         # Jangkar ini jadi sasaran. Dicatat sebagai PERCOBAAN, bukan
         # pengamatan: observer_count tidak disentuh, jadi invarian §3
         # tetap utuh — reputasi palsu tidak bisa dibangun dari sini.

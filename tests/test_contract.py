@@ -116,6 +116,10 @@ JALUR = {
     # Ditambahkan 21 Sep 2026 bersama tiket verifikasi. Dipakai di titik
     # EKSEKUSI pembayaran, bukan saat memindai.
     "/api/v1/tickets/verify",
+    # Ditambahkan 22 Sep 2026. Menjawab "payload ini isinya apa",
+    # BUKAN "apakah stiker ini sah di sini" — dan sengaja tidak
+    # menerima koordinat maupun menerbitkan tiket.
+    "/api/v1/inspect",
 }
 
 _hasil = []
