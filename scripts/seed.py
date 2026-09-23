@@ -37,6 +37,23 @@ PENIPU = {
     "name": "WARUNG BU SRI",
 }
 
+# Tetangga sah di sekitar warung, 12-35 meter, dengan nama berbeda.
+#
+# Ada karena tanpa mereka, seed menciptakan jebakan demo. Satu jangkar
+# 47 pengamat berarti SETIAP QRIS nyata dalam radius 50 meter dijawab
+# "Jangan bayar" — diukur: pedagang di 10 m, 25 m, dan 45 m semuanya
+# cooling_off. Demo di dekat kantin atau mal berarti juri memindai
+# warung sungguhan dan melihatnya dituduh penipu.
+#
+# Menyeedkan lingkungan yang realistis memperbaiki itu sekaligus
+# memperagakan hal yang hampir pasti ditanyakan juri: bagaimana sistem
+# ini berlaku di area padat. Tetangga lolos, stiker palsu ditahan.
+TETANGGA = [
+    ("ID1077778888999", "936000149000000003", "SOTO PAK MUL", 12, 0, 31),
+    ("ID1066665555444", "936000149000000004", "TOKO KELONTONG BU IDA", 28, 22, -18),
+    ("ID1055554444333", "936000149000000005", "FOTOKOPI MAJU JAYA", 19, -25, 12),
+]
+
 # Lokasi lain tempat NMID penipu ikut muncul, relatif jauh dari warung.
 SEBAR = [
     (-6.2088, 106.8456, "Jakarta Pusat"),
@@ -98,6 +115,18 @@ def main(lat=None, lng=None, db=None):
         last_seen=NOW - timedelta(hours=6),
     )
 
+    # Tetangga sah. Jumlah pengamatnya sengaja SEBANDING dengan warung
+    # (>= 10% dari 47, lihat ADJACENT_MIN_RATIO) supaya mereka lolos uji
+    # koeksistensi — itulah yang diperagakan.
+    for nmid, _pan, nama, obs, utara, timur in TETANGGA:
+        tlat, tlng = _shift(lat, lng, utara, timur)
+        s.seed_binding(
+            nmid=nmid, lat=tlat, lng=tlng, merchant_name=nama,
+            observer_count=obs,
+            first_seen=NOW - timedelta(days=120),
+            last_seen=NOW - timedelta(hours=2),
+        )
+
     # Sebaran NMID penipu. Titik pertama digeser 3 km dari lokasi kalian
     # supaya sinyal scatter tetap masuk akal di mana pun demo dijalankan.
     near_lat, near_lng = _shift(lat, lng, 3000, 1500)
@@ -116,6 +145,10 @@ def main(lat=None, lng=None, db=None):
     print("QR ASLI   ", make_qr(WARUNG["nmid"], WARUNG["pan"], WARUNG["name"]))
     print()
     print("QR PALSU  ", make_qr(PENIPU["nmid"], PENIPU["pan"], PENIPU["name"]))
+    print()
+    print("TETANGGA SAH — pindai ini untuk menunjukkan area padat ditangani:")
+    for nmid, pan, nama, _o, _u, _t in TETANGGA:
+        print(f"  {nama:24} {make_qr(nmid, pan, nama)}")
     s.close()
 
 

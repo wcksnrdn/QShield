@@ -299,4 +299,56 @@ assert "nmid_scatter" in v.signals, "penyebaran lolos lewat jalur kepindahan"
 assert v.status == b.ANOMALY
 print("\n  periode yang beririsan menahannya; frekuensi tidak dipakai menilai")
 
+print()
+print("=" * 66)
+print("18. Peniruan nama membatalkan pengecualian koeksistensi")
+print("=" * 66)
+
+# Usulan dari luar tim: bandingkan nama merchant baru dengan nama
+# pemilik jangkar. Idenya benar, tapi hanya separuh yang bisa dipakai
+# mesin — lihat calibrate_nama.py untuk kenapa skor kemiripan gagal.
+tuan = mk(REAL, WARUNG_LAT, WARUNG_LNG, 47, 4000, "WARUNG BU SRI")
+bukti = b.Challenge(devices=b.ADJACENT_MIN_DEVICES,
+                    first_at=NOW - timedelta(hours=30), last_at=NOW)
+LAIN = "ID9988776655443"
+
+# Tetangga sah dengan bukti kehadiran: lolos, dan pembeli DIBERI
+# kedua nama untuk dibandingkan sendiri.
+v = b.evaluate(LAIN, WARUNG_LAT, WARUNG_LNG, [tuan], [], now=NOW,
+               challenge=bukti, merchant_name="TOKO SEJAHTERA")
+show("tetangga sah, nama berbeda", v)
+assert v.status != b.ANOMALY, "tetangga sah dituduh"
+assert any("TOKO SEJAHTERA" in r and "WARUNG BU SRI" in r for r in v.reasons), (
+    "pembeli tidak diberi kontras nama pada cabang yang MELOLOSKAN — "
+    "padahal di situ pertahanannya berpindah ke matanya")
+
+# Nama yang sama persis: bukti kehadiran sebanyak apa pun tidak menolong.
+v = b.evaluate(LAIN, WARUNG_LAT, WARUNG_LNG, [tuan], [], now=NOW,
+               challenge=b.Challenge(devices=b.ADJACENT_MIN_DEVICES * 10,
+                                     first_at=NOW - timedelta(hours=40),
+                                     last_at=NOW),
+               merchant_name="WARUNG BU SRI")
+show("nama sama, bukti kehadiran berlimpah", v)
+assert "anchor_name_impersonation" in v.signals
+assert v.status == b.ANOMALY, "peniru nama lolos lewat bukti kehadiran"
+assert v.reasons[0].startswith("Kode ini memakai nama yang sama"), (
+    "alasan yang menentukan tidak dibaca lebih dulu")
+print("\n  peniru tertahan; tetangga sah lolos dengan kontras nama terbaca")
+
+print()
+print("=" * 66)
+print("19. Homoglif tertangkap, tetangga yang kebetulan mirip tidak")
+print("=" * 66)
+
+for nama, harus_tiru in [("WARUNG BU SR1", True), ("W4RUNG BU 5RI", True),
+                         ("warung  bu  sri", True), ("WARUNG BU SARI", False),
+                         ("WARUNG BU SRI 2", False), ("TOKO SEJAHTERA", False)]:
+    v = b.evaluate(LAIN, WARUNG_LAT, WARUNG_LNG, [tuan], [], now=NOW,
+                   merchant_name=nama)
+    tiru = "anchor_name_impersonation" in v.signals
+    print(f"  {nama:18} peniruan={str(tiru):5} (harus {harus_tiru})")
+    assert tiru == harus_tiru, f"{nama} salah diklasifikasi"
+print("\n  'BU SARI' dan 'BU SRI' adalah dua pedagang sungguhan, dan")
+print("  metrik kemiripan mana pun akan menuduh salah satunya peniru")
+
 print("\n\nSemua assertion lolos.")

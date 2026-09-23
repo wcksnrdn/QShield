@@ -2492,6 +2492,96 @@ Dicatat supaya dugaan yang sama tidak diulangi tanpa diukur lagi.
 
 ---
 
+## Keputusan 71 — Nama merchant: dipakai mengetatkan, tidak pernah melonggarkan
+
+Usulan dari luar tim, dan pengamatannya benar: nama merchant baru tidak
+pernah dibandingkan dengan nama pemilik jangkar. `binding.py` hanya
+MENAMPILKAN nama lama di alasan, tidak pernah membandingkannya.
+
+Argumen di baliknya kuat. Penipu harus memilih nama di QR-nya, dan
+kedua pilihannya merugikan: pakai nama korban → tetangga sah tidak
+pernah melakukan itu, jadi tertangkap; pakai nama lain → pembeli yang
+berdiri di depan warungnya melihat nama yang salah.
+
+**Bagian yang tidak bisa dipakai, dan angkanya.** Usulan aslinya
+memperlakukan "mirip" sebagai peniruan, dengan perbandingan teks
+longgar karena penipu bisa menulis "WARUNG BU SR1" atau "WR BU SRI".
+Diukur pada 161 nama dengan pola penamaan Indonesia:
+
+| pasangan | kemiripan |
+|---|---|
+| WARUNG MAKAN BU SARI vs WARUNG MAKAN BU SRI | 0,97 |
+| WARUNG BU TUTI vs WARUNG BU TUTIK | 0,96 |
+| KEDAI PAK UDI vs KEDAI PAK UDIN | 0,96 |
+
+Itu pedagang yang BENAR-BENAR BERBEDA. Peniruan sungguhan memberi
+0,95–1,00. **Rentangnya tumpang tindih; tidak ada ambang di antaranya.**
+Metrik yang lebih pintar tidak menolong — membandingkan hanya bagian
+pembeda justru lebih buruk, karena "WARUNG SEMBAKO" dan "TOKO SEMBAKO"
+mengerucut ke kata yang sama.
+
+Yang terpisah bersih hanyalah **kesamaan persis setelah normalisasi**:
+nol positif palsu dari 12.880 pasangan, sementara homoglif (`SR1`,
+`W4RUNG`, `5RI`), spasi, dan huruf besar-kecil tetap tertangkap.
+Diukur di `calibrate_nama.py`.
+
+**Arah pemakaiannya, dan kenapa itu prinsipil.** Usulan aslinya juga
+MELONGGARKAN: nama berbeda → turunkan jadi sekadar konfirmasi. Itu
+ditolak. Nama adalah nilai yang DIPILIH PENYERANG, dan melonggarkan
+atas dasar itu berarti menyerahkan pintu keluar kepada pihak yang
+paling berkepentingan memakainya — penyerang tinggal memilih nama lain,
+gratis.
+
+Yang melonggarkan tetap bukti kehadiran fisik (Keputusan 51): sesuatu
+yang tidak bisa dipalsukan penyerang tanpa membatalkan serangannya.
+
+**Yang diterapkan:**
+
+1. Nama sama persis (setelah normalisasi) MEMBATALKAN pengecualian
+   koeksistensi, berapa pun bukti kehadirannya. Bobot 90 — di atas
+   60+confidence milik `nmid_changed_at_anchor`, supaya alasan yang
+   menentukan terbaca lebih dulu (Keputusan 47).
+2. Nama berbeda: kedua nama DITAMPILKAN berdampingan, termasuk — dan
+   terutama — pada cabang yang MELOLOSKAN. Di situ pertahanannya
+   berpindah ke mata pembeli, jadi ia harus diberi bahan untuk menilai
+   tanpa perlu mengingat apa pun.
+
+**Efek pada R10.** Penyerang bermodal besar masih lolos, tapi kini
+hanya dengan nama yang BERBEDA dari korban. Memakai nama korban — yang
+dulu gratis dan justru paling menipu pembeli — kini ditahan mesin.
+Suite adversarial menolak perubahan ini lewat begitu saja: test batasan
+R10 gagal sampai catatannya diperbarui.
+
+---
+
+## Keputusan 72 — seed.py membuat jebakan demo
+
+Ditemukan dari usulan yang sama, dan diverifikasi dengan pengukuran.
+
+`seed.py` membuat SATU jangkar dengan 47 pengamat di koordinat yang
+diberikan. Artinya setiap QRIS nyata dalam radius 50 m dijawab
+"Jangan bayar". Diukur:
+
+| pedagang nyata | jarak dari seed | hasil |
+|---|---|---|
+| SOTO PAK MUL | 10 m | `cooling_off` |
+| KOPI KENANGAN | 25 m | `cooling_off` |
+| APOTEK SEHAT | 45 m | `cooling_off` |
+
+Demo di dekat kantin atau mal berarti juri memindai warung sungguhan
+dan melihatnya dituduh penipu.
+
+Seed kini membuat lingkungan yang realistis: tiga tetangga sah pada
+12–35 m dengan nama berbeda dan basis pengamat yang sebanding. Itu
+memperbaiki jebakannya sekaligus memperagakan pertanyaan yang hampir
+pasti muncul di panggung — bagaimana sistem ini berlaku di area padat.
+
+Urutan demonya sekarang: warung asli `proceed`, ketiga tetangga
+`proceed`, stiker palsu `cooling_off` dengan alasan peniruan nama
+terbaca paling atas.
+
+---
+
 ## Hasil pengujian
 
 ```

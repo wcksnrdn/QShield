@@ -97,6 +97,7 @@ python3 scripts/calibrate_falsepos.py          # gesekan pada pedagang jujur
 python3 scripts/calibrate_tetangga.py          # pedagang bersebelahan (R11)
 python3 scripts/calibrate_kehadiran.py         # ADJACENT_MIN_DEVICES
 python3 scripts/calibrate_relokasi.py          # pedagang pindah lokasi (R12)
+python3 scripts/calibrate_nama.py              # kenapa peniruan nama diuji sama-atau-tidak
 ```
 
 `test_invariants.py` keluar dengan status bukan-nol kalau ada satu invarian
