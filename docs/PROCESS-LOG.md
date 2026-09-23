@@ -2582,6 +2582,78 @@ terbaca paling atas.
 
 ---
 
+## Keputusan 73 — Scanner web terbuka di lensa ultra-wide
+
+Dilaporkan dari lapangan: pada Samsung S25 halaman ini terbuka di 0,5x
+dan QRIS tidak bisa difokuskan. HP lain di tim tidak kena.
+
+`facingMode: "environment"` hanya menyatakan kamera MENGHADAP KE MANA,
+bukan lensa yang mana. HP multi-lensa modern punya beberapa kamera
+belakang, dan browser memilih sendiri — sebagian memilih ultra-wide.
+
+Lensa ultra-wide punya jarak fokus minimum jauh lebih panjang. QRIS yang
+dipegang 20 cm berada DI DALAM jarak itu, jadi bukan "susah fokus"
+melainkan tidak bisa fokus sama sekali. Ditambah QR-nya kecil di bingkai
+karena sudut pandangnya lebar.
+
+**Tidak ada cara yang dijamin benar** untuk menebak lensa utama lewat
+web API. Yang dilakukan berlapis:
+
+1. Resolusi diminta 1920x1080. Tanpa itu sebagian browser memberi
+   640x480, dan QRIS di stiker kecil jadi terlalu sedikit piksel untuk
+   dibaca — gejalanya sama persis dengan "tidak fokus", padahal
+   penyebabnya berbeda.
+2. `applyConstraints` menaikkan zoom ke >= 1x dan meminta fokus
+   berkelanjutan, kalau browser mendukung. Keduanya opsional;
+   ketiadaannya bukan kegagalan.
+3. Tombol **Ganti lensa** yang hanya muncul kalau memang ada lebih dari
+   satu kamera belakang. Pilihannya disimpan, jadi cukup sekali per HP.
+
+Lapis ketiga yang menentukan. Dua yang pertama menebak; yang ketiga
+menyerahkan keputusan kepada orang yang sedang memegang HP-nya dan bisa
+melihat hasilnya langsung.
+
+**Catatan konvensi yang ikut ketahuan.** Versi pertama memakai `d`
+sebagai nama parameter lambda. Di berkas ini `d` berarti objek tanggapan
+API, dan `test_frontend.py` mengumpulkan setiap `d.<field>` lalu
+menuntutnya ada di tanggapan — jadi `d.kind` dan `d.label` milik
+`enumerateDevices()` membuat test gagal. Test itu benar; namanya yang
+salah.
+
+---
+
+## Keputusan 74 — Membaca di luar kunci pun menghilangkan pengamatan
+
+Muncul saat menjalankan suite setelah perbaikan di atas: `observations
+199, harusnya 200`. Gejala yang PERSIS sama dengan Keputusan 66.
+
+Penyebabnya juga sejenis, tapi lebih halus. `Store.challenge_state`
+hanya MEMBACA, dan karena itu ditulis tanpa `self._lock`. Tapi seluruh
+berkas ini bekerja dengan satu koneksi yang dibagi antar-thread, dan
+aturannya bukan "kunci saat menulis" melainkan **setiap sentuhan ke
+koneksi lewat kunci**.
+
+Membaca di luar kunci menyelipkan statement ke tengah transaksi
+`BEGIN IMMEDIATE` milik `record()`, dan satu pengamatan hilang tanpa
+galat apa pun.
+
+**Yang membuatnya berbahaya: intermiten.** Cacat ini masuk bersama buku
+tantangan (Keputusan 51), dan suite lolos berkali-kali sejak itu.
+Penulisan di luar kunci gagal hampir selalu; pembacaan gagal
+sesekali — dan kegagalan sesekali adalah kelas yang paling mudah
+dianggap "ah, flaky".
+
+Setelah diperbaiki: 200/200 lima kali berturut, dan **lebih cepat**
+(203–247 permintaan/detik, naik dari 184–202). Kunci yang tidak
+diperebutkan itu murah; yang mahal adalah statement yang saling
+menyelip.
+
+Diperiksa ulang seluruh `store.py`: method lain yang menyentuh koneksi
+di luar kunci semuanya dipanggil sekali saat inisialisasi, atau sudah
+berada di dalam transaksi yang terkunci.
+
+---
+
 ## Hasil pengujian
 
 ```

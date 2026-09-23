@@ -1069,13 +1069,26 @@ class Store:
                         nmid: str) -> Optional[bd.Challenge]:
         """Berapa perangkat berbeda menemui NMID ini di jangkar ini, sejak kapan."""
         gh7 = geo.encode(lat, lng, bd.INDEX_PRECISION)
-        row = self.conn.execute(
-            """SELECT COUNT(*) AS n, MIN(attempted_at) AS awal,
-                      MAX(attempted_at) AS akhir
-               FROM anchor_challenge
-               WHERE geohash_7 = ? AND nmid = ?""",
-            (gh7, nmid),
-        ).fetchone()
+        # Kuncinya WAJIB, walau ini hanya membaca.
+        #
+        # Seluruh berkas ini bekerja dengan satu koneksi yang dibagi
+        # antar-thread, dan aturannya: setiap sentuhan ke koneksi itu
+        # lewat self._lock. Membaca di luar kunci menyelipkan statement
+        # ke tengah transaksi BEGIN IMMEDIATE milik record(), dan
+        # akibatnya terukur — satu pengamatan hilang dari 200 permintaan
+        # serentak, tanpa galat apa pun.
+        #
+        # Gejalanya identik dengan Keputusan 66, dan penyebabnya sama:
+        # method yang dipanggil PER-PERMINTAAN tunduk pada aturan yang
+        # berbeda dari method yang dipanggil saat inisialisasi.
+        with self._lock:
+            row = self.conn.execute(
+                """SELECT COUNT(*) AS n, MIN(attempted_at) AS awal,
+                          MAX(attempted_at) AS akhir
+                   FROM anchor_challenge
+                   WHERE geohash_7 = ? AND nmid = ?""",
+                (gh7, nmid),
+            ).fetchone()
         if not row or not row["n"]:
             return None
         return bd.Challenge(
