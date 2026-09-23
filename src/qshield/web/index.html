@@ -294,6 +294,7 @@ textarea{min-height:78px;resize:vertical;
   </div>
 
   <button class="btn" id="scan">Mulai memindai</button>
+  <button class="btn ghost" id="lensa" style="display:none"></button>
   <button class="btn ghost" id="manual">Masukkan kode manual</button>
   <div id="notes"></div>
 
@@ -1087,6 +1088,65 @@ const esc = s => String(s).replace(/[&<>"]/g, c =>
 // --- kamera ---
 let stream = null, loop = null;
 
+// Daftar kamera belakang dan mana yang sedang dipakai.
+//
+// Dilaporkan dari lapangan: di Samsung S25 halaman ini terbuka di lensa
+// ultra-wide (0,5x) dan QRIS tidak bisa difokuskan; di HP lain tidak.
+//
+// Sebabnya facingMode:"environment" hanya menyatakan MENGHADAP KE MANA,
+// bukan lensa yang mana. HP multi-lensa modern punya beberapa kamera
+// belakang, dan browser memilih sendiri. Ultra-wide punya jarak fokus
+// minimum yang panjang, jadi QRIS yang dipegang 20 cm berada DI DALAM
+// jarak itu — bukan "susah fokus", melainkan tidak bisa fokus.
+//
+// Tidak ada cara yang dijamin benar untuk menebak lensa utama lewat
+// web API. Yang dilakukan: coba perbaiki otomatis, lalu SEDIAKAN
+// tombol ganti kalau tebakannya meleset. Tombolnya hanya muncul kalau
+// memang ada lebih dari satu kamera belakang.
+let kameraBelakang = [], kameraIdx = 0;
+
+/** Ambil rentang zoom ke >= 1x kalau browser mengizinkan. */
+async function normalkanLensa(track){
+  try {
+    const c = track.getCapabilities ? track.getCapabilities() : {};
+    const maju = [];
+    if (c.zoom && c.zoom.min < 1) {
+      maju.push({zoom: Math.min(1, c.zoom.max)});
+    }
+    // Fokus berkelanjutan: QRIS dipindai sambil tangan bergerak, dan
+    // fokus yang terkunci sekali akan meleset begitu jaraknya berubah.
+    if (c.focusMode && c.focusMode.includes("continuous")) {
+      maju.push({focusMode: "continuous"});
+    }
+    if (maju.length) await track.applyConstraints({advanced: maju});
+    const s = track.getSettings ? track.getSettings() : {};
+    console.log("[qshield] kamera", s.width + "x" + s.height,
+                "zoom", s.zoom, "label", track.label);
+  } catch (_) { /* kemampuan ini opsional; ketiadaannya bukan kegagalan */ }
+}
+
+async function perbaruiDaftarLensa(){
+  try {
+    const semua = await navigator.mediaDevices.enumerateDevices();
+    // `d` sengaja TIDAK dipakai sebagai nama di sini: di berkas ini
+    // `d` berarti objek tanggapan API, dan tests/test_frontend.py
+    // mengumpulkan setiap `d.<field>` lalu menuntutnya ada di tanggapan.
+    kameraBelakang = semua.filter(alat => alat.kind === "videoinput" &&
+      !/front|user|depan|selfie/i.test(alat.label || ""));
+    // Indeks tersimpan bisa melebihi daftar setelah HP dicabut-pasang
+    // atau izin dicabut; tanpa penjepit ini labelnya menunjuk "3/2".
+    if (kameraIdx >= kameraBelakang.length) kameraIdx = 0;
+    const tombol = $("lensa");
+    if (kameraBelakang.length > 1) {
+      tombol.style.display = "";
+      tombol.textContent = "Ganti lensa (" + (kameraIdx + 1) + "/" +
+        kameraBelakang.length + ")";
+    } else {
+      tombol.style.display = "none";
+    }
+  } catch (_) { /* enumerateDevices bisa ditolak; tombolnya tetap sembunyi */ }
+}
+
 async function mulaiKamera(){
   if (!AMAN) { catatan("<b>Kamera butuh HTTPS.</b> Pakai kode manual atau mode replay."); return; }
   if (!("BarcodeDetector" in window)) {
@@ -1095,10 +1155,28 @@ async function mulaiKamera(){
       "<b>Masukkan kode manual</b>.");
     return;
   }
+  // Resolusi diminta tinggi dengan sengaja. Tanpa itu sebagian browser
+  // memberi 640x480, dan QRIS di stiker kecil jadi terlalu sedikit piksel
+  // untuk dibaca BarcodeDetector — gejalanya sama persis dengan "tidak
+  // fokus", padahal penyebabnya berbeda.
+  const pilihan = kameraBelakang[kameraIdx];
+  const video = pilihan && pilihan.deviceId
+    ? {deviceId:{exact: pilihan.deviceId},
+       width:{ideal:1920}, height:{ideal:1080}}
+    : {facingMode:{ideal:"environment"},
+       width:{ideal:1920}, height:{ideal:1080}};
   try {
-    stream = await navigator.mediaDevices.getUserMedia(
-      {video:{facingMode:{ideal:"environment"}}, audio:false});
-  } catch (e) { catatan("<b>Kamera ditolak.</b> " + e.message); return; }
+    stream = await navigator.mediaDevices.getUserMedia({video, audio:false});
+  } catch (e) {
+    // deviceId yang tersimpan bisa basi setelah HP dicabut-pasang.
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(
+        {video:{facingMode:{ideal:"environment"}}, audio:false});
+    } catch (e2) { catatan("<b>Kamera ditolak.</b> " + e2.message); return; }
+  }
+  const track = stream.getVideoTracks()[0];
+  if (track) await normalkanLensa(track);
+  await perbaruiDaftarLensa();
 
   const v = $("video");
   v.srcObject = stream; await v.play();
@@ -1123,6 +1201,17 @@ function stopKamera(){
 }
 
 $("scan").onclick = () => stream ? stopKamera() : mulaiKamera();
+$("lensa").onclick = async () => {
+  if (!kameraBelakang.length) return;
+  kameraIdx = (kameraIdx + 1) % kameraBelakang.length;
+  try { localStorage.setItem("qs_lensa", String(kameraIdx)); } catch (_) {}
+  if (stream) { stopKamera(); await mulaiKamera(); }
+  else await perbaruiDaftarLensa();
+};
+try {
+  const simpan = parseInt(localStorage.getItem("qs_lensa") || "0", 10);
+  if (!isNaN(simpan)) kameraIdx = simpan;
+} catch (_) {}
 $("manual").onclick = () => $("sheet").classList.add("show");
 $("gear").onclick = () => $("sheet").classList.add("show");
 $("close").onclick = () => $("sheet").classList.remove("show");
