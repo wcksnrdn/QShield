@@ -832,28 +832,46 @@ def _b3():
 
 @serangan("Cold start dengan modal besar (sisa R10)", ditahan=False)
 def _b4():
+    """Sisa R10, yang MENYEMPIT sejak perbandingan nama masuk.
+
+    Penyerang bermodal besar masih lolos — tapi sekarang hanya kalau ia
+    memakai nama merchant yang BERBEDA dari korbannya. Memakai nama
+    korban, yang dulu gratis dan justru paling menipu pembeli, kini
+    ditahan mesin.
+
+    Harganya nyata bagi penyerang: satu-satunya cara lolos adalah
+    menampilkan nama yang salah di layar pembeli.
+    """
     s, c = fresh_store()
-    # Penyerang yang mau mengeluarkan device sebanyak merchant korban
-    # tetap lolos. ADJACENT_MIN_RATIO menaikkan biaya, tidak menutup celah.
     s.seed_binding(
-        nmid=PENYERANG, lat=LAT, lng=LNG, merchant_name="WARUNG BU SRI",
+        nmid=PENYERANG, lat=LAT, lng=LNG, merchant_name="TOKO SEJAHTERA",
         observer_count=40,
         first_seen=NOW - timedelta(days=90), last_seen=NOW - timedelta(hours=1),
     )
-    d = scan(c, qr(PENYERANG), device="penyerang-kaya-01")
+    d = scan(c, qr(PENYERANG, nama="TOKO SEJAHTERA"), device="penyerang-kaya-01")
     assert d["verdict"] == "verified", (
         "prasyarat batasan berubah — apakah R10 sudah tertutup penuh? "
         "Perbarui docs/THREAT-MODEL.md R10 dan catatan ini."
     )
 
-    # Ambang biayanya harus persis seperti yang dikalibrasi.
+    # Jalur yang DULU juga lolos: nama korban ditiru persis. Kini ditahan.
+    s2, c2 = fresh_store()
+    s2.seed_binding(
+        nmid=PENYERANG, lat=LAT, lng=LNG, merchant_name="WARUNG BU SRI",
+        observer_count=40,
+        first_seen=NOW - timedelta(days=90), last_seen=NOW - timedelta(hours=1),
+    )
+    d2 = scan(c2, qr(PENYERANG), device="penyerang-kaya-02")
+    assert d2["verdict"] == "anomaly", (
+        "peniruan nama lolos lagi — perbandingan nama regresi")
+
     batas = bd.ADJACENT_MIN_RATIO * 47
     assert bd.MIN_OBSERVERS < batas <= 40, (
         f"biaya penyerang bergeser: butuh >{batas:.0f} device"
     )
-    return (f"BELUM DITAHAN SEPENUHNYA: penyerang butuh >{batas:.0f} device "
-            f"(naik dari {bd.MIN_OBSERVERS}); penutupan sungguhan menuntut "
-            f"deteksi integritas perangkat")
+    return (f"MENYEMPIT: butuh >{batas:.0f} device DAN nama yang berbeda "
+            f"dari korban — nama korban kini ditahan. Penutupan penuh "
+            f"tetap menuntut deteksi integritas perangkat")
 
 
 @serangan("Jalur kehadiran tidak membangun reputasi (invarian §3)")
@@ -1124,6 +1142,59 @@ def _a36():
         f"buku tantangan tumbuh dari pemindaian gambar: "
         f"{tantangan_awal} -> {tantangan}")
     return "lokasi yang tidak tepercaya tidak menandai apa pun"
+
+
+@serangan("Peniru nama lolos lewat bukti kehadiran")
+def _a37():
+    """Celah yang ditutup oleh perbandingan nama.
+
+    Sebelum ini, penyerang yang sanggup mengumpulkan
+    ADJACENT_MIN_DEVICES perangkat selama 24 jam mendapat pengecualian
+    koeksistensi — diperlakukan sebagai tetangga sah — BAHKAN kalau
+    QR-nya memakai nama korban persis. Itu justru kasus yang paling
+    berbahaya: pembeli melihat nama yang benar di layarnya, jadi tidak
+    ada apa pun yang bisa dia curigai.
+    """
+    s, c = fresh_store()
+    for i in range(bd.ADJACENT_MIN_DEVICES * 2):
+        s.note_challenge(LAT, LNG, PENYERANG, f"perangkat-sewaan-{i:04d}",
+                         now=NOW - timedelta(hours=bd.MIN_AGE_HOURS + 6))
+    # qr() memakai nama "WARUNG BU SRI" — sama dengan korban.
+    d = scan(c, qr(PENYERANG), device="penyerang-peniru-01")
+    assert d["verdict"] == "anomaly", (
+        f"peniru nama lolos sebagai {d['verdict']}/{d['action']}")
+    assert "anchor_name_impersonation" in d["signals"]
+    assert "adjacent_merchant" not in d["signals"], (
+        "peniru nama masih menikmati pengecualian koeksistensi")
+    return (f"{bd.ADJACENT_MIN_DEVICES * 2} perangkat tidak menolong — "
+            f"nama yang ditiru membatalkan pengecualian")
+
+
+@serangan("Nama dipakai MELONGGARKAN, bukan hanya mengetatkan", ditahan=False)
+def _a38():
+    """Batasan yang disengaja, diuji agar tidak dibalik diam-diam.
+
+    Usulan yang masuk: kalau namanya BERBEDA, longgarkan jadi sekadar
+    konfirmasi. Itu ditolak, dan alasannya prinsipil — nama adalah
+    nilai yang DIPILIH PENYERANG. Melonggarkan atas dasar itu berarti
+    menyerahkan pintu keluar kepada pihak yang paling berkepentingan
+    memakainya: penyerang tinggal memilih nama lain, gratis.
+
+    Yang melonggarkan tetap bukti kehadiran fisik (R11) — sesuatu yang
+    tidak bisa dipalsukan penyerang tanpa membatalkan serangannya.
+    """
+    s, c = fresh_store()
+    d = scan(c, qr(PENYERANG, nama="TOKO SEJAHTERA"),
+             device="penyerang-nama-lain-1")
+    assert d["verdict"] == "anomaly", (
+        "nama berbeda melonggarkan blokir — penyerang tinggal ganti nama")
+    assert d["action"] == "cooling_off"
+    # Tapi pembeli HARUS diberi kedua nama untuk dibandingkan.
+    assert any("TOKO SEJAHTERA" in r for r in d["reasons"]), (
+        "nama yang dipindai tidak ditampilkan ke pembeli")
+    return ("DISENGAJA: nama berbeda TIDAK melonggarkan apa pun; yang "
+            "melonggarkan hanya bukti kehadiran fisik. Kontras nama "
+            "tetap ditampilkan supaya pembeli bisa menilai sendiri")
 
 
 print("=" * 72)

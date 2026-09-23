@@ -12,6 +12,8 @@ sel presisi 8 hanya setinggi 19 m, sehingga dua pemindaian di
 warung yang sama kerap jatuh di sel berbeda.
 """
 
+import re
+
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -113,6 +115,23 @@ SCATTER_MIN_KM = 1.0        # jarak minimum agar dianggap area berbeda
 # setara konflik konsensus 50 pengamat. Alasannya: penyelenggara
 # menyatakan merchant INI yang ada di sini, dan yang dipindai bukan dia.
 W_REGISTERED_CONFLICT = 85
+
+# Bobot peniruan nama di jangkar yang sudah bertuan.
+#
+# Sengaja DI ATAS 60+confidence milik nmid_changed_at_anchor, karena
+# urutan alasan mengikuti bobot (Keputusan 47): yang menentukan harus
+# terbaca lebih dulu. "Kode ini memakai nama yang sama dengan merchant
+# di sini" adalah fakta yang membuat orang berhenti; "Merchant ID
+# berbeda dari 47 pengamatan" tidak.
+W_NAME_IMPERSONATION = 90
+
+# Homoglif yang dipakai memalsukan nama: angka yang menyerupai huruf.
+# Dipetakan balik sebelum dibandingkan, sehingga "WARUNG BU SR1" dan
+# "W4RUNG BU 5RI" mengerucut ke bentuk yang sama.
+_HOMOGLIF = str.maketrans({
+    "0": "O", "1": "I", "3": "E", "4": "A", "5": "S", "7": "T", "8": "B",
+    "$": "S", "@": "A",
+})
 
 MIN_OBSERVERS = 3           # device unik sebelum binding dianggap mapan
 ADJACENT_MIN_RATIO = 0.10   # basis pengamat minimum relatif tetangga
@@ -303,6 +322,38 @@ def _action_for(score: int) -> str:
     return COOLING_OFF
 
 
+def nama_kanonik(nama: Optional[str]) -> str:
+    """Bentuk baku nama merchant, untuk perbandingan SAMA-atau-TIDAK.
+
+    Sengaja bukan skor kemiripan. Diukur pada 150 nama merchant dengan
+    pola penamaan Indonesia — yang berbagi awalan berat dan nama orang
+    yang berdekatan — dan hasilnya jelas:
+
+        WARUNG MAKAN BU SARI  vs  WARUNG MAKAN BU SRI   0,97
+        WARUNG BU TUTI        vs  WARUNG BU TUTIK       0,96
+        KEDAI PAK UDI         vs  KEDAI PAK UDIN        0,96
+
+    Itu pedagang yang BENAR-BENAR BERBEDA. Peniruan sungguhan memberi
+    0,95-1,00. Rentangnya tumpang tindih, jadi tidak ada ambang
+    kemiripan yang bisa memisahkan keduanya — dan ambang mana pun yang
+    menangkap peniru juga akan menuduh Bu Sari sebagai peniru Bu Sri.
+
+    Metrik yang lebih pintar tidak menolong. Membandingkan hanya bagian
+    pembeda justru lebih buruk: "WARUNG SEMBAKO" dan "TOKO SEMBAKO"
+    mengerucut ke kata yang sama.
+
+    Yang TERPISAH bersih hanyalah kesamaan persis setelah normalisasi:
+    nol positif palsu dari 11.175 pasangan, sementara homoglif, spasi,
+    dan beda huruf besar-kecil tetap tertangkap.
+
+    Selebihnya — pemotongan, imbuhan, singkatan — ditangani dengan
+    MENAMPILKAN kedua nama kepada pembeli, bukan dengan menghakiminya.
+    """
+    if not nama:
+        return ""
+    return re.sub(r"[^A-Z0-9]+", "", nama.upper().translate(_HOMOGLIF))
+
+
 def normalize_city(city: Optional[str]) -> str:
     """Samakan bentuk penulisan nama kota sebelum dibandingkan.
 
@@ -442,6 +493,7 @@ def evaluate(
     crc_valid: bool = True,
     now: Optional[datetime] = None,
     challenge: Optional["Challenge"] = None,
+    merchant_name: Optional[str] = None,
 ) -> Verdict:
     """Nilai satu pemindaian.
 
@@ -450,6 +502,8 @@ def evaluate(
     same_nmid_elsewhere  binding dengan NMID sama di mana pun
     challenge            jejak pemindaian NMID ini yang pernah DITOLAK di
                          jangkar ini; bukan reputasi, hanya bukti kehadiran
+    merchant_name        nama merchant di payload yang dipindai, untuk
+                         dibandingkan dengan nama pemilik jangkar
     """
     now = now or datetime.now(timezone.utc)
     score = 0
@@ -588,11 +642,37 @@ def evaluate(
             and challenge.span_hours >= MIN_AGE_HOURS
         )
 
+        # Nama yang SAMA PERSIS dengan pemilik jangkar membatalkan
+        # pengecualian koeksistensi, berapa pun bukti kehadirannya.
+        #
+        # Alasannya dari sisi penyerang. Ia harus memilih nama di QR-nya,
+        # dan kedua pilihannya merugikan:
+        #
+        #   pakai nama korban  -> tetangga sah TIDAK PERNAH melakukan itu,
+        #                         jadi ini tertangkap mesin di sini
+        #   pakai nama lain    -> pembeli yang berdiri di depan warung
+        #                         melihat nama yang salah di layarnya
+        #
+        # Yang kedua tidak bisa dihakimi mesin — "WARUNG BU SARI" dan
+        # "WARUNG BU SRI" adalah dua pedagang sungguhan. Karena itu yang
+        # kedua ditangani dengan MENAMPILKAN kedua nama, bukan dengan
+        # menuduh. Lihat nama_kanonik() untuk angkanya.
+        #
+        # Perhatikan arah pemakaiannya: nama dipakai MENGETATKAN, tidak
+        # pernah MELONGGARKAN. Nama adalah nilai yang dipilih penyerang;
+        # melonggarkan atas dasar itu berarti menyerahkan pintu keluar
+        # kepada orang yang paling berkepentingan memakainya.
+        meniru_nama = bool(
+            merchant_name and strongest.merchant_name
+            and nama_kanonik(merchant_name)
+            == nama_kanonik(strongest.merchant_name)
+        )
+
         coexisting = (
             (current is not None and current.is_established
              and basis_sebanding)
             or kehadiran_terbukti
-        )
+        ) and not meniru_nama
 
         if coexisting:
             score += 20
@@ -601,6 +681,19 @@ def evaluate(
                 f"Terdapat merchant lain dalam radius "
                 f"{strongest.distance_m(lat, lng):.0f} m yang juga aktif "
                 f"— kemungkinan lokasi bersebelahan"))
+            # Justru DI SINI kontras nama paling penting.
+            #
+            # Cabang ini MELOLOSKAN pemindaian, jadi pertahanannya
+            # berpindah ke mata pembeli. Orang yang berdiri di depan
+            # warungnya tahu nama mana yang benar; sistem tidak. Yang
+            # bisa dilakukan sistem adalah menaruh kedua nama
+            # berdampingan supaya perbandingannya tidak menuntut siapa
+            # pun mengingat apa pun.
+            if merchant_name and strongest.merchant_name:
+                reasons.append((PRIORITAS_PENGUNGKAPAN,
+                    f"Di titik ini tercatat {strongest.merchant_name}. "
+                    f"Kode yang dipindai atas nama {merchant_name} — "
+                    f"pastikan cocok dengan yang tertulis di stikernya."))
         elif strongest.is_registered:
             # Sinyal TERPISAH, bukan rumus konsensus yang diubah —
             # invarian §5 mengunci rumus itu apa adanya.
@@ -615,10 +708,29 @@ def evaluate(
             reasons.append((60 + confidence,
                 f"Merchant ID berbeda dari {strongest.observer_count} pengamatan "
                 f"sebelumnya di lokasi ini"))
-            if strongest.merchant_name:
-                reasons.append((PRIORITAS_INFORMASI,
-                    f"Lokasi ini konsisten terdaftar sebagai "
-                    f"{strongest.merchant_name}"))
+
+            if meniru_nama:
+                score += W_NAME_IMPERSONATION
+                signals.append("anchor_name_impersonation")
+                reasons.append((W_NAME_IMPERSONATION,
+                    f"Kode ini memakai nama yang sama dengan merchant yang "
+                    f"tercatat di titik ini ({strongest.merchant_name}) tapi "
+                    f"Merchant ID-nya berbeda — pola khas stiker yang ditempel "
+                    f"menyamar"))
+            elif strongest.merchant_name:
+                # Bukan skor, melainkan pengungkapan. Pembeli yang berdiri
+                # di depan warungnya tahu nama mana yang benar; sistem
+                # tidak. Yang bisa dilakukan sistem adalah menaruh kedua
+                # nama berdampingan supaya perbandingannya tidak menuntut
+                # orang mengingat apa pun.
+                if merchant_name:
+                    reasons.append((PRIORITAS_PENGUNGKAPAN,
+                        f"Di titik ini tercatat {strongest.merchant_name}. "
+                        f"Kode yang dipindai atas nama {merchant_name}."))
+                else:
+                    reasons.append((PRIORITAS_INFORMASI,
+                        f"Lokasi ini konsisten terdaftar sebagai "
+                        f"{strongest.merchant_name}"))
 
     # --- Sinyal 2: satu NMID tersebar di banyak area ----------------
     elsewhere = [

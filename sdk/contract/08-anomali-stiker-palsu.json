@@ -26,7 +26,7 @@
     },
     "layers": {
       "behavior": 0,
-      "location": 84
+      "location": 100
     },
     "location_source": "live",
     "merchant": {
@@ -38,12 +38,13 @@
     },
     "processing_ms": 0,
     "reasons": [
-      "Merchant ID berbeda dari 48 pengamatan sebelumnya di lokasi ini",
-      "Lokasi ini konsisten terdaftar sebagai WARUNG BU SRI"
+      "Kode ini memakai nama yang sama dengan merchant yang tercatat di titik ini (WARUNG BU SRI) tapi Merchant ID-nya berbeda — pola khas stiker yang ditempel menyamar",
+      "Merchant ID berbeda dari 48 pengamatan sebelumnya di lokasi ini"
     ],
-    "risk_score": 84,
+    "risk_score": 100,
     "signals": [
-      "nmid_changed_at_anchor"
+      "nmid_changed_at_anchor",
+      "anchor_name_impersonation"
     ],
     "ticket_expires_in": 90,
     "tlv": [],

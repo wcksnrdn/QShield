@@ -43,6 +43,8 @@ membuat mereka tidak tahu harus menampilkan apa.
 | 18 Sep 2026 | sinyal `adjacent_merchant` diperluas lewat bukti kehadiran | aditif |
 | 20 Sep 2026 | sinyal `nmid_relocated` | aditif |
 | 20 Sep 2026 | sinyal `ambient_wifi_confirms_place`, `ambient_wifi_foreign_nmid` | aditif |
+| 22 Sep 2026 | `POST /api/v1/inspect` | aditif — endpoint baru |
+| 23 Sep 2026 | sinyal `anchor_name_impersonation` | aditif |
 | 21 Sep 2026 | sinyal `malformed_country` (tag 58 cacat bentuk) | aditif — `signals` daftar terbuka |
 | 21 Sep 2026 | `fees` ditambahkan ke tanggapan | aditif — klien wajib mengabaikan field tak dikenal |
 | 21 Sep 2026 | `include_tlv` (permintaan, opsional, bawaan `false`) + `tlv` (tanggapan) | aditif — bawaannya mati, klien lama tidak terbebani |

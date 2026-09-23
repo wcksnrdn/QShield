@@ -1093,6 +1093,7 @@ def verify(req: VerifyRequest, request: Request):
         same_nmid_elsewhere=elsewhere,
         crc_valid=parsed.crc_valid,
         challenge=tantangan,
+        merchant_name=parsed.merchant_name,
     )
 
     # Layer 2 — perilaku artefak QR.
