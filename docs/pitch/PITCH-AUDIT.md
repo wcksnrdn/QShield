@@ -121,7 +121,9 @@ latih — pembelajaran statistik tak terawasi dalam arti sebenarnya.
 
 Yang TIDAK ada: jaringan saraf, bobot terlatih, berkas model. Kalau
 juri bertanya "modelnya apa", jawaban yang benar adalah sebaran
-empiris, bukan arsitektur. Rinciannya di `KLARIFIKASI-ML.md`.
+empiris, bukan arsitektur. Naskah jawabannya di `MODEL-ML.md` —
+termasuk nama teknis tiap model dan bukti yang bisa dijalankan di
+depan juri.
 
 ### 4–7. Sinyal transfer manual — ADA
 

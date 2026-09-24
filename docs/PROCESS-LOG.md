@@ -2807,6 +2807,200 @@ Dicatat terbuka; sebagian menjadi isi *Pathway*.
 
 ---
 
+## Keputusan 76 — Klaim "unsupervised ML" di POC dipertahankan, suratnya dibatalkan
+
+**Yang ditemukan.** `KLARIFIKASI-ML.md` menyiapkan surat koreksi ke
+panitia atas pemakaian istilah *machine learning* di POC. Dasarnya:
+"ML berarti model terlatih, dan kita tidak punya". Definisi itu
+**salah** — dan `PITCH-AUDIT.md` §3 sudah menyimpulkan sebaliknya sejak
+awal ("unsupervised ML models — ADA, dengan istilah yang tepat"). Dua
+dokumen di repo yang sama saling bertentangan, dan yang keliru adalah
+yang menyiapkan permintaan maaf.
+
+Machine learning tidak identik dengan *supervised classifier*. Deteksi
+pencilan tak terawasi di atas sebaran empiris adalah machine learning
+dalam pengertian baku. Yang POC tulis — "unsupervised ML models" —
+akurat apa adanya.
+
+**Apa yang sungguh ada.** Dua model tak terawasi berjalan di produksi:
+
+- `profile.py` — deteksi pencilan kategorikal berbasis frekuensi.
+  Sebaran marginal delapan ciri merchant diestimasi dari korpus; nilai
+  di bawah 5% disebut langka; tiga nilai langka sekaligus ditandai.
+  Sekerabat dengan Attribute Value Frequency, dengan ambang per-atribut
+  dan konjungsi supaya putusannya bisa menyebut fitur mana yang langka.
+- `issuer_dialect` — enam atribut cara penyusunan payload per penerbit,
+  dipakai menilai hanya setelah disepakati ≥5 NMID dan ≥90% merchant.
+
+Ditambah empat komponen adaptif: konsensus pengamat, penghalusan
+jangkar, `area_city`, dan jejak percobaan serangan.
+
+**Keputusan.** Surat koreksi dibatalkan. `KLARIFIKASI-ML.md` dihapus,
+diganti `MODEL-ML.md` yang isinya bukan permintaan maaf melainkan
+amunisi: nama teknis tiap model, parameter beserta alasannya, bukti
+yang bisa dijalankan di depan juri, daftar klaim yang tetap terlarang,
+dan naskah jawaban untuk empat pertanyaan yang paling mungkin ditanya.
+
+**Yang tetap terlarang.** "Deep learning", "neural network", "dilatih
+dengan data penipuan", dan angka akurasi/AUC terhadap data berlabel —
+sampel penipuan terkonfirmasi yang kita punya nol, dan mengarang
+labelnya jauh lebih merusak daripada salah istilah.
+
+**Alasan di balik ini bukan soal istilah.** Menarik klaim yang benar
+karena takut ditanya adalah bentuk lain dari tidak menguasai pekerjaan
+sendiri. Yang membedakan tim yang paham dari tim yang membesar-besarkan
+bukan seberapa kecil klaimnya, melainkan apakah tiap klaimnya bisa
+ditunjukkan berjalan. Dua model ini bisa — sapuan kalibrasinya ada di
+`calibrate_rarity.py`, dan dialek penerbit `93600914` konsisten 51 dari
+51 merchant yang dikumpulkan tim di lapangan.
+
+**Yang ikut diperbaiki.** `PITCH-PJP.md` memuat larangan menyeluruh
+"jangan menyebut machine learning". Untuk audiens PJP, penekanan pada
+sifat deterministik memang tepat — tapi larangannya diperhalus supaya
+tidak bertabrakan dengan naskah juri: yang dilarang adalah "AI" dan
+kesan classifier terlatih, bukan menyebut pembelajaran tak terawasi
+yang memang ada.
+
+---
+
+## Keputusan 77 — Model kelangkaan diuji pada merchant sungguhan, dan satu fiturnya ternyata kosong
+
+**Kenapa diuji ulang.** `calibrate_rarity.py` menyetel ambang memakai
+populasi sintetis yang meniru sebaran merchant Indonesia: 7 kota, 9
+kategori usaha. Korpus lapangan kini ada — 122 merchant sungguhan yang
+dipindai tim — sehingga setelan itu bisa diuji terhadap kenyataan, bukan
+terhadap tiruan kenyataan.
+
+Metodenya leave-one-out: tiap merchant dinilai terhadap korpus yang
+dibentuk 121 merchant lainnya, sehingga tidak ikut membentuk sebaran
+yang menilainya. Seluruh merchant di korpus ini sah, jadi setiap yang
+tertandai adalah positif palsu.
+
+**Yang ditemukan.**
+
+> Sintetis: 0,07% positif palsu. Lapangan: **8,20%** — 5 dari 122
+> menjadi 10 dari 122.
+
+Selisihnya bukan derau, melainkan satu fitur yang rusak diam-diam.
+Kardinalitas `kota` di lapangan 79 nilai berbeda untuk 122 merchant,
+dan **kota terbanyak pun hanya 6 merchant — 4,9%**, di bawah
+`RARE_THRESHOLD = 0,05`. Akibatnya seluruh nilai kota terbaca langka:
+122 dari 122 merchant sah membawa satu fitur langka gratis, dan
+`MIN_RARE_FEATURES = 3` diam-diam merosot jadi konjungsi dua fitur.
+
+Di populasi sintetis hal ini tidak pernah muncul karena kota terbanyak
+di sana mencakup 40% populasi. Sebaran tiruannya terlalu rapi.
+
+**Perbaikannya tidak menambah konstanta.** Penjaga baru di
+`score_features()`: fitur dilewati bila nilai TERBANYAKNYA sendiri sudah
+di bawah ambang langka. Alasannya berdiri sendiri — kalau menjadi langka
+adalah keadaan normal di sebuah fitur, fitur itu tidak membedakan apa
+pun. Ambangnya memakai `RARE_THRESHOLD` yang sudah ada, jadi tidak ada
+angka baru yang perlu dikalibrasi. Ini generalisasi penjaga
+`len(terlihat) < 2` yang sudah ada, bukan mekanisme baru.
+
+| | positif palsu lapangan | deteksi sintetis |
+|---|---|---|
+| sebelum | 8,20% (10/122) | 100% |
+| sesudah | **4,10% (5/122)** | 100% |
+
+Kalibrasi sintetis tidak berubah sama sekali — penjaga tidak aktif di
+sana, karena di sana memang tidak ada fitur yang rusak. Seluruh 13
+berkas test lolos, termasuk 44 skenario adversarial.
+
+**Yang tidak dibereskan, dan sengaja.** Positif palsunya tidak dikejar
+sampai nol. `MIN_RARE_FEATURES = 4` memang memberi 0,00% di korpus
+lapangan — tapi model yang tidak menandai satu pun dari 122 merchant
+juga berhenti menandai serangan. Sisa 4,1% itu memang merchant sungguhan
+yang tidak biasa, dan bobotnya diturunkan ke 25 di Keputusan 78 supaya
+sinyal ini tidak pernah menggeser tier sendirian.
+
+**Batas yang ikut terukur, dicatat sebagai R19.** Penyerang yang
+MENYALIN profil lazim — MCC 5812, kriteria UMI, PAN 18 digit — lolos
+sepenuhnya, begitu pula yang hanya menyimpang di dua ciri. Itu bukan
+kegagalan penyetelan melainkan sifat model kelangkaan, dan bukan tugas
+lapisan ini: QR yang dibangkitkan ulang ditangkap `issuer_dialect` lewat
+cara penyusunan payload, penempatan stikernya ditangkap ikatan
+geospasial.
+
+**R7 ikut diperbarui.** "Belum punya korpus payload QRIS asli" tidak
+lagi benar: 122 merchant dari 10 penerbit, 5 penerbit melewati
+`ISSUER_MIN_NMIDS`, dan penerbit `93600914` konsisten pada keenam
+atribut dialek untuk 51 dari 51 merchant. Yang masih terbuka: korpusnya
+dari satu wilayah, dan lima penerbit masih tipis.
+
+**Pelajaran yang lebih besar dari angkanya.** Kalibrasi terhadap sebaran
+buatan sendiri mengukur seberapa baik model mengenali generator kita,
+bukan seberapa baik ia mengenali dunia. Angka 0,07% itu tidak pernah
+salah ditulis — yang salah adalah populasi tempat ia diukur, dan itu
+baru kelihatan ketika ada merchant sungguhan untuk mengukurnya. Skrip kalibrasi sintetis tetap dipakai
+untuk memilih bentuk aturan; angka yang diklaim ke luar harus datang dari
+korpus lapangan.
+
+---
+
+## Keputusan 78 — Bobot kelangkaan 30 adalah veto permanen terhadap merchant sah
+
+**Yang ditemukan.** `profile.py` menyatakan niatnya sendiri di
+docstring: "bobotnya sedang, dan sinyal ini tidak boleh cukup
+sendirian". Bobotnya 30. Ambang `proceed` adalah `score <= 25`. Niat
+dan angka bertentangan, dan angkanya yang menang.
+
+Dampaknya bukan sekadar satu tier gesekan. `binding.py` memberi status
+VERIFIED hanya bila:
+
+```python
+current and current.is_established and score <= 25
+```
+
+Jadi pada bobot 30, sinyal kelangkaan SENDIRIAN membuat merchant sah
+kehilangan status hijau dan jatuh ke `unknown`.
+
+**Kenapa ini lebih buruk daripada gesekan biasa.** Kelangkaan adalah
+sifat PAYLOAD, bukan sifat lokasi. Merchant sah yang kebetulan punya
+kombinasi MCC, kriteria, dan panjang PAN yang tidak biasa **tidak bisa
+menghapusnya dengan dipindai lebih sering** — berapa pun pengamat yang
+terkumpul, berapa lama pun jangkarnya berdiri, skornya tetap 30 dan
+statusnya tetap unknown. Bobot di atas 25 bekerja sebagai veto permanen
+terhadap verifikasi.
+
+Terukur di korpus lapangan: 4,1% merchant sah — 5 dari 122 — berada di
+bawah veto itu, selamanya.
+
+**Harganya diukur sebelum diambil** (`calibrate_rarity_weight.py`).
+Seluruh kombinasi bobot sampai tiga sinyal disapu, dengan catatan bahwa
+sinyal WiFi tidak pernah muncul tanpa 40 dasar jalur akurasi rendah —
+menghitungnya tanpa itu akan melebih-lebihkan pelemahan.
+
+> Dari **1.392** kombinasi yang mungkin, **12 melemah satu tier.**
+
+Umumnya pasangan kelangkaan dengan satu sinyal berbobot 25-30 lain yang
+turun dari `step_up` ke `warn`: perangkat di-root, terbukti pindah,
+sidik jari encoding. Pasangan yang turun dari `cooling_off` ke `step_up`
+semuanya duduk di 48-50, tepat di bibir ambang.
+
+**Keputusan.** `W_RARE_PROFILE` 30 -> 25.
+
+Angkanya bukan selera dan bukan kompromi tengah: 25 adalah ambang
+`proceed` sekaligus syarat VERIFIED, sehingga pada nilai itu sinyal ini
+tepat tidak pernah menggeser tier sendirian — persis yang docstring-nya
+klaim sejak awal — dan tetap berarti begitu ditemani sinyal lain.
+
+**Yang ditukar, terang-terangan.** Dua belas kombinasi menjadi satu tier
+lebih lunak. Yang didapat: tidak ada lagi merchant sah yang dikunci di
+luar status hijau oleh sifat payload yang tidak bisa ia ubah. Untuk
+lapisan pra-pembayaran yang seluruh nilainya bergantung pada pedagang
+sah mau memakainya, pertukaran itu tidak berimbang — ia jelas berpihak
+ke sini.
+
+**Pola yang pantas diingat.** Ambang tier bukan sekadar pembatas
+keluaran; ia diam-diam juga menetapkan bobot MAKSIMUM yang boleh dimiliki
+sinyal mana pun yang bisa menyala pada merchant sah. Sinyal apa pun yang
+melampauinya menjadi veto, bukan pertimbangan. Itu pemeriksaan yang
+layak dijalankan untuk tiap bobot baru, bukan hanya untuk yang ini.
+
+---
+
 ## Keputusan 55 — Tag wajib diperiksa isinya, tapi hanya bentuknya
 
 **Yang ditemukan.** `MANDATORY_TAGS` menuntut tag 58 (kode negara) HADIR,
@@ -3432,6 +3626,9 @@ Layer 2 di `behavior.py`:
 | `SOFT_FINGERPRINT_CAP` | 25 | sekumpulan sinyal lemah tidak boleh menumpuk jadi setara satu bukti kuat |
 | `W_ANOMALY_BASE` | 12 | berskala dengan jumlah percobaan, pola yang sama dengan Keputusan 4 |
 | `W_ANOMALY_CAP` | 30 | sendirian tidak pernah cukup mencapai `cooling_off` |
+| `W_RARE_PROFILE` | 25 | sama dengan ambang `proceed` dan syarat VERIFIED — di atas itu sinyal ini menjadi veto permanen terhadap merchant sah (`calibrate_rarity_weight.py`) |
+| `RARE_THRESHOLD` | 0,05 | ambang kelangkaan per nilai; fitur yang nilai terbanyaknya sendiri di bawah ambang ini dilewati (Keputusan 77) |
+| `MIN_RARE_FEATURES` | 3 | satu keanehan adalah merchant tidak biasa; tiga sekaligus adalah pola. Positif palsu 4,1% pada 122 merchant lapangan (`evaluate_rarity.py`) |
 
 Tag yang diparse tapi **sengaja tidak diberi bobot sama sekali**: 55, 56,
 57 (biaya layanan) dan 61 (kode pos). Diungkapkan di tanggapan, tidak
