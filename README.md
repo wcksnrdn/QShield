@@ -81,7 +81,7 @@ python3 tests/test_emvco.py
 python3 tests/test_geo.py
 python3 tests/test_binding.py
 python3 tests/test_invariants.py               # kunci regresi kedelapan invarian
-python3 tests/test_adversarial.py              # 36 skenario dari sisi penyerang
+python3 tests/test_adversarial.py              # 44 skenario dari sisi penyerang
 python3 tests/test_hardening.py                # input, auth, rate limit, audit, konkurensi
 python3 tests/test_contract.py                 # kunci bentuk API v1
 python3 tests/test_frontend.py                 # kecocokan halaman dengan API
@@ -89,6 +89,9 @@ python3 tests/test_registration.py             # pendaftaran merchant + penyalah
 python3 tests/test_transfer.py                 # Layer 2 jalur transfer manual
 python3 tests/test_sdk_contract.py             # seam SDK native tidak basi
 python3 tests/test_ticket.py                   # tiket: pengikatan, pemalsuan, kedaluwarsa
+python3 tests/test_gambar.py                   # pembayaran jarak jauh dari foto QR
+python3 tests/test_keliling.py                 # pedagang keliling vs stiker yang disebar
+python3 tests/test_konsensus.py                # asal-usul reputasi jangkar
 PYTHONPATH=scripts python3 tests/test_api.py   # test_api.py mengimpor scripts/seed.py
 
 python3 scripts/calibrate_geo.py               # presisi geohash
@@ -148,6 +151,7 @@ scripts/         skrip yang dijalankan langsung, bukan bagian dari package
   export_corpus.py     ekspor ciri merchant dari produksi, tanpa NMID
   evaluate_rarity.py   evaluasi model kelangkaan pada korpus lapangan
   calibrate_rarity_weight.py  kenapa bobot kelangkaan dikunci 25
+  calibrate_keliling.py  ambang kecepatan & rentang pedagang keliling
   calibrate_decay.py  kalibrasi peluruhan jejak serangan
   calibrate_falsepos.py gesekan pada pedagang jujur
   calibrate_tetangga.py pedagang bersebelahan (R11)

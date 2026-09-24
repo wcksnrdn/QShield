@@ -676,8 +676,15 @@ def _k1():
         (NMID,)).fetchone()["observer_count"]
 
     # Jangkar sudah diseed 47 pengamat, jadi N device baru menambahkannya.
-    assert obs == N, f"observations {obs}, harusnya {N}"
+    #
+    # `observations` kini ikut berisi jejak seed (Keputusan 82): seed
+    # yang menulis observer_count tanpa baris pengamatan membuat data
+    # demo berbohong ke tim sendiri. Yang dikunci di sini justru
+    # kecocokan keduanya — kalau observer_count dan jumlah baris jejak
+    # berbeda, salah satunya berbohong.
+    assert obs == 47 + N, f"observations {obs}, harusnya {47 + N}"
     assert oc == 47 + N, f"observer_count {oc}, harusnya {47 + N}"
+    assert obs == oc, "observer_count dan jejak pengamatan tidak cocok"
     return f"{N} thread serentak, {lama:.0f} ms, nol galat, hitungan tepat"
 
 
@@ -701,8 +708,9 @@ def _k2():
         (NMID,)).fetchone()["observer_count"]
     obs = api.store.conn.execute(
         "SELECT COUNT(*) c FROM observations").fetchone()["c"]
-    assert obs == 1, f"observations {obs}, idempotensi jebol"
+    assert obs == 48, f"observations {obs}, idempotensi jebol (47 seed + 1)"
     assert oc == 48, f"observer_count {oc}, harusnya 47 + 1"
+    assert obs == oc, "observer_count dan jejak pengamatan tidak cocok"
     return "50 permintaan paralel dari satu device -> tetap 1 pengamat"
 
 
@@ -727,7 +735,7 @@ def _k3():
 
     obs = api.store.conn.execute(
         "SELECT COUNT(*) c FROM observations").fetchone()["c"]
-    assert obs == N, f"observations {obs}, harusnya {N}"
+    assert obs == 47 + N, f"observations {obs}, harusnya {47 + N}"
     # Demo memakai 2-3 HP. Margin puluhan kali lipat sudah lebih dari cukup.
     assert laju > 50, f"hanya {laju:.0f} permintaan/detik"
     return f"{N} serentak dalam {detik * 1000:.0f} ms = {laju:.0f} permintaan/detik"

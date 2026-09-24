@@ -261,7 +261,21 @@ di_sini = (WARUNG_LAT + 6 / 111.32, WARUNG_LNG)
 
 v = b.evaluate(REAL, *di_sini, [], pindah, now=NOW)
 show("hari pertama, tanpa bukti", v)
-assert v.status == b.ANOMALY, "tanpa bukti, kehati-hatian harus menang"
+# Harapan ini BERUBAH di Keputusan 80, dan perubahannya disengaja.
+#
+# Dulu di sini dituntut ANOMALY, dengan alasan "tanpa bukti, kehati-
+# hatian harus menang". Kehati-hatiannya benar; labelnya yang salah.
+# Tiga area dalam radius 6 km tanpa bukti kehadiran serentak sama
+# persis bentuknya dengan gerobak kopi keliling yang sah — dan menyebut
+# pedagang keliling "anomaly" adalah tuduhan, bukan kehati-hatian.
+#
+# Yang tetap dituntut: JANGAN pernah hijau. Gesekannya utuh — step_up
+# tetap meminta verifikasi identitas — yang berubah hanya sistem
+# berhenti mengaku tahu sesuatu yang tidak diketahuinya.
+assert v.status != b.VERIFIED, "tanpa bukti tidak boleh hijau"
+assert v.action in (b.STEP_UP, b.COOLING_OFF), f"gesekan hilang: {v.action}"
+assert "nmid_multi_area" in v.signals, v.signals
+assert "nmid_scatter" not in v.signals, "banyak area bukan bukti sebaran"
 
 cukup = b.Challenge(devices=b.ADJACENT_MIN_DEVICES,
                     first_at=NOW - timedelta(days=5),
@@ -295,9 +309,26 @@ banyak = b.Challenge(devices=b.ADJACENT_MIN_DEVICES * 5,
                      last_at=NOW - timedelta(days=2))
 v = b.evaluate(REAL, *di_sini, [], sebar, now=NOW, challenge=banyak)
 show("40 perangkat, stiker lama jarang dipindai", v)
-assert "nmid_scatter" in v.signals, "penyebaran lolos lewat jalur kepindahan"
-assert v.status == b.ANOMALY
-print("\n  periode yang beririsan menahannya; frekuensi tidak dipakai menilai")
+# Kepindahan tetap DITOLAK — itu bagian yang harus tidak boleh berubah.
+assert "nmid_relocated" not in v.signals, "penyebaran lolos jadi kepindahan"
+assert v.status != b.VERIFIED and v.action in (b.STEP_UP, b.COOLING_OFF)
+
+# Tapi ia juga tidak lagi disebut `nmid_scatter`, dan ini HARGA yang
+# dibayar sadar di Keputusan 80 — bukan bug.
+#
+# Pada data sebinding ini, stiker yang dipasang bersamaan dan gerobak
+# keliling berbentuk identik: periode aktif beririsan, tiga area dalam
+# radius 6 km. Periode beririsan memang menolak cerita "pindah", tapi ia
+# TIDAK memisahkan sebaran dari keliling — gerobak yang bolak-balik juga
+# punya periode beririsan. Tanpa jejak waktu yang lebih halus, tidak ada
+# informasi yang memisahkan keduanya, dan menuduh berarti menuduh
+# pedagang keliling juga.
+#
+# Yang memulihkan ketegasan: `jejak_kehadiran` — diuji di
+# tests/test_keliling.py, dan selalu terisi di jalur API sungguhan.
+assert "nmid_multi_area" in v.signals, v.signals
+print("\n  periode beririsan tetap menolak 'pindah'; pemisahan sebaran vs")
+print("  keliling menunggu jejak waktu (Keputusan 80, R21)")
 
 print()
 print("=" * 66)

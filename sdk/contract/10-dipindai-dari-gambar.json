@@ -1,5 +1,5 @@
 {
-  "_keterangan": "rooted: true -> status 'failed' dan skor Layer 2 naik.",
+  "_keterangan": "from_image: true — payload dibaca dari GAMBAR, jadi koordinat pemindai tidak mewakili lokasi QR. Layer 1 tidak dijalankan, tidak ada jangkar yang ditanam, dan `known` berisi apa yang sudah diamati atas Merchant ID ini. Pakai ini untuk alur scan-dari-galeri; tanpanya tiap pembayaran jarak jauh menanam jangkar palsu di lokasi pembayar.",
   "permintaan": {
     "accuracy_m": 8.5,
     "device_anon_id": "11111111-2222-4333-8444-555555555555",
@@ -7,8 +7,9 @@
       "attested": true,
       "mock_location": false,
       "platform": "android",
-      "rooted": true
+      "rooted": false
     },
+    "from_image": true,
     "lat": -6.914744,
     "lng": 107.60981,
     "payload": "00020101021126660014ID.CO.QRIS.WWW01189360001490000000010215ID10243654789120303UMI5204581253033605802ID5913WARUNG BU SRI6007BANDUNG6105402576304E671"
@@ -16,14 +17,8 @@
   "status_http": 200,
   "tanggapan": {
     "action": "warn",
-    "device_integrity": "failed",
-    "evidence": {
-      "established": true,
-      "observers": 48,
-      "registered": false,
-      "span_hours": 10723.5,
-      "vouched_observers": 0
-    },
+    "device_integrity": "attested",
+    "evidence": null,
     "fees": {
       "fixed": null,
       "indicator": null,
@@ -31,9 +26,21 @@
       "percent": null,
       "present": false
     },
-    "known": null,
+    "known": {
+      "city": "BANDUNG",
+      "first_seen": "2025-07-05T00:00:00+00:00",
+      "known": true,
+      "last_seen": "<iso-8601-utc>",
+      "locations": 1,
+      "name_matches": true,
+      "names": [
+        "WARUNG BU SRI"
+      ],
+      "observer_count": 48,
+      "registered": false
+    },
     "layers": {
-      "behavior": 25,
+      "behavior": 0,
       "location": 0
     },
     "location_source": "live",
@@ -46,15 +53,12 @@
     },
     "processing_ms": 0,
     "reasons": [
-      "Perangkat dilaporkan sudah di-root atau di-jailbreak — perlindungan sistem operasinya tidak lagi bisa diandalkan",
-      "Konsisten dengan 48 pengamatan sebelumnya di lokasi ini",
-      "Reputasi lokasi ini dibangun dari pemindaian anonim — tidak ada pengamat yang dijamin penyelenggara pembayaran"
+      "Dipindai dari gambar — penempatan stiker TIDAK dapat diverifikasi dari sini. Yang diperiksa hanya bentuk payload dan riwayat Merchant ID-nya.",
+      "Merchant ID ini dikenal: WARUNG BU SRI di BANDUNG — 48 pengamatan"
     ],
-    "risk_score": 25,
+    "risk_score": 0,
     "signals": [
-      "established_binding",
-      "consensus_unvouched",
-      "device_rooted"
+      "scanned_from_image"
     ],
     "ticket_expires_in": 90,
     "tlv": [],

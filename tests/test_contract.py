@@ -49,6 +49,13 @@ PERMINTAAN_OPSIONAL = {
     "printed_label",
     # Ditambahkan 17 Sep 2026 — sidik jari WiFi dari klien native.
     "ambient_wifi",
+    # Ditambahkan 25 Sep 2026. Opsional, bawaan False. Menyatakan bahwa
+    # payload dibaca dari GAMBAR, sehingga koordinat pemindai tidak
+    # mewakili lokasi QR — kasus foto QR yang dikirim lewat pesan lalu
+    # dibayar orang lain dari tempat berbeda. Hanya bisa MENGETATKAN:
+    # menyalakannya membuang verifikasi penempatan, tidak pernah
+    # menerbitkannya.
+    "from_image",
 }
 PERMINTAAN_TIPE = {
     "device_integrity": "object",
@@ -61,6 +68,7 @@ PERMINTAAN_TIPE = {
     "device_anon_id": "string",
     "accuracy_m": "number",
     "location_source": "string",
+    "from_image": "boolean",
 }
 
 TANGGAPAN_FIELD = {
@@ -71,6 +79,15 @@ TANGGAPAN_FIELD = {
     "signals": "array",
     "layers": "object",
     "merchant": "object",
+    # Ditambahkan 25 Sep 2026. Apa yang Q-Shield KETAHUI tentang Merchant
+    # ID ini — dibedakan tegas dari `merchant`, yang cuma mengutip isi
+    # payload. Diisi HANYA pada pemindaian dari gambar; null selainnya.
+    "known": "object",
+    # Ditambahkan 25 Sep 2026. Di atas APA putusan ini berdiri —
+    # terutama `vouched_observers`, satu-satunya angka reputasi yang
+    # tidak bisa ditumbuhkan penyerang dengan mengarang device_anon_id.
+    # Pengungkapan, bukan skor. Lihat Keputusan 81 dan R22.
+    "evidence": "object",
     # Ditambahkan 21 Sep 2026. ADITIF pada tanggapan — docs/API.md
     # membolehkannya tanpa naik versi, dan klien wajib mengabaikan
     # field yang tidak dikenalnya.

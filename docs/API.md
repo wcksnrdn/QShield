@@ -52,6 +52,116 @@ membuat mereka tidak tahu harus menampilkan apa.
 | 21 Sep 2026 | `verification_ticket` + `ticket_expires_in` ditambahkan ke tanggapan | aditif — klien yang mengabaikannya tetap berjalan seperti sebelumnya |
 | 21 Sep 2026 | `POST /api/v1/tickets/verify` ditambahkan | aditif — endpoint baru tidak memecah klien yang sudah ada |
 | 21 Sep 2026 | `payload_fp` ditambahkan ke jejak audit | aditif; bukan kontrak API, tapi mengubah bentuk baris log |
+| 25 Sep 2026 | `from_image` (permintaan, opsional, bawaan `false`) | aditif — bawaannya mati, klien lama tidak berubah perilakunya |
+| 25 Sep 2026 | `known` ditambahkan ke tanggapan `/verify` dan `/inspect` | aditif — `null` di `/verify` kecuali `from_image` menyala |
+| 25 Sep 2026 | sinyal `scanned_from_image` | aditif — `signals` daftar terbuka |
+| 25 Sep 2026 | sinyal `nmid_multi_area` | aditif — `signals` daftar terbuka |
+| 25 Sep 2026 | `evidence` ditambahkan ke tanggapan `/verify` | aditif — klien wajib mengabaikan field tak dikenal |
+| 25 Sep 2026 | sinyal `consensus_unvouched` | aditif — `signals` daftar terbuka |
+| 25 Sep 2026 | `nmid_scatter` kini menuntut bukti kehadiran serentak atau rentang >80 km | **perilaku berubah** — kosakata tetap, tapi kasus yang dulu `anomaly` kini bisa jadi `unknown`/`warn`. Lihat Keputusan 80 |
+
+### `from_image` — pemindaian dari gambar
+
+Opsional, bawaan `false`. Diisi klien ketika payload dibaca dari
+**gambar** dan bukan dari stiker di depan mata: scan-dari-galeri, QR
+yang diterima lewat pesan, tangkapan layar.
+
+Alasannya bukan sudut sempit. Alur yang paling umum di lapangan adalah
+seseorang memfoto QR di warung, mengirimkannya lewat pesan, lalu orang
+lain membayar dari tempat yang sama sekali berbeda. Koordinat pembayar
+NYATA — GPS-nya tidak berbohong — tapi tidak mengatakan apa pun tentang
+di mana stiker itu berada. Itu sebabnya field ini terpisah dari
+`location_source`: yang dipersoalkan bukan dari mana koordinatnya
+berasal, melainkan apa yang diwakilinya.
+
+Kalau menyala:
+
+| | |
+|---|---|
+| Layer 1 | **tidak dijalankan.** Menilai jangkar dengan koordinat pembayar akan menuduh pedagang yang sah |
+| Layer 2 | berjalan **penuh** — struktural, dialek penerbit, kelangkaan. Bentuk payload tidak berubah karena difoto |
+| Pengetahuan lokasi | tidak ada yang ditulis: tidak ada binding, tidak ada kota, tidak ada percobaan anomali |
+| Pengetahuan payload | tetap dipelajari |
+| Putusan | `unknown`, minimal `warn`. Tidak pernah `proceed` |
+| `known` | terisi |
+
+**Wajib dipakai PJP pada alur scan-dari-galeri.** Tanpanya tiap
+pembayaran jarak jauh menanam jangkar palsu di lokasi pembayar, dan
+tiap jangkar berjarak >1 km menambah `nmid_second_location` **+25
+permanen** pada merchant yang sah.
+
+Field ini diisi klien, dan klien bisa berbohong. Aman karena hanya bisa
+MENGETATKAN: menyalakannya membuang verifikasi penempatan, tidak pernah
+menerbitkannya. Kontradiksi struktural tetap `cooling_off` — sifat
+payload tidak melunak karena payload-nya sampai lewat gambar.
+
+### `evidence` — di atas apa putusan ini berdiri
+
+`verdict` menjawab "boleh dibayar atau tidak". `evidence` menjawab
+pertanyaan berbeda yang sama pentingnya: **seberapa mahal memalsukan
+dasar putusan itu.**
+
+| field | arti |
+|---|---|
+| `observers` | pengamat berbeda di jangkar ini saat putusan dibuat |
+| `vouched_observers` | di antaranya yang DIJAMIN penyelenggara |
+| `registered` | didaftarkan PJP di titik ini |
+| `established` | sudah melewati ambang konsensus dan umur |
+| `span_hours` | rentang pengamatan pertama ke terakhir |
+
+Bedanya `observers` dan `vouched_observers` bukan kosmetik, melainkan
+inti keamanannya. `observers` tumbuh dari `device_anon_id` — field yang
+diisi KLIEN. Terukur: tiga string karangan direntang lebih dari
+`MIN_AGE_HOURS` cukup membuat jangkar baru menjadi `verified`.
+`vouched_observers` tidak bisa ditumbuhkan begitu: ia hanya bertambah
+ketika atestasi perangkat diperiksa penyelenggara DAN dipertanggungkan
+lewat kunci API mereka. Pemindai anonim yang mengaku `attested: true`
+tidak terhitung — pengakuan itu cuma klaim penyerang tentang dirinya
+sendiri.
+
+Ketika sebuah jangkar mapan tapi `vouched_observers` nol dan tidak
+terdaftar, tanggapan membawa sinyal `consensus_unvouched` beserta
+alasannya. Itu **pengungkapan, bukan skor**: tier dan skornya tidak
+bergeser sedikit pun. Yang berubah hanya sistem berhenti menyamarkan
+kualitas buktinya sendiri — dan PJP bisa menyusun kebijakannya sendiri
+di atas angka itu. Lihat R22 di `THREAT-MODEL.md`.
+
+Nilainya menggambarkan keadaan yang menjadi DASAR putusan, bukan
+keadaan sesudah pemindaian ini ikut dicatat.
+
+`evidence` bernilai `null` pada jalur yang memang tidak menilai jangkar:
+GPS yang diakui palsu, akurasi di atas ambang invarian §6, dan
+pemindaian dari gambar.
+
+### `known` — atribusi Merchant ID
+
+Bedanya dengan `merchant` menentukan, dan jangan tertukar:
+
+| field | isinya |
+|---|---|
+| `merchant` | apa yang **TERTULIS di payload** — bisa diketik siapa saja saat mendaftar |
+| `known` | apa yang sudah **PERNAH DIAMATI** atas Merchant ID itu |
+
+Nama di QR bisa dikarang; riwayat pengamatan tidak bisa. Pada
+pembayaran jarak jauh, `known` adalah satu-satunya hal yang masih bisa
+diberikan: pembayar mencocokkannya sendiri dengan yang ia ketahui.
+Keputusan diserahkan ke manusia, bukan diklaim sistem.
+
+Isinya: `known`, `names`, `city`, `observer_count`, `locations`,
+`first_seen`, `last_seen`, `registered`, `name_matches`.
+
+**Tidak memuat koordinat.** Kota adalah resolusi paling halus yang
+keluar dari sini — titik persis lapak seorang pedagang bukan milik
+siapa pun yang kebetulan memegang payload-nya (invarian §8).
+
+**Tidak memuat putusan, aksi, maupun field kecurigaan.** Mengenali
+Merchant ID bukan verifikasi penempatan. Dan setiap field kecurigaan di
+sini akan menuduh orang yang salah: `anomaly_attempts` menempel pada
+JANGKAR, jadi nilainya tinggi justru pada pedagang yang DISERANG,
+sementara catatan penantang ikut terisi oleh tetangga yang sah (R11).
+
+Di `/verify`, `known` bernilai `null` kecuali `from_image` menyala. Di
+`/inspect` ia selalu terisi.
 
 `location_source` **tidak** bertambah nilainya. Sidik jari WiFi bisa
 menyimpulkan tempat, tapi field itu menyatakan bagaimana KLIEN

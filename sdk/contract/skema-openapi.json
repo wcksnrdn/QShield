@@ -178,6 +178,12 @@
         ],
         "description": "diisi klien native; klien web mengosongkannya"
       },
+      "from_image": {
+        "default": false,
+        "description": "true bila payload dibaca dari gambar/galeri, sehingga koordinat pemindai tidak mewakili lokasi QR",
+        "title": "From Image",
+        "type": "boolean"
+      },
       "include_tlv": {
         "default": false,
         "description": "sertakan bedah TLV di tanggapan (mode demo)",
@@ -246,8 +252,28 @@
         "title": "Device Integrity",
         "type": "string"
       },
+      "evidence": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/EvidenceOut"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
       "fees": {
         "$ref": "#/components/schemas/FeeOut"
+      },
+      "known": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/AttributionOut"
+          },
+          {
+            "type": "null"
+          }
+        ]
       },
       "layers": {
         "$ref": "#/components/schemas/LayerScores"

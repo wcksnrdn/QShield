@@ -177,6 +177,74 @@ MIN_AGE_HOURS = 24          # rentang minimal pengamatan pertama ke terakhir
 SCATTER_MIN_AREAS = 2       # jumlah area lain yang memicu alarm sebaran
 STALE_DAYS = 90             # binding tak terlihat selama ini dianggap usang
 
+# --- Pedagang keliling vs stiker yang disebar ----------------------
+#
+# Keduanya menghasilkan gejala yang SAMA PERSIS di bindings: satu
+# Merchant ID muncul di banyak area berjauhan. Sebelum ini gejala itu
+# sendiri yang dihukum (+60, "pola khas stiker yang disebar"), sehingga
+# gerobak kopi keliling yang sah divonis anomaly.
+#
+# Yang memisahkan keduanya bukan statistik, melainkan fisika:
+#
+#     satu gerobak hanya bisa berada di satu tempat pada satu waktu;
+#     lima stiker yang ditempel bersamaan hidup di lima tempat sekaligus.
+#
+# Jadi tuduhan sebaran menuntut BUKTI POSITIF kehadiran serentak —
+# dua pengamatan di tempat berbeda yang terpaut waktu terlalu singkat
+# untuk ditempuh siapa pun. Tanpa bukti itu, banyak-area bukan tuduhan,
+# melainkan ketidaktahuan, dan dihargai sebagai ketidaktahuan.
+#
+# Ambang kecepatan dari calibrate_keliling.py. Angkanya dipilih demi
+# KESELAMATAN pedagang, bukan demi angka tangkapan — dan profil yang
+# menentukan bukan gerobak dorong melainkan kopi keliling BERMOTOR:
+#
+#   ambang   dorong tertuduh   bermotor tertuduh   penyebar tertangkap
+#       20             0,0%               89,5%                 13,2%
+#       40             0,0%               23,2%                  6,8%
+#       60             0,0%                2,5%                  4,7%
+#       80             0,0%                0,0%                  3,8%
+#
+# 20 km/jam akan menuduh sembilan dari sepuluh pedagang bermotor. 80
+# km/jam menyisakan nol pada kedua profil, dengan p99 bermotor terukur
+# 69,6 km/jam. Model bermotornya sendiri sengaja dibuat agresif —
+# ia berpindah 1-8 km dalam 5-20 menit — sehingga 80 lebih konservatif
+# daripada yang terlihat.
+MOBILITY_MAX_KMH = 80.0
+
+# Rentang terjauh yang masih masuk akal untuk SATU pedagang keliling.
+#
+# Kecepatan saja tidak cukup: stiker yang disebar antar kota bisa lolos
+# uji kecepatan hanya karena pengamatannya kebetulan berjauhan waktu.
+# Tapi pedagang keliling bekerja dalam satu kota — tidak ada gerobak
+# yang rute hariannya membentang Bandung sampai Surabaya, berapa pun
+# jeda waktunya.
+#
+# Terukur di calibrate_keliling.py:
+#
+#   profil                    p99      maks
+#   keliling metropolitan    53,6 km   57,7 km
+#   stiker antar kota                1.974   km
+#
+#   ambang    metropolitan tertuduh   antar kota tertangkap
+#    30 km                    90,7%                  100,0%
+#    50 km                     6,5%                  100,0%
+#    80 km                     0,0%                  100,0%
+#
+# Diakui: penyebar yang bekerja HANYA dalam satu metropolitan punya
+# rentang yang sama dengan pedagang keliling sungguhan, dan uji ini
+# tidak memisahkannya. Di dalam satu kota, hanya uji waktu yang bisa.
+MOBILITY_MAX_SPAN_KM = 80.0
+
+# Bobot ketika satu NMID teramati di banyak area TANPA bukti kehadiran
+# serentak. Bukan tuduhan: sistem tidak tahu ini pedagang keliling atau
+# stiker yang disebar, dan mengatakannya begitu.
+#
+# 35 bukan angka baru — itu bobot first_observation, harga ketidaktahuan
+# tentang sebuah TEMPAT. Ketidaktahuan tentang POLA tempat pantas
+# dihargai sama. Ia menolak status VERIFIED (yang menuntut <= 25) tanpa
+# pernah sendirian mencapai step_up.
+W_MULTI_AREA_UNPROVEN = 35
+
 # Sinyal yang berarti "seseorang membawa stiker ke SINI yang bukan
 # miliknya". Hanya ini yang boleh menaikkan anomaly_attempts jangkar.
 #
@@ -242,6 +310,15 @@ class Binding:
     last_seen: Optional[datetime] = None
     registered_at: Optional[datetime] = None
     is_mobile: bool = False
+    # Pengamat yang DIJAMIN penyelenggara — atestasi perangkat yang
+    # diperiksa PJP lalu dipertanggungkan lewat kunci API mereka.
+    #
+    # Dipisah dari observer_count karena ongkos memalsukannya berbeda
+    # jauh: observer_count bisa ditumbuhkan siapa pun yang sanggup
+    # mengarang device_anon_id — terukur, tiga string karangan dan
+    # menunggu 24 jam sudah cukup membuat jangkar baru jadi VERIFIED.
+    # vouched_count tidak bisa. Lihat Keputusan 81 dan R22.
+    vouched_count: int = 0
 
     def __post_init__(self):
         if not self.geohash_7:
@@ -492,6 +569,93 @@ def _distinct_areas(bindings: list, lat: float, lng: float) -> list:
     return clusters
 
 
+def rentang_area_km(areas: list, lat: float, lng: float) -> float:
+    """Jarak terjauh antar dua tempat yang pernah membawa NMID ini."""
+    titik = [(a.lat, a.lng) for a in areas] + [(lat, lng)]
+    return max(
+        (geo.haversine_m(p[0], p[1], q[0], q[1]) / 1000
+         for i, p in enumerate(titik) for q in titik[i + 1:]),
+        default=0.0)
+
+
+def kehadiran_serentak(jejak: list, lat: float, lng: float,
+                       now: Optional[datetime] = None):
+    """Adakah bukti merchant ini berada di dua tempat sekaligus?
+
+    `jejak` adalah [(lat, lng, waktu)] — kapan saja merchant ini pernah
+    terlihat, dan di mana. Pemindaian yang SEDANG berlangsung ikut
+    dihitung: ia sering justru bukti paling segar, karena stiker yang
+    baru dipindai orang lain di kota sebelah lima menit lalu tidak bisa
+    ada di sini sekarang.
+
+    Mengembalikan (kecepatan_km_per_jam, jarak_km, selisih_menit) untuk
+    pasangan paling memberatkan, atau None kalau tidak ada pasangan
+    lintas-area sama sekali.
+
+    SELURUH pasangan lintas-area diperiksa, bukan hanya yang berurutan
+    dalam waktu: yang paling memberatkan kerap terpisah oleh pengamatan
+    di area ketiga.
+
+    Membandingkan pengamatan satu per satu berarti O(n^2), dan itu
+    diukur TERLALU MAHAL: 1.000 pengamatan menghabiskan 481 ms, melewati
+    seluruh anggaran 200 ms sendirian. Merchant keliling yang laris
+    justru yang paling mungkin mencapainya.
+
+    Yang menyelamatkan: seluruh pengamatan di satu jangkar berbagi
+    KOORDINAT YANG SAMA PERSIS — `jejak_lintas_area` mengambilnya dari
+    baris binding, bukan dari tiap pemindaian. Jadi titik yang berbeda
+    cuma sebanyak jangkarnya (belasan), dan untuk tiap pasang titik
+    cukup dicari selisih waktu TERKECIL antara dua daftar terurut —
+    dua penunjuk berjalan, sekali lewat. Ongkosnya jatuh ke
+    O(k^2 + n log n) dengan k jumlah jangkar.
+    """
+    titik = list(jejak)
+    if now is not None:
+        titik.append((lat, lng, now))
+    if len(titik) < 2:
+        return None
+
+    # Kelompokkan menurut koordinat jangkar.
+    per_titik = {}
+    for la, ln, t in titik:
+        per_titik.setdefault((la, ln), []).append(t)
+    for daftar in per_titik.values():
+        daftar.sort()
+    kunci = list(per_titik)
+    if len(kunci) < 2:
+        return None
+
+    puncak = None
+    for i, a in enumerate(kunci):
+        for b in kunci[i + 1:]:
+            jarak_km = geo.haversine_m(a[0], a[1], b[0], b[1]) / 1000
+            if jarak_km <= SCATTER_MIN_KM:
+                continue  # tempat yang sama; tidak mengatakan apa-apa
+            # Selisih waktu terkecil antara dua daftar terurut.
+            ta, tb = per_titik[a], per_titik[b]
+            ia = ib = 0
+            paling_dekat = None
+            while ia < len(ta) and ib < len(tb):
+                beda = abs((ta[ia] - tb[ib]).total_seconds())
+                if paling_dekat is None or beda < paling_dekat:
+                    paling_dekat = beda
+                if ta[ia] < tb[ib]:
+                    ia += 1
+                else:
+                    ib += 1
+            if paling_dekat is None:
+                continue
+            menit = paling_dekat / 60
+            if menit <= 0:
+                # Dua tempat berjauhan pada detik yang sama. Tidak ada
+                # kecepatan berhingga yang menjelaskannya.
+                return (float("inf"), jarak_km, 0.0)
+            kmh = jarak_km / (menit / 60)
+            if puncak is None or kmh > puncak[0]:
+                puncak = (kmh, jarak_km, menit)
+    return puncak
+
+
 def evaluate(
     nmid: str,
     lat: float,
@@ -502,6 +666,7 @@ def evaluate(
     now: Optional[datetime] = None,
     challenge: Optional["Challenge"] = None,
     merchant_name: Optional[str] = None,
+    jejak_kehadiran: Optional[list] = None,
 ) -> Verdict:
     """Nilai satu pemindaian.
 
@@ -512,6 +677,10 @@ def evaluate(
                          jangkar ini; bukan reputasi, hanya bukti kehadiran
     merchant_name        nama merchant di payload yang dipindai, untuk
                          dibandingkan dengan nama pemilik jangkar
+    jejak_kehadiran      [(lat, lng, waktu)] kapan NMID ini pernah terlihat
+                         dan di mana — memisahkan pedagang keliling dari
+                         stiker yang disebar. None berarti tidak diambil,
+                         dan tuduhan sebaran TIDAK dibuat tanpanya
     """
     now = now or datetime.now(timezone.utc)
     score = 0
@@ -844,14 +1013,51 @@ def evaluate(
         and _berurutan(areas)
     )
 
-    if len(areas) >= SCATTER_MIN_AREAS and not pindah_terbukti:
+    # Banyak area BUKAN tuduhan. Gerobak keliling dan stiker yang
+    # disebar menghasilkan gejala yang sama persis di sini, dan yang
+    # memisahkannya cuma satu: apakah merchant ini pernah terbukti
+    # berada di dua tempat pada saat yang sama.
+    serentak = None
+    rentang = 0.0
+    if len(areas) >= SCATTER_MIN_AREAS:
+        rentang = rentang_area_km(areas, lat, lng)
+        if jejak_kehadiran is not None:
+            serentak = kehadiran_serentak(jejak_kehadiran, lat, lng, now)
+
+    # Dua bukti yang sama-sama mematahkan cerita "pedagang keliling",
+    # lewat jalan yang berbeda: yang satu kecepatan, yang lain jangkauan.
+    terlalu_cepat = serentak is not None and serentak[0] > MOBILITY_MAX_KMH
+    terlalu_jauh = rentang > MOBILITY_MAX_SPAN_KM
+
+    if (len(areas) >= SCATTER_MIN_AREAS and not pindah_terbukti
+            and (terlalu_cepat or terlalu_jauh)):
         score += 60
         signals.append("nmid_scatter")
+        if terlalu_cepat:
+            _, jarak_km, menit = serentak
+            reasons.append((60,
+                f"Merchant ID ini terlihat di dua tempat berjarak "
+                f"{jarak_km:.1f} km hanya terpaut {menit:.0f} menit — "
+                f"tidak ada pedagang yang bisa berpindah secepat itu, "
+                f"jadi stikernya ada di banyak tempat sekaligus"))
+        else:
+            reasons.append((60,
+                f"Merchant ID yang sama terdeteksi di {len(areas) + 1} area "
+                f"berbeda yang membentang {rentang:.0f} km — terlalu jauh "
+                f"untuk satu pedagang keliling, pola khas stiker yang disebar"))
+    elif len(areas) >= SCATTER_MIN_AREAS and not pindah_terbukti:
+        # Tidak ada bukti kehadiran serentak. Bisa jadi pedagang
+        # keliling — kaki lima, food truck, kopi keliling — dan bisa
+        # jadi stiker yang disebar tapi belum ketahuan. Sistem tidak
+        # tahu, dan mengatakannya begitu: bukan proceed, bukan tuduhan.
+        score += W_MULTI_AREA_UNPROVEN
+        signals.append("nmid_multi_area")
         farthest = max(areas, key=lambda b: b.distance_m(lat, lng))
-        reasons.append((60,
-            f"Merchant ID yang sama terdeteksi di {len(areas) + 1} area berbeda, "
+        reasons.append((W_MULTI_AREA_UNPROVEN,
+            f"Merchant ID ini teramati di {len(areas) + 1} area berbeda, "
             f"terjauh {farthest.distance_m(lat, lng) / 1000:.0f} km — "
-            f"pola khas stiker yang disebar"))
+            f"bisa pedagang keliling, bisa juga stiker yang disebar; "
+            f"belum ada bukti yang memisahkan keduanya"))
     elif len(areas) >= SCATTER_MIN_AREAS:
         score += W_RELOCATED
         signals.append("nmid_relocated")
@@ -885,6 +1091,20 @@ def evaluate(
         reasons.append((PRIORITAS_INFORMASI,
             f"Konsisten dengan {current.observer_count} pengamatan sebelumnya "
             f"di lokasi ini"))
+        # Sebutkan dari MANA reputasi itu berasal, bukan cuma berapa
+        # banyak. Tanpa baris ini, "verified" yang berdiri di atas tiga
+        # pemindaian anonim terbaca sama persis dengan yang berdiri di
+        # atas lima puluh pemindaian yang dijamin penyelenggara —
+        # padahal ongkos memalsukan keduanya berbeda jauh (R22).
+        #
+        # Pengungkapan, BUKAN skor: tidak ada bobot di sini, dan tier-nya
+        # tidak bergeser sedikit pun. Yang berubah hanya sistem berhenti
+        # menyamarkan kualitas buktinya sendiri.
+        if not current.is_registered and current.vouched_count == 0:
+            signals.append("consensus_unvouched")
+            reasons.append((PRIORITAS_INFORMASI,
+                "Reputasi lokasi ini dibangun dari pemindaian anonim — "
+                "tidak ada pengamat yang dijamin penyelenggara pembayaran"))
     elif current:
         score += 15
         signals.append("young_binding")
