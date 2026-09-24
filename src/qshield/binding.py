@@ -125,6 +125,14 @@ W_REGISTERED_CONFLICT = 85
 # berbeda dari 47 pengamatan" tidak.
 W_NAME_IMPERSONATION = 90
 
+# Bobot tetangga yang BELUM terbukti mapan tapi jelas sedang tumbuh
+# bersama. Ditambah young_binding (15) menghasilkan 35 — `warn`, dengan
+# margin ke `step_up` di 50.
+#
+# Sengaja TIDAK mencapai proceed. Tenant ini boleh dibayar, tapi
+# pembelinya harus membaca namanya dulu.
+W_ADJACENT_UNPROVEN = 20
+
 # Homoglif yang dipakai memalsukan nama: angka yang menyerupai huruf.
 # Dipetakan balik sebelum dibandingkan, sehingga "WARUNG BU SR1" dan
 # "W4RUNG BU 5RI" mengerucut ke bentuk yang sama.
@@ -674,6 +682,57 @@ def evaluate(
             or kehadiran_terbukti
         ) and not meniru_nama
 
+        # Tetangga yang sedang tumbuh bersama, tapi belum melewati umur
+        # 24 jam. Diukur di lapangan dan hasilnya tidak bisa dibiarkan:
+        # di kantin dengan tiga tenant berjarak 3-9 meter, tenant yang
+        # melewati ambang umur beberapa MENIT lebih dulu — hanya karena
+        # kebetulan dipindai pertama — mengunci tetangganya selama dua
+        # hari penuh.
+        #
+        # Beberapa menit tidak boleh menjadi selisih antara "tetangga"
+        # dan "stiker tukar".
+        #
+        # Yang membedakannya dari penukaran tetap fisik: merchant lama
+        # HARUS masih terpindai. Stiker yang ditempel menutupi membuat
+        # QR di bawahnya diam, dan penyerang tidak bisa memalsukan itu
+        # tanpa membatalkan serangannya.
+        #
+        # KEDUA NAMA WAJIB ADA. Cabang ini tidak memblokir, jadi
+        # pertahanannya berpindah ke mata pembeli — dan pembeli hanya
+        # bisa menilai kalau kedua nama benar-benar ditampilkan. Klien
+        # yang tidak mengirim nama merchant tidak mendapat kelonggaran
+        # atas dasar sesuatu yang tidak bisa diperlihatkan.
+        nama_bisa_dibandingkan = bool(merchant_name and strongest.merchant_name)
+
+        # "Merchant lama masih terpindai" diukur terhadap kemunculan
+        # PERTAMA tenant ini, bukan terhadap buku tantangan.
+        #
+        # Memakai buku tantangan menuntut satu penolakan terjadi lebih
+        # dulu — tenant sah harus ditolak sekali sebelum diakui, dan itu
+        # tidak menambah keamanan apa pun. Cabang ini mensyaratkan
+        # `current` punya pengamat sendiri, jadi first_seen-nya selalu
+        # ada.
+        #
+        # Sifat yang menahan penukaran tetap sama: stiker yang ditempel
+        # MENUTUPI membuat QR lama berhenti terpindai, sehingga
+        # last_seen-nya membeku sebelum penantang muncul.
+        lama_masih_aktif = (
+            current is not None
+            and current.first_seen is not None
+            and strongest.last_seen is not None
+            and strongest.last_seen
+            >= current.first_seen + timedelta(hours=INCUMBENT_PROOF_HOURS)
+        )
+        tumbuh_bersama = (
+            not coexisting
+            and not meniru_nama
+            and nama_bisa_dibandingkan
+            and current is not None
+            and current.observer_count >= MIN_OBSERVERS
+            and basis_sebanding
+            and lama_masih_aktif
+        )
+
         if coexisting:
             score += 20
             signals.append("adjacent_merchant")
@@ -694,6 +753,21 @@ def evaluate(
                     f"Di titik ini tercatat {strongest.merchant_name}. "
                     f"Kode yang dipindai atas nama {merchant_name} — "
                     f"pastikan cocok dengan yang tertulis di stikernya."))
+        elif tumbuh_bersama:
+            score += W_ADJACENT_UNPROVEN
+            signals.append("adjacent_merchant_unproven")
+            # Kontras nama ditaruh PALING ATAS dan bukan sekadar
+            # pelengkap: ia satu-satunya hal yang bisa dinilai pembeli,
+            # dan cabang ini memang menyerahkan penilaiannya kepadanya.
+            reasons.append((PRIORITAS_PENGUNGKAPAN,
+                f"Di titik ini tercatat {strongest.merchant_name}. "
+                f"Kode yang dipindai atas nama {merchant_name} — "
+                f"pastikan cocok dengan yang tertulis di stikernya."))
+            reasons.append((W_ADJACENT_UNPROVEN,
+                f"Merchant ini baru tercatat {current.observer_count} "
+                f"pengamatan di titik ini dan belum cukup lama untuk "
+                f"dipastikan — periksa namanya sebelum membayar"))
+
         elif strongest.is_registered:
             # Sinyal TERPISAH, bukan rumus konsensus yang diubah —
             # invarian §5 mengunci rumus itu apa adanya.

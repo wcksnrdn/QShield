@@ -2654,6 +2654,78 @@ berada di dalam transaksi yang terkunci.
 
 ---
 
+## Keputusan 75 — Beberapa menit tidak boleh memisahkan tetangga dari penukaran
+
+Ditemukan dari korpus lapangan, bukan dari membaca kode. Tim memindai
+tiga tenant kantin berjarak 3-9 meter: Kantin Eka Putri, Kantin Suka
+Suka, OK MART 1. Ketiganya diterima — tapi hanya karena belum ada yang
+mapan.
+
+Disimulasikan dengan koordinat sungguhan itu, pembeli berbeda memindai
+tenant berbeda berselang-seling:
+
+| hari | Eka Putri | Suka Suka | OK MART |
+|---|---|---|---|
+| 1 | warn | warn | warn |
+| 2 | **proceed** | **cooling_off** | **cooling_off** |
+| 3 | proceed | cooling_off | cooling_off |
+| 4 | proceed | warn | warn |
+
+**Dua hari tenant sah dituduh.** Penyebabnya sepele, dan itu yang
+membuatnya buruk: Eka Putri melewati ambang umur 24 jam beberapa MENIT
+lebih dulu — hanya karena kebetulan dipindai pertama tiap putaran —
+lalu mengunci tetangganya sampai jalur bukti-kehadiran menyelamatkan
+mereka di hari keempat.
+
+**Beberapa menit tidak boleh menjadi selisih antara "tetangga" dan
+"stiker tukar".**
+
+**Tiga pilihan diukur, bukan diperdebatkan.**
+
+Pertama, melonggarkan `coexisting` jadi cukup punya `MIN_OBSERVERS`
+tanpa menunggu umur: kantin bersih, tapi penyerang cold start lolos
+sampai `proceed`.
+
+Kedua, membiarkan apa adanya: aman, tapi dua hari menuduh pedagang sah
+di kasus pemakaian INTI — ritel padat Indonesia.
+
+Ketiga, yang diambil: **lolos, tapi hanya sampai `warn`, dengan kontras
+nama wajib.** Tenant tidak diblokir, penyerang tidak dapat lampu hijau,
+dan pembeli yang berdiri di depan warungnya melihat nama mana yang
+benar.
+
+**Syarat yang membuatnya bisa dipertanggungjawabkan.** Cabang ini
+MELOLOSKAN, jadi penilaiannya berpindah ke mata pembeli — dan pembeli
+hanya bisa menilai kalau kedua nama benar-benar ditampilkan. Karena itu
+kelonggaran DICABUT kalau nama merchant tidak dikirim klien. Tidak ada
+kelonggaran atas dasar sesuatu yang tidak bisa diperlihatkan.
+
+**Biaya keamanannya diukur, dan jatuhnya sempit:**
+
+| serangan | hasil | pengamat penyerang |
+|---|---|---|
+| ditempel MENUTUPI jangkar mapan | `cooling_off` ×12 | **0** |
+| ditempel DI SEBELAH, korban tetap dipindai | `cooling_off` ×12 | **0** |
+| balapan cold start, 3 perangkat | warn lalu proceed | 3 |
+
+Dua yang pertama — stiker tukar pada merchant yang sudah jalan — sama
+sekali tidak terpengaruh, dan alasannya struktural: di jangkar mapan
+setiap pemindaian penantang adalah anomali, anomali tidak pernah
+dicatat, jadi syarat "punya MIN_OBSERVERS pengamat sendiri" mustahil
+dicapai. Kelonggaran ini tidak terjangkau dari sana.
+
+Biayanya jatuh HANYA di jendela cold start, yang memang sudah tercatat
+terbuka (R4, R10) dan ditutup oleh pendaftaran PJP.
+
+**Catatan implementasi.** Versi pertama memakai buku tantangan untuk
+menguji "merchant lama masih terpindai", dan itu menuntut satu
+penolakan terjadi lebih dulu — tenant sah harus ditolak sekali sebelum
+diakui, tanpa menambah keamanan apa pun. Diganti memakai `first_seen`
+tenant itu sendiri, yang selalu ada karena cabang ini mensyaratkan ia
+punya pengamat.
+
+---
+
 ## Hasil pengujian
 
 ```
