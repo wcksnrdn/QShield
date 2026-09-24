@@ -1197,6 +1197,84 @@ def _a38():
             "tetap ditampilkan supaya pembeli bisa menilai sendiri")
 
 
+@serangan("Kelonggaran tetangga dipakai di jangkar yang SUDAH mapan")
+def _a39():
+    """Batas pelonggaran `adjacent_merchant_unproven`.
+
+    Cabang itu melonggarkan tenant yang tertinggal beberapa jam dari
+    tetangganya. Pertanyaannya: apakah penyerang bisa memakainya di
+    jangkar milik merchant yang sudah jalan?
+
+    Tidak, dan alasannya struktural. Cabang itu menuntut penantang punya
+    MIN_OBSERVERS pengamat SENDIRI. Di jangkar yang sudah mapan, setiap
+    pemindaian penantang adalah anomali, dan anomali tidak pernah
+    dicatat — jadi pengamatnya tetap nol selamanya.
+
+    Diuji dua bentuk: stiker ditempel MENUTUPI (korban berhenti
+    terpindai) dan ditempel DI SEBELAH (korban tetap terpindai, yang
+    justru memenuhi syarat fisiknya).
+    """
+    # Slug tanpa spasi: device_anon_id menolak apa pun di luar
+    # [A-Za-z0-9_-], dan 422 datang tanpa field `action` sehingga
+    # kegagalannya menyamar jadi KeyError, bukan assertion yang jelas.
+    for slug, korban_dipindai in [("tutup", False), ("sebelah", True)]:
+        s, c = fresh_store()
+        hasil = set()
+        for i in range(12):
+            if korban_dipindai:
+                scan(c, qr(KORBAN, pan="936000149000000001"),
+                     device=f"pembeli-{slug}-{i:03d}")
+            d = scan(c, qr(PENYERANG, nama="TOKO SEJAHTERA"),
+                     device=f"korban-{slug}-{i:03d}")
+            assert "action" in d, f"{slug}: permintaan ditolak — {d}"
+            hasil.add(d["action"])
+        punya = s.conn.execute(
+            "SELECT COALESCE(SUM(observer_count),0) n FROM bindings "
+            "WHERE nmid = ?", (PENYERANG,)).fetchone()["n"]
+        assert hasil == {"cooling_off"}, f"{slug}: bocor jadi {hasil}"
+        assert punya == 0, f"{slug}: penyerang mengumpulkan {punya} pengamat"
+    return ("dua bentuk, 12 korban masing-masing: semua cooling_off, "
+            "penyerang nol pengamat — kelonggaran tidak terjangkau")
+
+
+@serangan("Balapan cold start memakai kelonggaran tetangga", ditahan=False)
+def _a40():
+    """Harga yang dibayar untuk menutup positif palsu di area padat.
+
+    Penyerang yang sempat mengumpulkan MIN_OBSERVERS pengamat SEBELUM
+    korbannya mapan bisa memakai cabang `adjacent_merchant_unproven`.
+    Itu disengaja dan diukur; biayanya jatuh di dalam jendela cold start
+    yang memang sudah tercatat terbuka (R4, R10), bukan di jangkar
+    merchant yang sudah jalan.
+
+    Yang didapat penyerang pun bukan lampu hijau: `warn`, dengan nama
+    merchant korban dan nama di QR-nya ditampilkan berdampingan. Pembeli
+    yang berdiri di depan warungnya melihat nama yang salah.
+
+    Alternatifnya diukur juga: tanpa cabang ini, tenant kantin yang sah
+    dituduh `cooling_off` selama DUA HARI karena tetangganya melewati
+    ambang umur beberapa menit lebih dulu.
+    """
+    s, c = fresh_store()
+    # Jangkar dikosongkan: ini skenario cold start, bukan jangkar mapan.
+    s.conn.execute("DELETE FROM observations")
+    s.conn.execute("DELETE FROM bindings")
+    s.conn.commit()
+    for i in range(3):
+        scan(c, qr(KORBAN, pan="936000149000000001"), device=f"warga-{i:03d}")
+    for i in range(3):
+        scan(c, qr(PENYERANG, nama="TOKO SEJAHTERA"), device=f"penyerang-{i:03d}")
+    punya = s.conn.execute(
+        "SELECT COALESCE(SUM(observer_count),0) n FROM bindings WHERE nmid = ?",
+        (PENYERANG,)).fetchone()["n"]
+    assert punya >= bd.MIN_OBSERVERS, (
+        "prasyarat batasan berubah — penyerang tidak lagi bisa mengumpulkan "
+        "pengamat saat cold start. Perbarui docs/THREAT-MODEL.md R10.")
+    return (f"BELUM DITAHAN: penyerang yang datang saat cold start "
+            f"mengumpulkan {punya} pengamat dan kelak memperoleh `warn` "
+            f"dengan kontras nama. Penutupan menuntut pendaftaran PJP (R4)")
+
+
 print("=" * 72)
 print("SUITE ADVERSARIAL")
 print("=" * 72)

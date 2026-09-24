@@ -351,4 +351,58 @@ for nama, harus_tiru in [("WARUNG BU SR1", True), ("W4RUNG BU 5RI", True),
 print("\n  'BU SARI' dan 'BU SRI' adalah dua pedagang sungguhan, dan")
 print("  metrik kemiripan mana pun akan menuduh salah satunya peniru")
 
+print()
+print("=" * 66)
+print("20. Tenant yang tertinggal beberapa jam tidak dituduh menukar stiker")
+print("=" * 66)
+
+# Diukur dari korpus lapangan: di kantin dengan tiga tenant berjarak
+# 3-9 meter, tenant yang melewati ambang umur beberapa MENIT lebih dulu
+# mengunci tetangganya selama dua hari penuh. Beberapa menit tidak boleh
+# menjadi selisih antara "tetangga" dan "stiker tukar".
+def tenant(nmid, nama, obs, mulai_jam, akhir_jam):
+    return b.Binding(nmid=nmid, lat=WARUNG_LAT, lng=WARUNG_LNG,
+                     merchant_name=nama, observer_count=obs,
+                     first_seen=NOW - timedelta(hours=mulai_jam),
+                     last_seen=NOW - timedelta(hours=akhir_jam))
+
+# Eka Putri mapan (4 pengamat, rentang 25 jam) dan masih terus dipindai.
+tuan = tenant("ID1111111111111", "Kantin Eka Putri", 4, 25, 0)
+# Suka Suka tertinggal DUA JAM saja: 3 pengamat, rentang 23 jam.
+sebelah = tenant("ID2222222222222", "Kantin Suka Suka", 3, 23, 1)
+
+v = b.evaluate("ID2222222222222", WARUNG_LAT, WARUNG_LNG, [tuan, sebelah], [],
+               now=NOW, merchant_name="Kantin Suka Suka")
+show("tertinggal 2 jam dari tetangga", v)
+assert "adjacent_merchant_unproven" in v.signals
+assert v.status != b.ANOMALY, "tetangga sah yang tertinggal 2 jam dituduh"
+assert v.action == b.WARN, f"seharusnya warn, bukan {v.action}"
+assert v.reasons[0].startswith("Di titik ini tercatat"), (
+    "kontras nama tidak dibaca lebih dulu — padahal cabang ini "
+    "MELOLOSKAN, jadi penilaiannya diserahkan kepada pembeli")
+print("\n  tidak diblokir, tidak dihijaukan, dan kedua nama terbaca")
+
+print()
+print("=" * 66)
+print("21. Kelonggaran itu dicabut kalau namanya tidak bisa ditampilkan")
+print("=" * 66)
+
+# Cabang di atas menyerahkan penilaian kepada mata pembeli. Pembeli
+# hanya bisa menilai kalau kedua nama benar-benar terlihat — jadi klien
+# yang tidak mengirim nama merchant tidak boleh mendapat kelonggaran
+# atas dasar sesuatu yang tidak bisa diperlihatkan.
+v = b.evaluate("ID2222222222222", WARUNG_LAT, WARUNG_LNG, [tuan, sebelah], [],
+               now=NOW, merchant_name=None)
+show("klien tidak mengirim nama merchant", v)
+assert "adjacent_merchant_unproven" not in v.signals
+assert v.status == b.ANOMALY, "kelonggaran diberikan tanpa bisa menampilkan nama"
+
+# Dan nama yang DITIRU tetap ditahan, berapa pun pengamatnya.
+for nama in ["Kantin Eka Putri", "Kantin Eka Putr1", "kantin  eka  putri"]:
+    v = b.evaluate("ID2222222222222", WARUNG_LAT, WARUNG_LNG, [tuan, sebelah],
+                   [], now=NOW, merchant_name=nama)
+    assert "anchor_name_impersonation" in v.signals, f"{nama} lolos"
+    assert v.status == b.ANOMALY
+print("\n  tanpa nama: ditahan; nama ditiru: ditahan, termasuk homoglif")
+
 print("\n\nSemua assertion lolos.")
