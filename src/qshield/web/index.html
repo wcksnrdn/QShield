@@ -49,6 +49,17 @@ video{width:100%;height:100%;object-fit:cover;display:none}
 .stage.live .idle{display:none}
 
 button{font-family:inherit}
+/* Sakelar mode ditaruh di layar utama, bukan di dalam setelan: ia
+   dipindah berkali-kali dalam satu sesi, dan pemakainya harus selalu
+   bisa MELIHAT sedang di mode mana sebelum memindai. */
+.mode{display:flex;gap:6px;background:var(--line);padding:4px;
+  border-radius:13px;margin-bottom:10px}
+.mode .pilih{flex:1;padding:10px;border:0;border-radius:10px;
+  background:none;color:var(--ink2);font-size:14px;cursor:pointer}
+.mode .pilih.on{background:var(--kartu,#fff);color:var(--ink);
+  font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.katalog-note{margin-top:12px;padding:12px 14px;border-radius:12px;
+  background:var(--line);font-size:13px;line-height:1.5;color:var(--ink2)}
 .btn{width:100%;margin-top:12px;padding:15px;border-radius:14px;border:0;
   background:linear-gradient(140deg,var(--brand),var(--brand2));color:#fff;
   font-size:15.5px;font-weight:700;cursor:pointer}
@@ -289,14 +300,37 @@ textarea{min-height:78px;resize:vertical;
     <div class="frame"><i></i></div>
     <div class="idle" id="idle">
       <div class="big">&#9635;</div>
-      <div>Arahkan kamera ke stiker QRIS</div>
+      <div id="idleTeks">Arahkan kamera ke stiker QRIS</div>
     </div>
   </div>
 
+  <div class="mode" id="mode">
+    <button class="pilih on" id="mVerif">Verifikasi</button>
+    <button class="pilih" id="mKatalog">Katalog</button>
+  </div>
   <button class="btn" id="scan">Mulai memindai</button>
   <button class="btn ghost" id="lensa" style="display:none"></button>
   <button class="btn ghost" id="manual">Masukkan kode manual</button>
   <div id="notes"></div>
+
+  <!-- Hasil katalog punya wadah SENDIRI, tidak berbagi elemen dengan
+       hasil verifikasi. Keduanya menjawab pertanyaan yang berbeda, dan
+       berbagi slot membuat salah satu diam-diam mewarisi arti yang
+       lain — termasuk bagi test kontrak, yang mencocokkan pola pada
+       elemen itu. -->
+  <div class="result" id="katalog">
+    <div class="band a-neutral">
+      <div class="dot">&#9635;</div>
+      <div><h2>Tercatat ke korpus</h2>
+        <p>Isi payload dibaca &middot; lokasi tidak diperiksa</p></div>
+    </div>
+    <div class="merchant" id="kMerchant"></div>
+    <ul class="reasons" id="kReasons"></ul>
+    <div class="katalog-note">Lokasi <b>tidak</b> diperiksa. Mode katalog
+      hanya membaca isi payload &mdash; pakai mode Verifikasi saat berdiri
+      di depan stiker yang sesungguhnya.</div>
+    <div class="meta" id="kMeta"></div>
+  </div>
 
   <div class="result" id="result">
     <div class="band" id="band">
@@ -605,6 +639,62 @@ let hitungMundur = null;
 // Keduanya sama sampai ada yang menukarnya di tengah jalan.
 let payloadDipindai = null, payloadDibayar = null;
 
+// Satu peta pesan, dipakai jalur verifikasi maupun katalog. Menyalinnya
+// berarti salah satu akan basi tanpa ada yang menyadarinya.
+const PESAN = {401:"Kunci API tidak valid atau belum diisi di setelan.",
+               413:"Kode terlalu panjang.",
+               422:"Kode ini bukan payload QRIS yang sah.",
+               429:"Terlalu banyak permintaan, tunggu sebentar.",
+               503:"Server belum dikonfigurasi kunci API.",
+               lain:"Tidak bisa menghubungi server."};
+
+let modeKatalog = false;
+
+function setMode(katalog){
+  modeKatalog = katalog;
+  $("katalog").classList.remove("show");
+  $("result").classList.remove("show");
+  $("mVerif").classList.toggle("on", !katalog);
+  $("mKatalog").classList.toggle("on", katalog);
+  try { localStorage.setItem("qs_katalog", katalog ? "1" : "0"); } catch (_) {}
+  $("idleTeks").textContent = katalog
+    ? "Katalogkan QRIS — lokasi tidak diperiksa"
+    : "Arahkan kamera ke stiker QRIS";
+}
+
+/** Kirim payload ke /inspect. Tidak ada koordinat yang ikut. */
+async function katalogkan(payload){
+  const head = {"Content-Type":"application/json"};
+  const key = $("apikey").value.trim();
+  if (key) head["X-API-Key"] = key;
+  let r, d;
+  try {
+    r = await fetch("/api/v1/inspect", {method:"POST", headers:head,
+      body: JSON.stringify({payload, include_tlv: demo.checked})});
+    d = await r.json();
+  } catch (e) { catatan("<b>Tidak bisa menghubungi server.</b>"); return; }
+  if (!r.ok) { catatan("<b>Ditolak (" + r.status + ").</b> " +
+      esc(PESAN[r.status] || (d && d.detail) || PESAN.lain)); return; }
+  tampilkanKatalog(d);
+}
+
+function tampilkanKatalog(hasil){
+  bersihkanCatatan();
+  $("result").classList.remove("show");
+  const m = hasil.merchant || {};
+  $("kMerchant").innerHTML =
+    "<b>" + esc(m.name || "(nama tidak terbaca)") + "</b>" +
+    (m.nmid ? "<br>" + esc(m.nmid) : "") +
+    (m.city ? "<br><span style=\"opacity:.65\">Kota di stiker: " +
+      esc(m.city) + "</span>" : "");
+  const alasan = hasil.structural_reasons || [];
+  $("kReasons").innerHTML = alasan.length
+    ? alasan.map(x => "<li>" + esc(x) + "</li>").join("")
+    : "<li>Bentuk payload wajar \u2014 tidak ada kejanggalan struktural.</li>";
+  $("kMeta").textContent = (hasil.processing_ms || 0) + " ms";
+  $("katalog").classList.add("show");
+}
+
 async function verifikasi(payload, printed){
   payloadDipindai = payloadDibayar = payload;
   bersihkanCatatan();
@@ -633,6 +723,13 @@ async function verifikasi(payload, printed){
       (lokal.crcValid ? "" : " &middot; <b>checksum tidak cocok</b>") +
       "<br>Memverifikasi lokasi\u2026");
   }
+
+  // Mode katalog berhenti di sini: tidak ada lokasi yang diambil sama
+  // sekali. Itu bukan penghematan, melainkan intinya — mengkatalogkan
+  // QRIS sambil duduk di satu tempat membuat tempat itu tampak seperti
+  // jangkar yang berkali-kali diserang, dan pedagang sungguhan di
+  // sekitarnya ikut tertuduh.
+  if (modeKatalog) { await katalogkan(payload); return; }
 
   let loc;
   try { loc = await lokasi(); }
@@ -678,12 +775,8 @@ async function verifikasi(payload, printed){
   }
 
   if (!r.ok) {
-    const p = {401:"Kunci API tidak valid atau belum diisi di setelan.",
-               413:"Kode terlalu panjang.",
-               422:"Kode ini bukan payload QRIS yang sah.",
-               429:"Terlalu banyak permintaan, tunggu sebentar.",
-               503:"Server belum dikonfigurasi kunci API."};
-    catatan("<b>Ditolak (" + r.status + ").</b> " + (p[r.status] || (d && d.detail) || ""));
+    catatan("<b>Ditolak (" + r.status + ").</b> " +
+      (PESAN[r.status] || (d && d.detail) || ""));
     return;
   }
   tampilkan(d);
@@ -1199,6 +1292,10 @@ function stopKamera(){
   $("stage").classList.remove("live");
   $("scan").textContent = "Mulai memindai";
 }
+
+$("mVerif").onclick = () => setMode(false);
+$("mKatalog").onclick = () => setMode(true);
+try { setMode(localStorage.getItem("qs_katalog") === "1"); } catch (_) { setMode(false); }
 
 $("scan").onclick = () => stream ? stopKamera() : mulaiKamera();
 $("lensa").onclick = async () => {

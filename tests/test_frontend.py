@@ -667,6 +667,58 @@ def _f18():
     return "tiket diperiksa sebelum PIN; QR ditukar berhenti sebelum PIN"
 
 
+@cek("Mode katalog tidak pernah mengirim koordinat")
+def _f20():
+    """Inti mode katalog, dan satu-satunya hal yang membuatnya aman.
+
+    Mengkatalogkan QRIS sambil duduk di satu tempat lewat /verify
+    membuat tempat itu tampak seperti jangkar yang berkali-kali
+    diserang, dan pedagang sungguhan di sekitarnya ikut tertuduh. Itu
+    bukan skenario hipotetis; itu yang terjadi di lapangan.
+
+    Dikunci di sini supaya jalur katalog tidak pernah diam-diam
+    memperoleh lokasi lagi.
+    """
+    blok = SCRIPT[SCRIPT.index("async function katalogkan"):]
+    blok = blok[:blok.index("function tampilkanKatalog")]
+    for terlarang in ("lokasi(", "geolocation", "lat", "lng", "accuracy"):
+        assert terlarang not in blok, (
+            f"jalur katalog menyentuh {terlarang!r} — ia tidak boleh "
+            f"mengirim lokasi apa pun")
+    assert "/api/v1/inspect" in blok, "katalog tidak memanggil /inspect"
+
+    # Dan cabangnya harus BERHENTI sebelum lokasi diambil.
+    v = SCRIPT[SCRIPT.index("async function verifikasi"):]
+    potong = v.index("if (modeKatalog)")
+    ambil = v.index("await lokasi()")
+    assert potong < ambil, (
+        "cabang katalog berada SETELAH lokasi diambil — koordinat sudah "
+        "terlanjur diminta dari pengguna")
+    return "nol koordinat di jalur katalog; cabangnya sebelum lokasi diambil"
+
+
+@cek("Hasil katalog tidak menyamar jadi putusan")
+def _f21():
+    """Mode katalog tidak memeriksa lokasi, jadi tampilannya tidak boleh
+    terlihat seperti sudah memeriksanya.
+
+    Wadahnya terpisah dari hasil verifikasi dengan sengaja: berbagi slot
+    membuat salah satu diam-diam mewarisi arti yang lain.
+    """
+    blok = SCRIPT[SCRIPT.index("function tampilkanKatalog"):]
+    blok = blok[:blok.index("async function verifikasi")]
+    for milik_putusan in ('$("band")', '$("title")', '$("reasons")',
+                          '$("merchant")', '$("meta")'):
+        assert milik_putusan not in blok, (
+            f"renderer katalog menulis ke {milik_putusan}, yang dipesan "
+            f"untuk hasil verifikasi")
+    assert 'a-proceed' not in blok and 'a-cooling_off' not in blok, (
+        "hasil katalog memakai warna putusan")
+    assert "tidak diperiksa" in SCRIPT, (
+        "pengguna tidak diberi tahu bahwa lokasi tidak diperiksa")
+    return "wadah sendiri, warna netral, dan ketiadaan pemeriksaan disebut"
+
+
 print("=" * 70)
 print("FRONTEND <-> API")
 print("=" * 70)
