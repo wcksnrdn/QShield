@@ -52,6 +52,10 @@ CREATE TABLE IF NOT EXISTS bindings (
     last_seen       TEXT    NOT NULL,
     anomaly_attempts   INTEGER NOT NULL DEFAULT 0,
     last_anomaly_at    TEXT,
+    -- Pengamat yang DIJAMIN penyelenggara, bukan sekadar dihitung.
+    -- observer_count bisa ditumbuhkan siapa pun yang sanggup mengarang
+    -- device_anon_id; kolom ini tidak bisa. Lihat Keputusan 81.
+    vouched_count      INTEGER NOT NULL DEFAULT 0,
     UNIQUE (nmid, geohash_7)
 );
 
@@ -263,6 +267,40 @@ def _parse(value: Optional[str]) -> Optional[datetime]:
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
+def _jadwal_pengamatan(jumlah: int, awal: datetime, akhir: datetime) -> list:
+    """Kapan saja `jumlah` pengamat menemui merchant ini, untuk data demo.
+
+    Tersebar merata di sepanjang rentang, lalu digeser ke jam buka
+    (08:00-19:00 WIB) supaya jejaknya tidak memuat pemindaian jam tiga
+    pagi. Titik pertama dan terakhir dibiarkan persis di `awal` dan
+    `akhir` — kalau digeser, rentang di baris binding tidak lagi cocok
+    dengan jejaknya sendiri.
+
+    Deterministik dengan sengaja: seed yang dijalankan dua kali harus
+    menghasilkan basis data yang sama, kalau tidak angka di naskah demo
+    ikut bergerak tiap kali.
+    """
+    if jumlah <= 0:
+        return []
+    if jumlah == 1:
+        return [awal]
+
+    rentang = (akhir - awal).total_seconds()
+    keluar = []
+    for i in range(jumlah):
+        t = awal + timedelta(seconds=rentang * i / (jumlah - 1))
+        if 0 < i < jumlah - 1:
+            # WIB = UTC+7; jam buka disebar 08..19 tanpa acak.
+            wib = t + timedelta(hours=7)
+            wib = wib.replace(hour=8 + (i * 7) % 12,
+                              minute=(i * 17) % 60, second=(i * 29) % 60)
+            geser = wib - timedelta(hours=7)
+            if awal < geser < akhir:
+                t = geser
+        keluar.append(t)
+    return keluar
+
+
 def _row_to_binding(row: sqlite3.Row) -> bd.Binding:
     return bd.Binding(
         nmid=row["nmid"],
@@ -276,6 +314,10 @@ def _row_to_binding(row: sqlite3.Row) -> bd.Binding:
         last_seen=_parse(row["last_seen"]),
         registered_at=_parse(row["registered_at"]),
         is_mobile=bool(row["is_mobile"]),
+        # Basis data lama tidak punya kolomnya; nol adalah jawaban yang
+        # benar untuk mereka — tidak ada yang pernah dijamin.
+        vouched_count=(row["vouched_count"]
+                       if "vouched_count" in row.keys() else 0) or 0,
     )
 
 
@@ -418,6 +460,13 @@ class Store:
             "is_mobile": "INTEGER NOT NULL DEFAULT 0",
             "origin_lat": "REAL",
             "origin_lng": "REAL",
+            # Berapa pengamat jangkar ini yang DIJAMIN penyelenggara —
+            # atestasi perangkat yang diperiksa PJP lalu dipertanggungkan
+            # lewat kunci API mereka. Lihat Keputusan 81: tanpa angka
+            # ini, "verified" yang disandarkan pada tiga pemindaian
+            # anonim tidak bisa dibedakan dari yang disandarkan pada
+            # lima puluh pemindaian yang dijamin.
+            "vouched_count": "INTEGER NOT NULL DEFAULT 0",
         }
         for nama, tipe in tambahan.items():
             if nama not in ada:
@@ -544,8 +593,16 @@ class Store:
         device_anon_id: str,
         merchant_name: Optional[str] = None,
         now: Optional[datetime] = None,
+        vouched: bool = False,
     ) -> bd.Binding:
         """Catat satu pengamatan. Idempoten per (binding, device).
+
+        `vouched` berarti pengamatan ini DIJAMIN penyelenggara: atestasi
+        perangkatnya diperiksa PJP lalu dipertanggungkan lewat kunci API
+        mereka. Dihitung terpisah dari observer_count dengan sengaja —
+        observer_count bisa ditumbuhkan siapa pun yang sanggup mengarang
+        device_anon_id, dan angka yang bisa dikarang tidak boleh terbaca
+        sama dengan angka yang tidak bisa. Lihat Keputusan 81.
 
         Seluruh urutannya berjalan dalam SATU transaksi. Versi lama
         melakukan SELECT lalu INSERT/UPDATE terpisah — dua permintaan yang
@@ -600,9 +657,10 @@ class Store:
                     # supaya tidak ada nilai lama yang dibaca lebih dulu.
                     self.conn.execute(
                         """UPDATE bindings
-                           SET observer_count = observer_count + 1
+                           SET observer_count = observer_count + 1,
+                               vouched_count = vouched_count + ?
                            WHERE id = ?""",
-                        (binding_id,),
+                        (1 if vouched else 0, binding_id),
                     )
                     # Jangkar dihaluskan HANYA saat ada pengamat baru.
                     # Pemindaian berulang dari device yang sama tidak
@@ -1033,6 +1091,36 @@ class Store:
         total = sum(r["n"] for r in baris)
         return baris[0]["city"], baris[0]["n"], total
 
+    def jejak_lintas_area(self, nmid: str) -> list:
+        """Kapan saja merchant ini pernah TERLIHAT, dan di titik mana.
+
+        Satu baris per (jangkar, pengamat berbeda) — `observations`
+        memang hanya menyimpan pengamat pertama tiap perangkat, dan itu
+        justru yang dibutuhkan di sini: sampel kapan merchant ini hadir
+        di sebuah tempat.
+
+        Dipakai membedakan pedagang KELILING dari stiker yang DISEBAR.
+        Keduanya menghasilkan gejala yang sama persis di `bindings` —
+        satu NMID di banyak area — dan hanya waktu yang memisahkannya:
+        satu gerobak cuma bisa ada di satu tempat pada satu waktu.
+
+        `device_ref` sengaja TIDAK ikut keluar. Yang dibaca riwayat
+        kehadiran MERCHANT, bukan perjalanan seseorang; pelingkupan
+        device_ref per jangkar memang dibuat supaya baris tidak bisa
+        dirangkai antar-tempat (invarian §8).
+        """
+        with self._lock:
+            baris = self.conn.execute(
+                "SELECT b.lat, b.lng, o.observed_at "
+                "FROM observations o JOIN bindings b ON b.id = o.binding_id "
+                "WHERE b.nmid = ? ORDER BY o.observed_at", (nmid,)).fetchall()
+        keluar = []
+        for r in baris:
+            t = _parse(r["observed_at"])
+            if t is not None:
+                keluar.append((r["lat"], r["lng"], t))
+        return keluar
+
     def names_for_nmid(self, nmid: str) -> list:
         """Semua nama merchant yang pernah dipakai NMID ini."""
         with self._lock:
@@ -1176,16 +1264,64 @@ class Store:
         observer_count: int,
         first_seen: datetime,
         last_seen: datetime,
+        vouched_count: int = 0,
     ) -> None:
-        """Sisipkan binding dengan riwayat siap pakai, untuk demo."""
+        """Sisipkan binding dengan riwayat siap pakai, untuk demo.
+
+        Jejak `observations` IKUT dibuat — satu baris per pengamat,
+        tersebar sepanjang rentangnya, pada jam yang masuk akal.
+
+        Versi sebelumnya hanya menulis angka di baris binding, dan
+        akibatnya baru terlihat ketika ada fitur yang membaca jejaknya:
+        merchant demo dengan 149 pengamat ternyata punya NOL baris
+        pengamatan. `evidence`, jejak kehadiran lintas-area, dan tiap
+        hitungan hari-berbeda melaporkan kekosongan untuk merchant yang
+        di layar justru tampak paling mapan. Data demo yang tidak
+        konsisten dengan dirinya sendiri lebih berbahaya daripada tidak
+        ada data demo sama sekali — ia berbohong ke tim sendiri.
+
+        `INSERT OR REPLACE` juga diganti: ia membuang baris lama lalu
+        membuat rowid BARU, sehingga pengamatan lama menggantung pada
+        binding_id yang tidak ada lagi. Baris yang sama kini dipakai
+        ulang, dan jejak lamanya dibersihkan lebih dulu.
+        """
         gh7 = geo.encode(lat, lng, bd.INDEX_PRECISION)
         gh6 = geo.encode(lat, lng, bd.AREA_PRECISION)
         with self._lock:
-            self.conn.execute(
-                """INSERT OR REPLACE INTO bindings
-                   (nmid, lat, lng, geohash_7, geohash_6, merchant_name,
-                    observer_count, first_seen, last_seen)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (nmid, lat, lng, gh7, gh6, merchant_name, observer_count,
-                 _iso(first_seen), _iso(last_seen)),
-            )
+            ada = self.conn.execute(
+                "SELECT id FROM bindings WHERE nmid = ? AND geohash_7 = ?",
+                (nmid, gh7)).fetchone()
+            if ada:
+                binding_id = ada["id"]
+                self.conn.execute(
+                    "DELETE FROM observations WHERE binding_id = ?",
+                    (binding_id,))
+                self.conn.execute(
+                    """UPDATE bindings
+                       SET lat = ?, lng = ?, geohash_6 = ?, merchant_name = ?,
+                           observer_count = ?, first_seen = ?, last_seen = ?,
+                           vouched_count = ?
+                       WHERE id = ?""",
+                    (lat, lng, gh6, merchant_name, observer_count,
+                     _iso(first_seen), _iso(last_seen), vouched_count,
+                     binding_id))
+            else:
+                binding_id = self.conn.execute(
+                    """INSERT INTO bindings
+                       (nmid, lat, lng, geohash_7, geohash_6, merchant_name,
+                        observer_count, first_seen, last_seen, vouched_count)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                       RETURNING id""",
+                    (nmid, lat, lng, gh7, gh6, merchant_name, observer_count,
+                     _iso(first_seen), _iso(last_seen), vouched_count),
+                ).fetchone()["id"]
+
+            for waktu in _jadwal_pengamatan(observer_count,
+                                            first_seen, last_seen):
+                self.conn.execute(
+                    """INSERT OR IGNORE INTO observations
+                       (binding_id, device_ref, observed_at)
+                       VALUES (?, ?, ?)""",
+                    (binding_id,
+                     self.device_ref(binding_id, f"seed-{_iso(waktu)}"),
+                     _iso(waktu)))

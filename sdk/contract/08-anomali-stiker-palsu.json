@@ -17,6 +17,13 @@
   "tanggapan": {
     "action": "cooling_off",
     "device_integrity": "attested",
+    "evidence": {
+      "established": false,
+      "observers": 0,
+      "registered": false,
+      "span_hours": 0.0,
+      "vouched_observers": 0
+    },
     "fees": {
       "fixed": null,
       "indicator": null,
@@ -24,6 +31,7 @@
       "percent": null,
       "present": false
     },
+    "known": null,
     "layers": {
       "behavior": 0,
       "location": 100

@@ -3001,6 +3001,405 @@ layak dijalankan untuk tiap bobot baru, bukan hanya untuk yang ini.
 
 ---
 
+## Keputusan 79 — Pembayaran jarak jauh: mengaku tidak tahu, dan berhenti menanam jangkar palsu
+
+**Kasus yang memicunya.** "Aku foto QRIS warung madura, kirim ke Fredo
+lewat WhatsApp, dia yang bayar dari rumahnya." Itu bukan sudut sempit —
+itu cara orang membayarkan pesanan teman setiap hari, dan GoPay, DANA,
+maupun BCA Mobile semuanya punya scan-dari-galeri.
+
+Jawaban pertama yang sempat kami ajukan — tiket verifikasi — **salah
+sasaran**, dan yang menunjukkannya justru pertanyaan lanjutan pemilik
+masalahnya: tidak satu pun aplikasi pembayaran punya alur "pindai dulu
+di warung, baru kirim fotonya". Tiket berguna untuk integrasi
+PJP-ke-PJP; ia tidak menolong perilaku konsumen. Jalur itu diturunkan
+posisinya dalam cerita kami.
+
+**Yang terjadi sebelum ini, diukur:**
+
+```
+Pembayar 11 km dari warung, memindai foto QR yang sah
+  -> unknown / step_up   skor 60
+     - Lokasi ini belum pernah tercatat sebelumnya
+     - Merchant ID ini juga tercatat di lokasi lain berjarak 11.2 km
+
+  jangkar di basis data sesudahnya:
+     -6.91474,107.60981   47 pengamat   <- warung yang sebenarnya
+     -6.96000,107.70000    1 pengamat   <- DITANAM oleh pembayaran itu
+```
+
+Dua kerusakan sekaligus. Yang pertama terlihat: pedagang yang sah
+dituduh gara-gara pembayarnya jauh. Yang kedua tidak terlihat dan lebih
+merusak: tiap pembayaran jarak jauh menanam **jangkar hantu** di lokasi
+pembayar, dan tiap jangkar berjarak >1 km menambah
+`nmid_second_location` **+25 permanen** pada merchant yang sah. Di skala
+PJP — jutaan pembayaran dari lokasi acak — itu merusak korpus secara
+sistematis, dan justru integrasi PJP adalah seluruh rencana kami.
+
+**Keputusan.** Field opsional baru `from_image` pada `/verify`.
+Menyalakannya berarti: Layer 1 tidak dijalankan sama sekali, tidak ada
+pengetahuan LOKASI yang ditulis, Layer 2 berjalan penuh, dan
+pengetahuan PAYLOAD tetap dipelajari.
+
+Bukan nilai baru pada `location_source` — `docs/API.md` menyatakannya
+kosakata tertutup yang menuntut API v2, dan kami tidak menaikkan versi
+lima hari sebelum code freeze. Menambah field opsional aditif, dan
+tabel yang sama menyatakan itu tidak menuntut versi baru.
+
+Pemisahan itu juga benar secara makna. `location_source` menjawab *dari
+mana koordinat ini berasal*; `from_image` menjawab *apa yang diwakili
+koordinat ini*. Koordinat pembayar nyata — GPS-nya tidak berbohong —
+tapi tidak mengatakan apa pun tentang letak stiker.
+
+**Yang masih bisa diberikan: atribusi, bukan putusan.** Field `known`
+melaporkan apa yang sudah DIAMATI atas Merchant ID itu — dikenal atau
+tidak, dengan nama apa, di kota mana, berapa pengamatan. Dibedakan
+tegas dari `merchant`, yang cuma mengutip isi payload: **nama di QR bisa
+dikarang, riwayat pengamatan tidak bisa.** Pembayar mencocokkannya
+sendiri dengan yang ia ketahui; keputusan diserahkan ke manusia, bukan
+diklaim sistem.
+
+`known` sengaja tidak memuat koordinat — kota adalah resolusi paling
+halus yang boleh keluar (invarian §8) — dan sengaja tidak memuat satu
+pun field kecurigaan. Dua alasan, keduanya sudah pernah menggigit kami:
+`anomaly_attempts` menempel pada JANGKAR, sehingga nilainya tinggi
+justru pada pedagang yang DISERANG, dan catatan penantang di
+`anchor_challenge` ikut terisi oleh tetangga yang sah (R11). Endpoint
+ini melaporkan pengenalan, bukan kecurigaan.
+
+**Lubang yang ditemukan test-nya sendiri.** Skenario "penanda hanya bisa
+mengetatkan" gagal pada percobaan pertama: payload dengan kontradiksi
+struktural berhenti di skor 70, dan 70 memetakan ke `step_up`, bukan
+`cooling_off`. Di jalur biasa sisanya disumbang Layer 1 — yang di sini
+sengaja mati. Artinya menyalakan `from_image` **melonggarkan** putusan,
+persis tuas yang tidak boleh ada pada field yang diisi klien.
+
+Ditutup secara struktural: kontradiksi struktural memaksa
+`cooling_off`, apa pun jalurnya. Bukan dengan menaikkan `W_STRUCTURAL`
+— bobot itu sudah dikalibrasi terhadap 20.000 payload sah dan tidak
+boleh digeser demi satu jalur.
+
+**Batas yang tidak ditutup, dan tidak bisa ditutup.** Kalau pemotretnya
+yang tertipu di warung, ia memfoto stiker penipu — yang payload-nya
+sah, terbitan acquirer sungguhan — dan pembayar membayar penipu.
+Informasinya sudah hilang sejak jepretan. Tidak ada mekanisme di sisi
+pembayar yang bisa mengembalikannya, dan tidak ada yang akan kami klaim
+bisa. Tercatat sebagai R20.
+
+**Sinyal "belum pernah diamati" baru kuat kalau korpus luas.** Dengan
+122 merchant, warung sah yang belum pernah kami lihat juga muncul
+sebagai tidak dikenal. Itu harus disebut apa adanya, bukan diklaim
+sekarang.
+
+**Penjaga kontrak bekerja persis seperti maksudnya.** `test_contract.py`
+menolak perubahan bentuk sampai tabel KONTRAK diperbarui;
+`test_sdk_contract.py` menolak sampai fixture SDK diregenerasi. Keduanya
+menahan perubahan ini sampai dokumennya menyusul — dan satu fixture baru
+memaksa `known.last_seen` dinormalkan karena skenario itu sendiri yang
+menjadi pengamatan terakhirnya.
+
+---
+
+## Keputusan 80 — Banyak area bukan tuduhan: memisahkan gerobak keliling dari stiker yang disebar
+
+**Kasus yang memicunya.** "Kopi keliling, gerobaknya banyak dan bisa di
+mana aja, itu gimana?" Pertanyaan yang tepat, dan jawabannya ternyata
+membalik asumsi kami sendiri.
+
+**Temuan 1 — `nmid_scatter` tidak pernah bisa menangkap penyebar
+sungguhan.** Diuji: penyebar menempel di 4 merchant mapan, 16
+pemindaian.
+
+```
+tiap stiker  -> ANOMALY / step_up      skor 75   nmid_changed_at_anchor
+berulang     -> ANOMALY / cooling_off  skor 100  + repeated_anomaly_at_anchor
+
+jangkar milik NMID penipu : 0
+sinyal nmid_scatter        : TIDAK PERNAH menyala
+```
+
+Sebabnya justru invarian kami sendiri: pemindaiannya ditolak sebagai
+anomaly, dan **invarian §3 melarang pemindaian yang ditolak membangun
+reputasi**. Penyerang tidak pernah mengumpulkan jangkar, jadi tidak
+pernah punya "banyak area" untuk dideteksi.
+
+**Temuan 2 — yang kena justru pedagang keliling.** Gerobak kopi, 6
+titik mangkal, 46 pengamat, sebulan:
+
+```
+-> ANOMALY / step_up  skor 60
+   - Merchant ID yang sama terdeteksi di 5 area berbeda, terjauh 6 km
+     — pola khas stiker yang disebar
+   - Konsisten dengan 9 pengamatan sebelumnya di lokasi ini
+```
+
+Dua baris itu saling bertentangan di layar yang sama: sistem mengakui
+merchant ini mapan di titik ini, lalu tetap menuduhnya. `nmid_scatter`
+ada di `ANOMALI_LOKASI`, jadi statusnya dipaksa `anomaly`.
+
+Kode kami sendiri sudah mencatat lukanya jauh sebelum ini: *"Yang
+terkena justru segmen inti: pedagang kaki lima, food truck, pedagang
+pasar."* Yang belum dilakukan hanya menindaklanjutinya.
+
+**Pembedanya fisika, bukan statistik.** Satu gerobak hanya bisa berada
+di satu tempat pada satu waktu; lima stiker yang ditempel bersamaan
+hidup di lima tempat sekaligus. Itu terbaca di `observations`, yang
+menyimpan stempel waktu per (jangkar, pengamat berbeda).
+
+**Keputusan.** Tuduhan sebaran kini menuntut BUKTI POSITIF, lewat dua
+jalan yang berbeda:
+
+| bukti | ambang | dasar |
+|---|---|---|
+| kecepatan mustahil antar dua pengamatan | `MOBILITY_MAX_KMH = 80` | tidak ada pedagang yang berpindah secepat itu |
+| rentang di luar jangkauan satu pedagang | `MOBILITY_MAX_SPAN_KM = 80` | pedagang keliling bekerja dalam satu kota |
+
+Tanpa salah satunya: sinyal baru `nmid_multi_area`, bobot
+`W_MULTI_AREA_UNPROVEN = 35`, status `unknown`, aksi minimal `warn` —
+dan alasan yang mengaku tidak tahu, bukan menuduh.
+
+35 bukan angka baru: itu bobot `first_observation`, harga
+ketidaktahuan tentang sebuah TEMPAT. Ketidaktahuan tentang POLA tempat
+dihargai sama. Ia menolak VERIFIED (yang menuntut ≤25) tanpa pernah
+sendirian mencapai `step_up`.
+
+**Ambangnya dipilih demi keselamatan pedagang, bukan demi angka
+tangkapan** (`calibrate_keliling.py`). Profil yang menentukan bukan
+gerobak dorong melainkan kopi keliling BERMOTOR:
+
+```
+  ambang   dorong tertuduh   bermotor tertuduh   penyebar tertangkap
+      20             0,0%               89,5%                 13,2%
+      40             0,0%               23,2%                  6,8%
+      60             0,0%                2,5%                  4,7%
+      80             0,0%                0,0%                  3,8%
+```
+
+Tebakan awal 20 km/jam akan menuduh **sembilan dari sepuluh** pedagang
+bermotor. Untuk rentang, keliling metropolitan terukur maksimum 57,7 km
+sedangkan penyebar antar kota ~1.974 km; 80 km memberi 0,0% salah tuduh
+dan 100,0% tangkapan.
+
+**Harganya, terang-terangan.** Penyebar yang bekerja dalam SATU kota
+dengan pemindaian jarang turun dari `anomaly` ke `unknown/warn` —
+terukur hanya 3,8% yang meninggalkan bukti. Itu dipilih sadar, dan
+tercatat sebagai R21. Yang TIDAK berubah sama sekali: stiker yang
+menutupi merchant mapan tetap `cooling_off` skor 100, lewat sinyal yang
+sama sekali berbeda.
+
+**Dua test lama menolak perubahan ini, dan keduanya benar menolak.**
+Skenario 16 menuntut `ANOMALY` "tanpa bukti, kehati-hatian harus
+menang" — kehati-hatiannya benar, labelnya yang salah, dan harapannya
+diperbarui jadi "jangan pernah hijau, gesekan utuh". Skenario 17
+menangkap pelemahan nyata terhadap stiker yang dipasang bersamaan;
+harapannya diperbarui dengan komentar yang menyebut harga itu apa
+adanya, bukan dihapus.
+
+**Ongkosnya sempat melewati seluruh anggaran, dan itu ketahuan dari
+pengukuran, bukan dari firasat.** Versi pertama membandingkan tiap
+pasang pengamatan — O(n²):
+
+```
+   50 pengamatan ->    1,22 ms
+  200 pengamatan ->   19,45 ms
+  500 pengamatan ->  120,94 ms
+ 1000 pengamatan ->  481,22 ms   <- anggaran seluruhnya 200 ms
+```
+
+Merchant keliling yang laris justru yang paling mungkin mencapainya.
+Yang menyelamatkan: seluruh pengamatan di satu jangkar berbagi
+koordinat yang sama persis, karena `jejak_lintas_area` mengambilnya
+dari baris binding. Titik berbeda cuma sebanyak jangkarnya, dan untuk
+tiap pasang titik cukup dicari selisih waktu terkecil antara dua daftar
+terurut — dua penunjuk, sekali lewat. Hasilnya 481 ms → **2,59 ms**,
+dan 5.000 pengamatan pun hanya 13,9 ms.
+
+**R6 dikoreksi.** `THREAT-MODEL.md` menulis merchant keliling "DITUTUP".
+Itu hanya benar untuk yang terdaftar PJP. Kalau juri bertanya persis
+seperti pertanyaan yang memicu keputusan ini lalu meminta demo tanpa
+pendaftaran, klaim itu akan runtuh di depan mereka. Sekarang tertulis
+"dipersempit, tidak ditutup".
+
+---
+
+## Keputusan 81 — Konsensus bisa dikarang, dan sistem berhenti menyamarkannya
+
+**Cara menemukannya.** Bukan dari membaca kode, melainkan dari satu
+pertanyaan yang belum pernah kami uji: *seberapa murah memalsukan
+konsensus?* Jawabannya diukur, bukan diperdebatkan:
+
+```
+Penyerang menempel stikernya di titik kosong, lalu memindai sendiri
+dengan tiga device_anon_id karangan, direntang 25 jam.
+
+  Korban pertama memindai -> VERIFIED / proceed  skor 0
+      - Konsisten dengan 3 pengamatan sebelumnya di lokasi ini
+
+  Ongkos: 3 string UUID karangan + menunggu 24 jam.
+```
+
+**Kenapa ini lebih serius daripada bug mana pun sebelumnya.** Seluruh
+sistem ini berdiri di atas satu prinsip yang kami tulis sendiri dan
+pakai berkali-kali — di peniruan nama, di `from_image`, di jejak
+kehadiran:
+
+> Nilai yang dikendalikan penyerang boleh MENGETATKAN, tidak pernah
+> MELONGGARKAN.
+
+`device_anon_id` diisi klien. `observer_count` tumbuh darinya. Jadi di
+titik paling inti — konsensus pengamat, hal pertama yang kami sebut di
+tiap presentasi — prinsip itu dilanggar terbalik: nilai yang
+dikendalikan penyerang MELONGGARKAN. Dan tidak ada yang menyadarinya
+sampai diuji.
+
+**R4 ikut terkoreksi.** `THREAT-MODEL.md` menulis cold start "DITUTUP
+untuk merchant terdaftar; sisanya tetap `unknown` yang jujur". Bagian
+kedua tidak benar: yang tidak terdaftar menjadi `verified` begitu
+konsensusnya terpenuhi, dan konsensus itu bisa dikarang.
+
+**Yang TIDAK kami lakukan: menaikkan `MIN_OBSERVERS`.** Menghitung
+angka yang bisa dikarang tetap menghitung angka yang bisa dikarang.
+Menaikkannya dari 3 ke 6 melipatgandakan ongkos penyerang dua kali
+lipat sambil menghukum tiap pedagang sungguhan selamanya — dan Es
+Kelapa, satu-satunya merchant hijau kami di lapangan, punya tepat 6
+pengamat. Pertahanan yang harganya adalah data lapangan sendiri bukan
+pertahanan.
+
+**Yang dilakukan: memisahkan angka yang bisa dikarang dari yang
+tidak.**
+
+`vouched_count` menghitung pengamat yang atestasi perangkatnya
+diperiksa penyelenggara LALU dipertanggungkan lewat kunci API mereka.
+Rantai kepercayaannya sudah ada di `behavior.py` sejak awal — *"kami
+tidak memercayai perangkatnya; kami memercayai PJP yang menyatakan
+sudah memeriksanya"* — yang belum ada hanyalah mencatatnya.
+
+Syaratnya DUA-DUANYA: atestasi DAN klien terautentikasi. Pemindai
+anonim yang mengaku `attested: true` tidak terhitung, karena pengakuan
+itu cuma klaim penyerang tentang dirinya sendiri. Itu diuji tersendiri
+di `test_konsensus.py`, dan itulah inti pertahanannya.
+
+**Hasilnya, tiap putusan kini membawa dasarnya:**
+
+```json
+"evidence": {
+  "observers": 3, "vouched_observers": 0,
+  "registered": false, "established": true, "span_hours": 25.0
+}
+"signals": ["established_binding", "consensus_unvouched"]
+"reasons": ["Reputasi lokasi ini dibangun dari pemindaian anonim —
+             tidak ada pengamat yang dijamin penyelenggara pembayaran"]
+```
+
+Sebelum ini, "verified" yang berdiri di atas tiga pemindaian anonim
+terbaca SAMA PERSIS dengan yang berdiri di atas lima puluh pemindaian
+yang dijamin PJP. Sekarang tidak lagi.
+
+**Pengungkapan, bukan skor — dan itu dikunci test.** Tidak satu pun
+field baru menyentuh penilaian; skor tetap 0, aksi tetap `proceed`.
+Kalau baris ini sampai menggeser tier, ia berhenti jadi pengungkapan
+dan berubah jadi penilaian diam-diam, jadi pemeriksaannya ditulis
+eksplisit.
+
+**Kenapa berhenti di pengungkapan, bukan penutupan.** Karena
+penutupannya bukan milik kami: ia menuntut pengamat yang dijamin
+penyelenggara, dan itu integrasi PJP. Yang bisa kami lakukan hari ini
+adalah berhenti mengklaim lebih dari yang didukung bukti — dan
+menyerahkan angkanya ke PJP untuk menyusun kebijakannya sendiri. Sistem
+pembayaran tunduk audit; putusan yang menyembunyikan kualitas
+dasarnya tidak punya tempat di sana.
+
+**Dua harapan test-ku sendiri ternyata salah, dan itu memperjelas
+maknanya.** Kukira `evidence` akan melaporkan 4 pengamat setelah korban
+memindai; ternyata 3. Benar demikian: yang dilaporkan adalah keadaan
+yang menjadi DASAR putusan, bukan keadaan sesudah pemindaian itu ikut
+dicatat. Putusannya memang berdiri di atas tiga pengamatan.
+
+---
+
+## Keputusan 82 — Data demo yang berbohong ke tim sendiri
+
+**Cara menemukannya.** Bukan dari test yang gagal, melainkan dari
+memeriksa produksi sebelum mengubah `MIN_AGE_HOURS` jadi "N hari
+berbeda". Yang dicari: apakah Es Kelapa selamat. Yang ditemukan: dua
+hal, dan yang kedua tidak dicari sama sekali.
+
+```
+merchant                 obs  rentang jam  hari WIB
+Es Kelapa Boga Rasa        6        124.7         4   <- selamat
+WARUNG BU SRI            149       4343.5         2   <- seed
+WARUNG BU SRI              2         64.0         0   <- seed, nol jejak
+```
+
+**Merchant demo utama kami punya 149 pengamat dan NOL baris
+pengamatan.** `seed_binding()` menulis `observer_count` langsung ke
+baris binding tanpa pernah menyentuh tabel `observations`.
+
+Selama ini tidak terlihat karena tidak ada yang membacanya. Begitu
+`evidence`, `jejak_lintas_area`, dan hitungan hari-berbeda masuk,
+ketiganya melaporkan kekosongan untuk merchant yang di layar justru
+tampak paling mapan.
+
+**Kenapa ini diperbaiki meski bukan soal keamanan.** Data demo yang
+tidak konsisten dengan dirinya sendiri lebih berbahaya daripada tidak
+ada data demo: ia berbohong ke tim sendiri. Kalau juri membuka
+`evidence` pada merchant paling meyakinkan di panggung dan menemukan
+angka yang tidak mungkin, yang runtuh bukan satu fitur melainkan
+kepercayaan pada seluruh angka yang kami sebutkan.
+
+**Yang diperbaiki.** `seed_binding()` kini membuat jejaknya juga: satu
+baris per pengamat, tersebar merata sepanjang rentang, digeser ke jam
+buka 08:00-19:00 WIB. Deterministik dengan sengaja — seed yang
+dijalankan dua kali harus menghasilkan basis data yang sama, kalau
+tidak angka di naskah demo ikut bergerak tiap kali dijalankan.
+
+Titik pertama dan terakhir dibiarkan persis di `first_seen` dan
+`last_seen`: kalau digeser, rentang di baris binding tidak lagi cocok
+dengan jejaknya sendiri — persis penyakit yang sedang diobati.
+
+**Bug kedua yang ikut ketahuan.** `INSERT OR REPLACE` membuang baris
+lama lalu membuat rowid BARU, sehingga pengamatan lama menggantung pada
+`binding_id` yang tidak ada lagi. Belum pernah menggigit karena tidak
+ada pengamatan yang ditulis; begitu ada, tiap re-seed akan meninggalkan
+sampah. Baris yang sama kini dipakai ulang dan jejak lamanya dibersihkan
+lebih dulu.
+
+**Hasil sampingan yang menguntungkan demo.** Fixture sebaran stiker
+sekarang memicu sinyalnya lewat jalur yang lebih kuat:
+
+```
+sebelum : "terdeteksi di 4 area berbeda, terjauh 567 km"
+sesudah : "terlihat di dua tempat berjarak 567.4 km hanya terpaut
+           0 menit — tidak ada pedagang yang bisa berpindah secepat itu"
+```
+
+Stiker yang ditempel bersamaan memang punya rentang yang sama persis,
+jadi jejaknya jatuh di detik yang sama di dua kota. Demo-nya berhenti
+memperagakan aturan dan mulai memperagakan buktinya.
+
+**Tiga test pengerasan menolak perubahan ini, dan benar menolak.**
+Ketiganya menghitung `COUNT(*) FROM observations` lalu membandingkannya
+dengan angka yang mengandaikan seed tidak menulis apa-apa. Harapannya
+diperbarui, dan satu assertion BARU ditambahkan di dua di antaranya:
+`observer_count` harus sama dengan jumlah baris jejak. Kalau keduanya
+berbeda lagi, salah satunya berbohong — dan sekarang test yang
+mengatakannya, bukan produksi.
+
+**Catatan untuk keputusan yang tidak jadi diambil.** Pemeriksaan ini
+berawal dari rencana mengganti `MIN_AGE_HOURS` dengan "N hari berbeda".
+Rencana itu DIBATALKAN, dan alasannya lebih penting daripada hasil
+pemeriksaannya: koordinat dikirim klien dan tidak bisa diverifikasi
+(R1), jadi penyerang tidak perlu hadir di lokasi sama sekali. "Tiga
+hari berbeda" baginya berarti tiga permintaan HTTP dari laptop, dijeda
+tiga hari — ongkos naik dari 25 jam jadi 3 hari. Itu penundaan, bukan
+pertahanan, dan harganya adalah menjatuhkan seluruh data demo.
+
+Ambang waktu tidak membebani penyerang yang tidak perlu hadir. Dicatat
+di sini supaya tidak ada yang mengulang rencana itu nanti dan mengira
+ia menemukan sesuatu.
+
+---
+
 ## Keputusan 55 — Tag wajib diperiksa isinya, tapi hanya bentuknya
 
 **Yang ditemukan.** `MANDATORY_TAGS` menuntut tag 58 (kode negara) HADIR,
@@ -3626,6 +4025,9 @@ Layer 2 di `behavior.py`:
 | `SOFT_FINGERPRINT_CAP` | 25 | sekumpulan sinyal lemah tidak boleh menumpuk jadi setara satu bukti kuat |
 | `W_ANOMALY_BASE` | 12 | berskala dengan jumlah percobaan, pola yang sama dengan Keputusan 4 |
 | `W_ANOMALY_CAP` | 30 | sendirian tidak pernah cukup mencapai `cooling_off` |
+| `MOBILITY_MAX_KMH` | 80 | kecepatan di atas ini bukan pedagang berpindah melainkan dua benda sekaligus; 20 km/jam menuduh 89,5% pedagang bermotor (`calibrate_keliling.py`) |
+| `MOBILITY_MAX_SPAN_KM` | 80 | pedagang keliling bekerja dalam satu kota; metropolitan terukur maks 57,7 km, penyebar antar kota ~1.974 km |
+| `W_MULTI_AREA_UNPROVEN` | 35 | sama dengan `first_observation` — harga ketidaktahuan; menolak VERIFIED tanpa menuduh (Keputusan 80) |
 | `W_RARE_PROFILE` | 25 | sama dengan ambang `proceed` dan syarat VERIFIED — di atas itu sinyal ini menjadi veto permanen terhadap merchant sah (`calibrate_rarity_weight.py`) |
 | `RARE_THRESHOLD` | 0,05 | ambang kelangkaan per nilai; fitur yang nilai terbanyaknya sendiri di bawah ambang ini dilewati (Keputusan 77) |
 | `MIN_RARE_FEATURES` | 3 | satu keanehan adalah merchant tidak biasa; tiga sekaligus adalah pola. Positif palsu 4,1% pada 122 merchant lapangan (`evaluate_rarity.py`) |

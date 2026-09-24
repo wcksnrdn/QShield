@@ -43,6 +43,12 @@ NMID_PALSU = "ID1099887766554"
 NONDETERMINISTIK = ("processing_ms",)
 TIKET_CONTOH = "<base64url-klaim>.<base64url-hmac-sha256>"
 
+# `known.last_seen` ikut bergerak: ia mencatat pengamatan TERAKHIR, dan
+# skenario ini sendiri yang menjadi pengamatan itu. Dinormalkan dengan
+# alasan yang sama seperti tiket — yang perlu dilihat penulis SDK adalah
+# bentuk dan tipenya, bukan jam berapa fixture dibuat.
+WAKTU_CONTOH = "<iso-8601-utc>"
+
 
 def _qr(nmid=NMID, pan="936000149000000001", nama="WARUNG BU SRI"):
     from qshield import emvco
@@ -129,6 +135,17 @@ def _skenario():
              "mock_location": False, "rooted": False,
              "attested": True, "platform": "android"})),
 
+        ("10-dipindai-dari-gambar",
+         "from_image: true — payload dibaca dari GAMBAR, jadi koordinat "
+         "pemindai tidak mewakili lokasi QR. Layer 1 tidak dijalankan, "
+         "tidak ada jangkar yang ditanam, dan `known` berisi apa yang "
+         "sudah diamati atas Merchant ID ini. Pakai ini untuk alur "
+         "scan-dari-galeri; tanpanya tiap pembayaran jarak jauh menanam "
+         "jangkar palsu di lokasi pembayar.",
+         dengan(from_image=True, device_integrity={
+             "mock_location": False, "rooted": False,
+             "attested": True, "platform": "android"})),
+
         ("09-bedah-tlv-mode-demo",
          "include_tlv: true — bedah TLV lengkap, termasuk tag bersarang "
          "26 yang terurai jadi GUID/PAN/NMID/kriteria. Biarkan false di "
@@ -159,6 +176,8 @@ def bangun():
                 d[k] = 0
         if d.get("verification_ticket"):
             d["verification_ticket"] = TIKET_CONTOH
+        if d.get("known") and d["known"].get("last_seen"):
+            d["known"]["last_seen"] = WAKTU_CONTOH
         keluar[nama] = {
             "_keterangan": keterangan,
             "status_http": r.status_code,

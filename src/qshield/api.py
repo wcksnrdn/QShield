@@ -307,6 +307,42 @@ class VerifyRequest(BaseModel):
     location_source: Literal["live", "replay"] = Field(
         "live", description="'replay' bila koordinat berasal dari rekaman")
 
+    # Pemindaian dari GAMBAR, bukan dari stiker di depan mata.
+    #
+    # Kasusnya sehari-hari dan bukan sudut sempit: seseorang memfoto QR
+    # di warung, mengirimkannya lewat pesan, dan orang lain yang
+    # membayar dari tempat yang sama sekali berbeda. Koordinat pembayar
+    # NYATA — GPS-nya tidak berbohong — tapi tidak mengatakan apa pun
+    # tentang di mana stiker itu berada. Itu sebabnya field ini terpisah
+    # dari `location_source`: bukan soal dari mana koordinatnya berasal,
+    # melainkan soal APA yang diwakilinya.
+    #
+    # Akibatnya dua, dan keduanya perlu:
+    #
+    #   1. Layer 1 tidak dijalankan. Menilai jangkar dengan koordinat
+    #      pembayar akan menuduh pedagang yang sah — persis yang terjadi
+    #      hari ini: pemindaian dari jauh menghasilkan `step_up` pada
+    #      warung yang tidak bersalah sama sekali.
+    #
+    #   2. Tidak ada yang dipelajari tentang TEMPAT. Tanpa ini tiap
+    #      pembayaran jarak jauh menanam jangkar hantu di rumah pembayar,
+    #      dan tiap jangkar hantu berjarak >1 km menambah
+    #      `nmid_second_location` +25 PERMANEN ke merchant yang sah.
+    #      Di skala PJP itu merusak korpus secara sistematis.
+    #
+    # Pengetahuan tingkat PAYLOAD tetap dipelajari — dialek penerbit dan
+    # kelangkaan ciri tidak berubah karena difoto.
+    #
+    # Field ini diisi klien, dan klien bisa berbohong. Aman karena hanya
+    # bisa MENGETATKAN: menyalakannya membuang verifikasi penempatan,
+    # tidak pernah menerbitkannya. Prinsip yang sama dengan nama
+    # merchant — nilai yang dikendalikan penyerang boleh mengetatkan,
+    # tidak pernah melonggarkan.
+    from_image: bool = Field(
+        False,
+        description="true bila payload dibaca dari gambar/galeri, "
+                    "sehingga koordinat pemindai tidak mewakili lokasi QR")
+
     device_integrity: Optional[DeviceIntegrity] = Field(
         None, description="diisi klien native; klien web mengosongkannya")
 
@@ -335,6 +371,87 @@ class MerchantOut(BaseModel):
     city: Optional[str]
     criteria: Optional[str]
     is_static: bool
+
+
+class AttributionOut(BaseModel):
+    """Apa yang Q-Shield KETAHUI tentang sebuah Merchant ID.
+
+    Dipisahkan tegas dari `MerchantOut`, dan bedanya menentukan:
+    `MerchantOut` mengutip apa yang TERTULIS di payload — nama dan kota
+    yang bisa diketik siapa saja saat mendaftar. `AttributionOut`
+    melaporkan apa yang sudah PERNAH DIAMATI atas Merchant ID itu.
+    Nama di QR bisa dikarang; riwayat pengamatan tidak bisa.
+
+    Gunanya di pembayaran jarak jauh. Ketika seseorang memfoto QR lalu
+    mengirimkannya lewat pesan, pembayar tidak berada di tempat itu dan
+    penempatan stiker MUSTAHIL diverifikasi dari sisinya. Yang masih bisa
+    diberikan: apakah Merchant ID ini dikenal, dengan nama apa, di kota
+    mana. Pembayar mencocokkannya sendiri dengan yang ia ketahui —
+    keputusan diserahkan ke manusia, bukan diklaim sistem.
+
+    Sengaja TIDAK memuat koordinat. Kota adalah resolusi paling halus
+    yang boleh keluar dari sini; titik persis lapak seorang pedagang
+    bukan milik siapa pun yang kebetulan memegang payload-nya
+    (invarian §8).
+
+    Sengaja TIDAK memuat putusan maupun aksi. Mengenali Merchant ID
+    bukan verifikasi penempatan, dan menyajikannya sebagai tier akan
+    persis menjadi kebohongan yang dihindari endpoint ini.
+
+    Sengaja TIDAK memuat field kecurigaan apa pun — tidak ada "pernah
+    ditandai", tidak ada hitungan percobaan. Dua alasan, keduanya sudah
+    pernah menggigit kami. `anomaly_attempts` menempel pada JANGKAR,
+    jadi nilainya tinggi justru pada pedagang yang DISERANG: melaporkannya
+    akan menuduh korban. Dan catatan penantang di `anchor_challenge`
+    ikut terisi oleh tetangga yang sah — pelajaran R11. Endpoint ini
+    melaporkan pengenalan, bukan kecurigaan.
+    """
+
+    known: bool = Field(..., description="Merchant ID ini pernah diamati")
+    names: list = Field([], description="nama yang pernah dipakai NMID ini")
+    city: Optional[str] = Field(None, description="kota, bukan koordinat")
+    observer_count: int = Field(0, description="total pengamat di semua lokasi")
+    locations: int = Field(0, description="berapa tempat NMID ini teramati")
+    first_seen: Optional[str] = None
+    last_seen: Optional[str] = None
+    registered: bool = Field(False, description="didaftarkan PJP")
+    name_matches: Optional[bool] = Field(
+        None,
+        description="nama di payload sama dengan yang pernah diamati; "
+                    "null kalau belum ada pembanding")
+
+
+class EvidenceOut(BaseModel):
+    """Di atas APA putusan ini berdiri.
+
+    `verdict` menjawab "boleh dibayar atau tidak". Field ini menjawab
+    pertanyaan yang berbeda dan sama pentingnya: **seberapa mahal
+    memalsukan dasar putusan itu.**
+
+    Sebelum ini keduanya tidak bisa dibedakan dari luar. "verified" yang
+    berdiri di atas tiga pemindaian anonim terbaca sama persis dengan
+    yang berdiri di atas lima puluh pemindaian yang dijamin PJP —
+    padahal yang pertama bisa dibuat siapa saja dengan tiga string
+    karangan dan kesabaran 24 jam (R22).
+
+    `vouched_observers` adalah angka yang TIDAK bisa ditumbuhkan
+    penyerang: ia menghitung pengamat yang atestasi perangkatnya
+    diperiksa penyelenggara lalu dipertanggungkan lewat kunci API
+    mereka. `observers` bisa.
+
+    Pengungkapan, bukan skor. Tidak satu pun field di sini menyentuh
+    penilaian — PJP yang memutuskan kebijakannya sendiri di atas angka
+    ini, dan auditor bisa melihat dasar tiap putusan.
+    """
+
+    observers: int = Field(0, description="pengamat berbeda di jangkar ini")
+    vouched_observers: int = Field(
+        0, description="di antaranya yang dijamin penyelenggara")
+    registered: bool = Field(False, description="didaftarkan PJP di titik ini")
+    established: bool = Field(
+        False, description="sudah melewati ambang konsensus dan umur")
+    span_hours: float = Field(
+        0.0, description="rentang pengamatan pertama ke terakhir")
 
 
 class FeeOut(BaseModel):
@@ -401,6 +518,13 @@ class VerifyResponse(BaseModel):
     signals: list
     layers: LayerScores
     merchant: MerchantOut
+    # Diisi HANYA pada pemindaian dari gambar. Di pemindaian biasa
+    # jawabannya sudah ada di `verdict`: penempatan memang terverifikasi,
+    # dan atribusi tidak menambah apa-apa selain dua kueri.
+    known: Optional[AttributionOut] = None
+    # Di atas apa putusan ini berdiri. Null pada jalur yang memang tidak
+    # menilai jangkar — GPS palsu, akurasi buruk, pemindaian dari gambar.
+    evidence: Optional[EvidenceOut] = None
     fees: FeeOut
     # Putusan ini, ditandatangani dan diikat ke sidik jari payload yang
     # diperiksa. MENGIKAT, bukan memaksa: ia mencegah putusan dipindah
@@ -419,6 +543,10 @@ class VerifyResponse(BaseModel):
 
 REPLAY_NOTICE = ("Koordinat diputar ulang dari rekaman lokasi — bukan GPS "
                  "langsung. Penilaian berjalan apa adanya.")
+
+IMAGE_NOTICE = ("Dipindai dari gambar — penempatan stiker TIDAK dapat "
+                "diverifikasi dari sini. Yang diperiksa hanya bentuk "
+                "payload dan riwayat Merchant ID-nya.")
 
 MOCK_NOTICE = ("Sistem operasi melaporkan lokasi ini berasal dari mock "
                "provider — jangkar tidak dapat dinilai")
@@ -440,6 +568,61 @@ def _bedah(parsed, diminta: bool) -> list:
     if not diminta:
         return []
     return [TlvOut(**e) for e in parsed.breakdown()]
+
+
+def _bukti(binding) -> EvidenceOut:
+    """Di atas apa putusan ini berdiri. Pengungkapan, bukan skor."""
+    if binding is None:
+        return EvidenceOut()
+    return EvidenceOut(
+        observers=binding.observer_count,
+        vouched_observers=binding.vouched_count,
+        registered=binding.is_registered,
+        established=binding.is_established,
+        span_hours=round(binding.age_hours, 1),
+    )
+
+
+def _atribusi(nmid: str, parsed) -> AttributionOut:
+    """Apa yang sudah kita amati tentang Merchant ID ini.
+
+    Tidak membaca koordinat pemindai sama sekali — inilah yang membuatnya
+    sah dipakai ketika pemindainya jauh dari merchant.
+    """
+    bindings = store.by_nmid(nmid)
+    if not bindings:
+        return AttributionOut(known=False)
+
+    nama = sorted({n for n in store.names_for_nmid(nmid) if n})
+
+    # Kota disimpulkan dari pengetahuan WILAYAH, bukan dibaca dari
+    # payload: yang tertulis di QR justru bagian yang bisa dikarang.
+    kota = None
+    for b in bindings:
+        hasil = store.area_city(b.lat, b.lng)
+        if hasil:
+            kota = hasil[0]
+            break
+
+    awal = [b.first_seen for b in bindings if b.first_seen]
+    akhir = [b.last_seen for b in bindings if b.last_seen]
+
+    cocok = None
+    if nama and parsed.merchant_name:
+        kanonik = bd.nama_kanonik(parsed.merchant_name)
+        cocok = any(kanonik == bd.nama_kanonik(n) for n in nama)
+
+    return AttributionOut(
+        known=True,
+        names=nama,
+        city=kota,
+        observer_count=sum(b.observer_count for b in bindings),
+        locations=len(bindings),
+        first_seen=min(awal).isoformat() if awal else None,
+        last_seen=max(akhir).isoformat() if akhir else None,
+        registered=any(b.is_registered for b in bindings),
+        name_matches=cocok,
+    )
 
 
 def _biaya(parsed) -> FeeOut:
@@ -798,6 +981,7 @@ class InspectResponse(BaseModel):
     """
 
     merchant: MerchantOut
+    known: AttributionOut
     fees: FeeOut
     structural_signals: list
     structural_reasons: list
@@ -845,6 +1029,7 @@ def inspect(req: InspectRequest, request: Request):
             nmid=parsed.nmid, name=parsed.merchant_name,
             city=parsed.merchant_city, criteria=parsed.criteria_label,
             is_static=parsed.is_static),
+        known=_atribusi(parsed.nmid, parsed),
         fees=_biaya(parsed),
         structural_signals=[s.name for s in struktural.signals],
         structural_reasons=[s.reason for s in struktural.signals],
@@ -952,6 +1137,109 @@ def verify(req: VerifyRequest, request: Request):
                 nmid=nmid, name=parsed.merchant_name,
                 city=parsed.merchant_city, criteria=parsed.criteria_label,
                 is_static=parsed.is_static),
+            fees=_biaya(parsed),
+            tlv=_bedah(parsed, req.include_tlv),
+            verification_ticket=_tiket["ticket"],
+            ticket_expires_in=_tiket["expires_in"],
+            processing_ms=elapsed,
+        )
+
+    # Pemindaian dari gambar. Koordinat pembayar NYATA, tapi tidak
+    # mewakili tempat stiker itu berada — jadi jangkar tidak layak
+    # dinilai, persis seperti invarian §6, dengan sebab yang berbeda.
+    #
+    # Ditempatkan SEBELUM cabang akurasi rendah dengan sengaja: kalau
+    # koordinatnya memang tidak mewakili apa pun, seberapa akurat
+    # koordinat itu sama sekali tidak relevan.
+    if req.from_image:
+        gambar = bd.Verdict(
+            status=bd.UNKNOWN,
+            action=bd.WARN,
+            risk_score=0,
+            reasons=[IMAGE_NOTICE],
+            signals=["scanned_from_image"],
+        )
+        # has_coords=False: sinyal yang bergantung posisi dimatikan,
+        # bukan dijalankan dengan nilai karangan. Struktural, dialek
+        # penerbit, dan kelangkaan tetap penuh — bentuk payload tidak
+        # berubah karena difoto.
+        struktural = bh.evaluate(
+            parsed, state=None, has_coords=False,
+            issuer_profile=(store.dialect_profile(parsed.merchant_pan[:8])
+                            if parsed.merchant_pan
+                            and len(parsed.merchant_pan) >= 8 else None),
+            feature_corpus=store.feature_corpus(),
+        )
+        gambar = _tandai_replay(bd.compose(gambar, struktural), req)
+
+        # PAGAR. Tanpa Layer 1, kontradiksi struktural berhenti di skor
+        # 70 — dan 70 memetakan ke `step_up`, bukan `cooling_off`. Di
+        # jalur biasa sisanya disumbang Layer 1, yang di sini sengaja
+        # tidak dijalankan. Akibatnya, menyalakan `from_image` akan
+        # MELONGGARKAN putusan dari cooling_off jadi step_up — persis
+        # tuas yang tidak boleh ada pada field yang diisi klien.
+        #
+        # Kontradiksi spec adalah sifat PAYLOAD. Ia tidak menjadi kurang
+        # pasti karena payload-nya sampai lewat gambar, jadi tier-nya
+        # tidak boleh ikut melunak. Diperbaiki secara struktural di
+        # sini, bukan dengan menaikkan W_STRUCTURAL — bobot itu sudah
+        # dikalibrasi terhadap 20.000 payload sah dan tidak boleh
+        # digeser demi satu jalur.
+        if struktural.hard_violation:
+            gambar.action = bd.COOLING_OFF
+
+        atribusi = _atribusi(nmid, parsed)
+
+        # Atribusi masuk sebagai ALASAN, tanpa bobot. Mengenali Merchant
+        # ID bukan bukti penempatan, jadi ia tidak boleh menggerakkan
+        # tier ke arah mana pun — yang dilakukannya memberi pembayar
+        # sesuatu yang bisa ia cocokkan sendiri.
+        if atribusi.known:
+            bagian = ", ".join(atribusi.names) or "tanpa nama tercatat"
+            if atribusi.city:
+                bagian += f" di {atribusi.city}"
+            gambar.reasons.append(
+                f"Merchant ID ini dikenal: {bagian} — "
+                f"{atribusi.observer_count} pengamatan")
+            if atribusi.name_matches is False:
+                gambar.reasons.append(
+                    f"Nama di QR ini ({parsed.merchant_name}) berbeda dari "
+                    f"nama yang pernah diamati untuk Merchant ID tersebut")
+        else:
+            gambar.reasons.append(
+                "Merchant ID ini belum pernah kami amati di mana pun")
+
+        # Pengetahuan tingkat PAYLOAD tetap dipelajari; pengetahuan
+        # LOKASI tidak ada satu pun yang disentuh. Tidak ada binding
+        # dibuat, tidak ada kota dipelajari, tidak ada percobaan anomali
+        # dicatat — jangkar hantu justru yang dicegah di sini.
+        if gambar.status != bd.ANOMALY and parsed.crc_valid:
+            store.learn_dialect(parsed, nmid)
+            store.learn_features(parsed, nmid)
+
+        elapsed = round((time.perf_counter() - started) * 1000, 2)
+        audit.record_verdict(
+            gambar, nmid, req.lat, req.lng,
+            {"location": 0, "behavior": struktural.score},
+            elapsed, req.accuracy_m, parsed.merchant_name,
+            req.location_source, client_id, status_integritas,
+            tk.payload_fingerprint(req.payload),
+        )
+        _tiket = tk.issue(
+            req.payload, gambar.status, gambar.action, nmid,
+            client_id or "anonymous", _bahan_tiket(client_id))
+        return VerifyResponse(
+            verdict=gambar.status, action=gambar.action,
+            risk_score=gambar.risk_score, reasons=gambar.reasons,
+            signals=gambar.signals,
+            layers=LayerScores(location=0, behavior=struktural.score),
+            location_source=req.location_source,
+            device_integrity=status_integritas,
+            merchant=MerchantOut(
+                nmid=nmid, name=parsed.merchant_name,
+                city=parsed.merchant_city, criteria=parsed.criteria_label,
+                is_static=parsed.is_static),
+            known=atribusi,
             fees=_biaya(parsed),
             tlv=_bedah(parsed, req.include_tlv),
             verification_ticket=_tiket["ticket"],
@@ -1084,6 +1372,13 @@ def verify(req: VerifyRequest, request: Request):
 
     tantangan = store.challenge_state(req.lat, req.lng, nmid)
 
+    # Jejak kehadiran memisahkan pedagang keliling dari stiker yang
+    # disebar, dan hanya relevan kalau NMID ini memang punya jangkar di
+    # lebih dari satu tempat. Mayoritas merchant punya satu, dan tidak
+    # perlu ikut membayar kuerinya.
+    jejak_hadir = (store.jejak_lintas_area(nmid)
+                   if len(elsewhere) >= bd.SCATTER_MIN_AREAS else None)
+
     # Layer 1 — ikatan merchant-lokasi.
     lokasi = bd.evaluate(
         nmid=nmid,
@@ -1094,6 +1389,7 @@ def verify(req: VerifyRequest, request: Request):
         crc_valid=parsed.crc_valid,
         challenge=tantangan,
         merchant_name=parsed.merchant_name,
+        jejak_kehadiran=jejak_hadir,
     )
 
     # Layer 2 — perilaku artefak QR.
@@ -1158,6 +1454,14 @@ def verify(req: VerifyRequest, request: Request):
             lng=req.lng,
             device_anon_id=req.device_anon_id,
             merchant_name=parsed.merchant_name,
+            # Dijamin hanya kalau DUA-DUANYA ada: atestasi perangkat DAN
+            # klien yang terautentikasi. Atestasi sendiri tidak cukup —
+            # ia dilaporkan klien dan tidak bisa kami verifikasi; yang
+            # membuatnya berarti adalah PJP yang memeriksanya lalu
+            # mempertanggungkannya lewat kunci API mereka. Pemindai
+            # anonim yang mengaku `attested: true` tidak dijamin siapa
+            # pun, dan tidak boleh terhitung begitu.
+            vouched=(status_integritas == "attested" and client_id is not None),
         )
         # Pengetahuan wilayah dibangun HANYA dari pemindaian yang tidak
         # ditolak — alasan yang sama dengan invarian §3.
@@ -1244,6 +1548,7 @@ def verify(req: VerifyRequest, request: Request):
             criteria=parsed.criteria_label,
             is_static=parsed.is_static,
         ),
+        evidence=_bukti(lokasi.matched_binding),
         fees=_biaya(parsed),
         tlv=_bedah(parsed, req.include_tlv),
         verification_ticket=_tiket["ticket"],

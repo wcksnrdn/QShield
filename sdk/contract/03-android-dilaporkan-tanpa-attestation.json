@@ -16,6 +16,13 @@
   "tanggapan": {
     "action": "proceed",
     "device_integrity": "reported",
+    "evidence": {
+      "established": true,
+      "observers": 48,
+      "registered": false,
+      "span_hours": 10723.5,
+      "vouched_observers": 0
+    },
     "fees": {
       "fixed": null,
       "indicator": null,
@@ -23,6 +30,7 @@
       "percent": null,
       "present": false
     },
+    "known": null,
     "layers": {
       "behavior": 0,
       "location": 0
@@ -37,11 +45,13 @@
     },
     "processing_ms": 0,
     "reasons": [
-      "Konsisten dengan 48 pengamatan sebelumnya di lokasi ini"
+      "Konsisten dengan 48 pengamatan sebelumnya di lokasi ini",
+      "Reputasi lokasi ini dibangun dari pemindaian anonim — tidak ada pengamat yang dijamin penyelenggara pembayaran"
     ],
     "risk_score": 0,
     "signals": [
-      "established_binding"
+      "established_binding",
+      "consensus_unvouched"
     ],
     "ticket_expires_in": 90,
     "tlv": [],

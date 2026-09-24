@@ -17,6 +17,7 @@
   "tanggapan": {
     "action": "warn",
     "device_integrity": "attested",
+    "evidence": null,
     "fees": {
       "fixed": null,
       "indicator": null,
@@ -24,6 +25,7 @@
       "percent": null,
       "present": false
     },
+    "known": null,
     "layers": {
       "behavior": 0,
       "location": 40
