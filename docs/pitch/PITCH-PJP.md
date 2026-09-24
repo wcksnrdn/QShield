@@ -294,8 +294,11 @@ bukan pemasangan.
 - Jangan menyebut angka kerugian fraud yang tidak kalian punya
   sumbernya. Orang industri tahu angka sebenarnya, dan angka karangan
   mengakhiri percakapan lebih cepat daripada tidak ada angka.
-- Jangan menyebut Layer 2 "pakai AI" atau "machine learning". Sistem ini
-  deterministik, dan itu keunggulannya — tiap putusan bisa dijelaskan
-  kalimat per kalimat.
+- Jangan menyebut Layer 2 "pakai AI", dan jangan memberi kesan ada
+  classifier terlatih — tidak ada. Di depan PJP, tekankan sifat
+  deterministiknya: tiap putusan bisa dijelaskan kalimat per kalimat,
+  dan itu yang mereka butuhkan untuk audit. Kalau ditanya soal
+  pembelajaran, sebutkan apa adanya — dua model tak terawasi di atas
+  sebaran empiris, tanpa data latih. Naskahnya di `MODEL-ML.md`.
 - Jangan mengklaim parameter sudah dikalibrasi lapangan sebelum
   surveinya benar-benar dijalankan.

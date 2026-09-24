@@ -144,7 +144,10 @@ scripts/         skrip yang dijalankan langsung, bukan bagian dari package
   calibrate_anchor.py kalibrasi penghalusan jangkar
   calibrate_dynamic.py kalibrasi deteksi QR dinamis dipakai ulang
   calibrate_transfer.py kalibrasi bobot transfer manual
-  calibrate_rarity.py  kalibrasi model kelangkaan
+  calibrate_rarity.py  kalibrasi model kelangkaan (populasi sintetis)
+  export_corpus.py     ekspor ciri merchant dari produksi, tanpa NMID
+  evaluate_rarity.py   evaluasi model kelangkaan pada korpus lapangan
+  calibrate_rarity_weight.py  kenapa bobot kelangkaan dikunci 25
   calibrate_decay.py  kalibrasi peluruhan jejak serangan
   calibrate_falsepos.py gesekan pada pedagang jujur
   calibrate_tetangga.py pedagang bersebelahan (R11)
@@ -196,7 +199,7 @@ Dikelompokkan menurut siapa yang membacanya.
 |---|---|
 | [`docs/pitch/PITCH-PJP.md`](docs/pitch/PITCH-PJP.md) | alasan bisnis untuk PJP + panduan pendekatan dari nol |
 | [`docs/pitch/PITCH-AUDIT.md`](docs/pitch/PITCH-AUDIT.md) | audit naskah pitch terhadap kode + naskah pengganti |
-| [`docs/pitch/KLARIFIKASI-ML.md`](docs/pitch/KLARIFIKASI-ML.md) | koreksi istilah ML untuk panitia |
+| [`docs/pitch/MODEL-ML.md`](docs/pitch/MODEL-ML.md) | dua model tak terawasi: nama teknis, bukti, dan naskah jawaban untuk juri |
 | [`docs/pitch/PDF-UPDATE.md`](docs/pitch/PDF-UPDATE.md) | teks pengganti untuk `Q-Shield-Overview.pdf` yang sudah basi |
 
 ## Sebelum demo

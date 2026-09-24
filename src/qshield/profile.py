@@ -24,6 +24,14 @@ punya tempat di sistem pembayaran, dan model ini tidak menuntutnya.
 Batasnya diakui: merchant sah yang memang tidak biasa akan tertandai.
 Karena itu bobotnya sedang, dan butuh beberapa fitur langka sekaligus —
 satu keanehan bukan apa-apa.
+
+Diukur terhadap merchant SUNGGUHAN, bukan hanya populasi sintetis:
+leave-one-out pada 122 merchant yang dipindai di lapangan menandai 5 di
+antaranya — 4,1% positif palsu. Lihat `scripts/evaluate_rarity.py`.
+
+Batas kedua, lebih mendasar: penyerang yang MENYALIN profil lazim tidak
+tertangkap di sini sama sekali. Itu tugas dialek penerbit dan ikatan
+geospasial, bukan tugas model ini. Tercatat sebagai R19.
 """
 
 from dataclasses import dataclass
@@ -56,7 +64,29 @@ RARE_THRESHOLD = 0.05
 # adalah pola yang tidak pernah terjadi.
 MIN_RARE_FEATURES = 3
 
-W_RARE_PROFILE = 30
+# Bobot sinyal kelangkaan. Dikunci ke 25, dan angkanya BUKAN selera —
+# 25 adalah ambang `proceed`, sekaligus syarat status VERIFIED di
+# binding.py:
+#
+#     current.is_established and score <= 25
+#
+# Pada bobot 30, sinyal ini sendirian membuat merchant SAH kehilangan
+# status hijau dan jatuh ke unknown. Dan kelangkaan adalah sifat
+# PAYLOAD, bukan sifat lokasi — merchant sah dengan profil tidak biasa
+# tidak bisa menghapusnya dengan dipindai lebih sering. Bobot di atas 25
+# karenanya bekerja sebagai veto permanen terhadap verifikasi, menimpa
+# 4,1% merchant di korpus lapangan.
+#
+# Itu bertentangan dengan niat modul ini sendiri: sinyal ini tidak boleh
+# cukup sendirian. Pada 25 ia tidak pernah menggeser tier sendirian, dan
+# tetap berarti begitu ditemani sinyal lain.
+#
+# Harganya diukur, bukan diabaikan (calibrate_rarity_weight.py): dari
+# 1.392 kombinasi bobot yang mungkin, 12 melemah satu tier — umumnya
+# pasangan kelangkaan dengan satu sinyal 25-30 lain yang turun dari
+# step_up ke warn. Ditukar dengan hilangnya veto permanen terhadap
+# merchant sah, dan pertukaran itu dipilih sadar.
+W_RARE_PROFILE = 25
 
 # Fitur yang diamati. Sengaja hanya yang kategorikal dan berkardinalitas
 # rendah — sesuatu seperti nama merchant akan selalu langka dan tidak
@@ -109,13 +139,21 @@ def score(parsed, corpus: Optional[dict]) -> tuple:
     Mengembalikan (bobot, daftar RarityFinding). Bobot 0 berarti tidak
     ada yang perlu dikatakan — termasuk ketika korpusnya belum cukup.
     """
+    return score_features(features_of(parsed), corpus)
+
+
+def score_features(punya: dict, corpus: Optional[dict]) -> tuple:
+    """Sama dengan score(), tapi menerima ciri yang sudah diekstrak.
+
+    Dipakai evaluasi: korpus lapangan menyimpan ciri per merchant, bukan
+    payload-nya, sehingga leave-one-out tidak bisa lewat score().
+    """
     if not corpus:
         return 0, []
     total = corpus.get("_total", 0)
     if total < MIN_CORPUS:
         return 0, []
 
-    punya = features_of(parsed)
     langka = []
     for f in FEATURES:
         terlihat = corpus.get(f)
@@ -126,7 +164,22 @@ def score(parsed, corpus: Optional[dict]) -> tuple:
         # akan selalu "langka" tanpa berarti apa-apa.
         if len(terlihat) < 2:
             continue
-        n = terlihat.get(punya[f], 0)
+        # Fitur yang bahkan nilai TERBANYAKNYA sudah langka tidak bisa
+        # membedakan apa pun — "langka" menjadi keadaan normal di sana,
+        # dan fitur itu memberi satu fitur langka gratis kepada SEMUA
+        # merchant, termasuk yang sah.
+        #
+        # Terukur di korpus lapangan 122 merchant: kota punya 79 nilai
+        # berbeda dan kota terbanyak hanya 6 merchant (4,9%) — di bawah
+        # RARE_THRESHOLD. Akibatnya 122 dari 122 merchant sah selalu
+        # membawa satu fitur langka, dan konjungsi tiga fitur diam-diam
+        # merosot jadi konjungsi dua. Lihat evaluate_rarity.py.
+        #
+        # Penjaga ini tidak menambah konstanta baru: ambangnya sama
+        # dengan ambang kelangkaan itu sendiri.
+        if max(terlihat.values()) / total < RARE_THRESHOLD:
+            continue
+        n = terlihat.get(punya.get(f, "?"), 0)
         bagian = n / total
         if bagian < RARE_THRESHOLD:
             langka.append(RarityFinding(f, punya[f], bagian))
