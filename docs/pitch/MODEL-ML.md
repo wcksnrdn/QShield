@@ -169,9 +169,36 @@ Jalur itu **sudah kami uji dan tolak dengan alasan**, dan ini justru
 temuan yang mendasari seluruh arsitektur Q-Shield.
 
 Enam belas ciri payload diekstrak lalu dibandingkan antara stiker asli
-dan stiker pengganti pada skenario sticker-swap:
+dan stiker pengganti pada skenario sticker-swap. Bisa dijalankan
+sekarang juga: `python scripts/enam_belas_ciri.py`, dan dikunci di
+`tests/test_enam_belas.py`.
 
-> **Nol dari enam belas ciri berbeda.**
+> **Nol dari dua belas ciri STRUKTURAL berbeda.** Terhadap penipu yang
+> mencocokkan isian pendaftarannya: **nol dari enam belas, seluruhnya.**
+
+Presisinya penting, dan sebutkan sendiri sebelum ditanya. Enam belas
+ciri itu terbagi dua:
+
+| kelompok | isi | siapa yang menentukan |
+|---|---|---|
+| **struktural** (12) | urutan & jumlah field, validitas dan gaya checksum, GUID, nomor template, susunan data merchant, panjang & prefiks PAN, format Merchant ID, mata uang, kode negara | generator acquirer |
+| **deskriptif** (4) | kategori usaha, kriteria usaha, tipe kode, panjang nama | merchant, saat mendaftar |
+
+Ciri struktural **selalu identik**, karena stiker penipu memang
+diterbitkan acquirer yang sama. Terukur ulang di korpus lapangan kami:
+52 merchant nyata dari penerbit `93600914`, lima dari enam ciri
+struktural yang kami simpan identik pada seluruhnya.
+
+Ciri deskriptif bisa berbeda — tapi penipu mengisinya sendiri, dan yang
+teliti tinggal mencocokkannya. Selisihnya adalah **kesalahan penipu,
+bukan deteksi struktural.**
+
+**Nama dan kota sengaja DI LUAR enam belas**, dan itu diumumkan, bukan
+disembunyikan: keduanya teks bebas, bukan ciri struktural. Keduanya
+justru kami pakai — `W_CITY_MISMATCH` dan `W_NAME_IMPERSONATION` ada di
+`binding.py`. Skrip peragaannya menampilkan kolom itu terpisah, persis
+supaya tidak terlihat seperti ciri yang dibuang karena kebetulan
+bekerja.
 
 Sebabnya mendasar. Pelaku sticker-swap **tidak memalsukan QR**. Ia
 mendaftarkan akun merchant sungguhan pada penyelenggara sungguhan,
@@ -186,7 +213,8 @@ identitas merchant ke tempat, bukan ke bentuk kode.
 
 Tiga alasan, singkat, untuk dijawab di sesi tanya jawab:
 
-1. **Tidak ada sinyal di payload** — 0 dari 16 ciri berbeda.
+1. **Tidak ada sinyal struktural di payload** — 0 dari 12 ciri
+   struktural berbeda; 0 dari 16 terhadap penipu yang teliti.
 2. **Tidak ada data latih** — sampel penipuan terkonfirmasi nol;
    classifier butuh dua kelas. Model yang dilatih pada data bangkitan
    sendiri hanya belajar mengenali generator kita sendiri.
