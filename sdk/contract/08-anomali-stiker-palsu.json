@@ -21,7 +21,7 @@
       "established": false,
       "observers": 0,
       "registered": false,
-      "span_hours": 0.0,
+      "span_hours": -1.0,
       "vouched_observers": 0
     },
     "fees": {
