@@ -48,6 +48,7 @@ TIKET_CONTOH = "<base64url-klaim>.<base64url-hmac-sha256>"
 # alasan yang sama seperti tiket — yang perlu dilihat penulis SDK adalah
 # bentuk dan tipenya, bukan jam berapa fixture dibuat.
 WAKTU_CONTOH = "<iso-8601-utc>"
+RENTANG_CONTOH = -1.0   # <jam, float>
 
 
 def _qr(nmid=NMID, pan="936000149000000001", nama="WARUNG BU SRI"):
@@ -178,6 +179,13 @@ def bangun():
             d["verification_ticket"] = TIKET_CONTOH
         if d.get("known") and d["known"].get("last_seen"):
             d["known"]["last_seen"] = WAKTU_CONTOH
+        # `evidence.span_hours` ikut bergerak: fixture diseed relatif
+        # terhadap jam pembuatannya, jadi rentangnya bertambah sendiri
+        # setiap kali digenerate ulang. Dinormalkan dengan alasan yang
+        # sama seperti tiket — penulis SDK perlu melihat bentuk dan
+        # tipenya, bukan berapa jam yang kebetulan tercatat.
+        if d.get("evidence") and d["evidence"].get("span_hours") is not None:
+            d["evidence"]["span_hours"] = RENTANG_CONTOH
         keluar[nama] = {
             "_keterangan": keterangan,
             "status_http": r.status_code,
