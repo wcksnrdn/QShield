@@ -3400,6 +3400,82 @@ ia menemukan sesuatu.
 
 ---
 
+## Keputusan 83 — Klaim dasar arsitektur akhirnya bisa ditunjukkan, dan ternyata perlu dipertajam
+
+**Yang ditemukan.** Kalimat yang menjadi dasar SELURUH arsitektur
+Q-Shield — *"nol dari enam belas ciri berbeda"* — muncul di empat
+dokumen dan **tidak ada satu pun yang menguncinya**. Tidak bisa
+ditunjukkan ke juri, tidak bisa diverifikasi tim sendiri, dan siapa pun
+bisa mengubah ekstraktor ciri lalu membuatnya diam-diam tidak benar.
+
+Lebih buruk: dalam bentuk yang tertulis, ia **bertabrakan dengan kode
+kami sendiri.** Dokumen menyatakan payload tidak memberi tahu apa pun,
+sementara `binding.py` menskor ketidakcocokan kota:
+
+```python
+# Stiker bertuliskan JAKARTA yang menempel di warung Bandung ketahuan
+# pada pemindaian PERTAMA, tanpa riwayat apa pun tentang merchant itu.
+W_CITY_MISMATCH = 40
+```
+
+Pertanyaan yang mematikan, dan pasti ditanyakan juri track keamanan:
+*"Katanya nol dari enam belas, tapi kalian sendiri punya sinyal kota.
+Yang mana yang benar?"*
+
+**Duduk perkaranya.** Keduanya benar, tapi hanya kalau diucapkan dengan
+presisi yang selama ini tidak ada:
+
+| kelompok | jumlah | siapa yang menentukan | bisa memisahkan swap? |
+|---|---|---|---|
+| struktural | 12 | generator acquirer | **tidak pernah** |
+| deskriptif | 4 | merchant saat mendaftar | bisa, tapi penipu mengendalikannya |
+| di luar daftar | nama, kota, kode pos | merchant, teks bebas | dipakai, dan diumumkan |
+
+Nama dan kota memang **sengaja di luar** enam belas — keduanya teks
+bebas, bukan ciri struktural. Tapi mengecualikannya tanpa mengatakannya
+terlihat seperti membuang ciri yang kebetulan bekerja. Maka skrip
+peragaannya menampilkan kolom itu di blok terpisah, lengkap dengan
+catatan bahwa keduanya justru diskor.
+
+**Diukur ulang di korpus lapangan.** 52 merchant nyata dari penerbit
+`93600914`: lima dari enam ciri struktural yang kami simpan identik
+pada seluruhnya (`tag_order` punya 2 varian — beda versi generator).
+Yang bervariasi justru ciri deskriptif — MCC 21 varian, kota 35 varian
+— dan itu bukan jejak penipuan, melainkan bukti bahwa 52 merchant itu
+memang usaha yang berbeda-beda.
+
+**Bentuk klaim yang sekarang dipakai**, dan ini lebih kuat justru
+karena lebih sempit:
+
+> Nol dari dua belas ciri struktural berbeda. Terhadap penipu yang
+> mencocokkan isian pendaftarannya: nol dari enam belas, seluruhnya.
+
+**Peragaan dua kali menangkap cacat di dirinya sendiri.** Pertama,
+`str.isupper()` melaporkan checksum yang kebetulan seluruhnya angka
+sebagai "huruf kecil" — selisih palsu. Diganti membaca
+`emvco.dialect()` langsung, karena **peragaan yang punya ekstraktor
+sendiri bisa melenceng dari model yang diperagakannya**, dan peragaan
+yang melenceng lebih buruk daripada tidak ada peragaan.
+
+Kedua, test menolak asumsi bahwa kota ada di dalam enam belas. Ternyata
+tidak — dan penolakan itu yang memunculkan blok "di luar enam belas".
+
+**Yang dihasilkan.** `scripts/enam_belas_ciri.py` bisa dijalankan hidup
+di depan juri dengan dua payload QRIS asli, dan `tests/test_enam_belas.py`
+mengunci enam hal: jumlah cirinya tepat 16, nol struktural berbeda
+antar-merchant satu acquirer, nol dari enam belas terhadap penipu yang
+teliti, QR yang dibangkitkan ulang TETAP meninggalkan jejak (jadi
+klaimnya bukan "payload tidak berguna"), kota di luar daftar tapi
+ditampilkan dan diskor, serta ekstraktornya membaca `emvco` bukan
+salinan sendiri.
+
+**Pelajarannya di luar kasus ini.** Klaim yang menjadi dasar seluruh
+arsitektur tidak boleh hidup hanya sebagai kalimat di dokumen pitch.
+Kalau ia benar, ia bisa dijalankan. Kalau tidak bisa dijalankan,
+tidak ada yang tahu kapan ia berhenti benar.
+
+---
+
 ## Keputusan 55 — Tag wajib diperiksa isinya, tapi hanya bentuknya
 
 **Yang ditemukan.** `MANDATORY_TAGS` menuntut tag 58 (kode negara) HADIR,

@@ -34,10 +34,17 @@ merchant lain adalah payload yang **sah secara sintaksis**. CRC-nya
 valid. Formatnya benar. Nama merchant bisa ditiru persis.
 
 Kami menguji ini: enam belas ciri yang bisa diekstrak dari payload —
-panjang, urutan field, checksum, format Merchant ID, kode kategori —
-dibandingkan antara stiker asli dan stiker pengganti.
+urutan field, checksum, format Merchant ID, kode kategori, dan
+seterusnya — dibandingkan antara stiker asli dan stiker pengganti.
 
-> **Nol dari enam belas berbeda.**
+> Dua belas di antaranya ciri **struktural**, ditentukan generator
+> acquirer. **Nol yang berbeda.** Terhadap penipu yang mencocokkan
+> isian pendaftarannya: **nol dari enam belas, seluruhnya.**
+
+Empat sisanya ciri deskriptif — kategori usaha dan sejenisnya — yang
+diisi merchant sendiri saat mendaftar. Bisa berbeda, dan kalau berbeda
+kami memakainya. Tapi itu kesalahan penipu, bukan deteksi struktural:
+ia mengendalikan kolom itu.
 
 Sebabnya bukan kelemahan pemeriksaan kami. Penipu tidak memalsukan QR.
 Ia mendaftar akun merchant sungguhan ke penyelenggara sungguhan,

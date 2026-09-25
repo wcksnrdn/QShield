@@ -92,6 +92,7 @@ python3 tests/test_ticket.py                   # tiket: pengikatan, pemalsuan, k
 python3 tests/test_gambar.py                   # pembayaran jarak jauh dari foto QR
 python3 tests/test_keliling.py                 # pedagang keliling vs stiker yang disebar
 python3 tests/test_konsensus.py                # asal-usul reputasi jangkar
+python3 tests/test_enam_belas.py               # klaim dasar: payload tidak memisahkan swap
 PYTHONPATH=scripts python3 tests/test_api.py   # test_api.py mengimpor scripts/seed.py
 
 python3 scripts/calibrate_geo.py               # presisi geohash
@@ -152,6 +153,7 @@ scripts/         skrip yang dijalankan langsung, bukan bagian dari package
   evaluate_rarity.py   evaluasi model kelangkaan pada korpus lapangan
   calibrate_rarity_weight.py  kenapa bobot kelangkaan dikunci 25
   calibrate_keliling.py  ambang kecepatan & rentang pedagang keliling
+  enam_belas_ciri.py     peragaan: kenapa analisis payload tidak cukup
   calibrate_decay.py  kalibrasi peluruhan jejak serangan
   calibrate_falsepos.py gesekan pada pedagang jujur
   calibrate_tetangga.py pedagang bersebelahan (R11)

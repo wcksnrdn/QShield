@@ -260,5 +260,5 @@ Tiap klaim di naskah baru punya buktinya:
 | penajaman jangkar | `python tests/test_invariants.py` |
 | tolak putusan saat GPS buruk | `python tests/test_invariants.py` |
 | deteksi scan pertama | `python tests/test_adversarial.py` |
-| 16 ciri, nol berbeda | ada di `../PROCESS-LOG.md` Keputusan 39 |
+| 16 ciri, nol berbeda | **Sebutkan presisinya**: 12 ciri struktural, nol berbeda; nol dari 16 terhadap penipu yang mencocokkan isian pendaftaran. Nama & kota sengaja di luar daftar dan diumumkan begitu. Peragaan: `scripts/enam_belas_ciri.py`, dikunci `tests/test_enam_belas.py` |
 | privasi | `python tests/test_invariants.py` |

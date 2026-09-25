@@ -423,11 +423,15 @@ diputar ulang. Tunjukkan itu ke juri — jangan disembunyikan.
 > berpura-pura sudah punya.
 
 **"Kenapa nggak pakai model yang dilatih?"**
-> Kami uji jalur itu: enam belas ciri payload, **nol** yang berbeda
-> antara stiker asli dan stiker penipu — karena stiker penipu memang
-> diterbitkan penyelenggara sungguhan. Tidak ada yang bisa dipelajari
-> di sana. Penipuannya ada di penempatan, dan penempatan tidak terekam
-> di payload.
+> Kami uji jalur itu: enam belas ciri payload. Dua belas di antaranya
+> ciri struktural — cara QR dibangun — dan **nol** yang berbeda, karena
+> stiker penipu memang diterbitkan penyelenggara sungguhan. Empat
+> sisanya menggambarkan jenis usahanya, dan itu diisi penipu sendiri
+> saat mendaftar; yang teliti tinggal mencocokkannya, lalu selisihnya
+> nol seluruhnya. Penipuannya ada di penempatan, dan penempatan tidak
+> terekam di payload.
+>
+> Bisa kami jalankan sekarang: `scripts/enam_belas_ciri.py`.
 
 **"Ini machine learning atau aturan?"**
 > Keduanya, dan urutannya penting: **belajar tanpa label, memutuskan
