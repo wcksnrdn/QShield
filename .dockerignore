@@ -1,0 +1,43 @@
+# Yang TIDAK perlu ikut naik ke builder tiap kali deploy.
+#
+# Tanpa berkas ini konteks build 213 MB — 207 MB di antaranya .venv,
+# yang bahkan tidak dipakai: Dockerfile menginstal dependensinya sendiri
+# lewat pip. Jadi tiap deploy mengunggah 200 MB untuk dibuang.
+#
+# Dockerfile hanya menyalin tiga hal: pyproject.toml, src/, dan
+# scripts/. Apa pun di luar itu aman diabaikan.
+
+# Lingkungan virtual lokal — dependensi diinstal ulang di dalam image
+.venv/
+venv/
+
+# Riwayat git
+.git/
+.github/
+
+# Cache Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Basis data lokal beserta berkas pendamping WAL.
+# TIDAK boleh ikut: korpus produksi hidup di volume, bukan di image.
+*.db
+*.db-wal
+*.db-shm
+*.db.cadangan-*
+
+# Rahasia dan berkas khusus mesin ini
+certs/
+venue.json
+.env
+.env.*
+
+# Tidak dipakai saat runtime
+tests/
+docs/
+props/
+sdk/
+.claude/
+*.pdf
