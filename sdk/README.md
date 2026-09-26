@@ -114,6 +114,8 @@ putusan.
 | `fees` | biaya di luar nominal yang diminta payload (tag 55/56/57) | tampilkan ke pengguna bila `fees.present`, **sebelum** layar PIN, dan tampilkan netral — ini fakta, bukan tuduhan |
 | `tlv` | bedah TLV per tag; kosong kecuali `include_tlv: true` | perkakas internal dan investigasi; **jangan** tampilkan ke nasabah |
 | `verification_ticket` | putusan bertanda tangan, terikat ke sidik jari payload | **teruskan ke titik yang mengeksekusi pembayaran** — lihat §6 |
+| `evidence` | dasar putusan: `observers`, `vouched_observers`, `registered`, `established`, `span_hours` | bedanya `observers` dan `vouched_observers` adalah inti keamanannya — lihat di bawah |
+| `known` | atribusi Merchant ID; diisi hanya saat `from_image` | tampilkan ke pembayar supaya ia bisa mencocokkan sendiri |
 
 `tlv` berguna saat mengembangkan SDK: ia memperlihatkan apa yang
 **server** baca dari payload yang kamu kirim, jadi kalau hasilnya tidak
@@ -146,6 +148,10 @@ data class VerifyRequest(
     // produksi: tanggapannya membengkak ~4x (533 -> 1984 byte diukur).
     @SerialName("include_tlv")
     val includeTlv: Boolean = false,
+    // Payload dibaca dari GAMBAR, bukan dari stiker di depan mata.
+    // WAJIB true pada alur pilih-dari-galeri — lihat §5b.
+    @SerialName("from_image")
+    val fromImage: Boolean = false,
 )
 
 @Serializable
@@ -180,6 +186,11 @@ data class VerifyResponse(
     val verificationTicket: String,   // putusan bertanda tangan
     @SerialName("ticket_expires_in")
     val ticketExpiresIn: Int,         // detik (90)
+    // Di atas APA putusan ini berdiri. null pada jalur yang memang
+    // tidak menilai jangkar: GPS palsu, akurasi buruk, dari gambar.
+    val evidence: EvidenceOut? = null,
+    // Atribusi Merchant ID. Diisi HANYA saat fromImage = true.
+    val known: AttributionOut? = null,
     @SerialName("processing_ms")
     val processingMs: Double,     // metrik kami; JANGAN tampilkan
 )
@@ -214,6 +225,67 @@ data class TlvOut(
 kotlinx.serialization: `Json { ignoreUnknownKeys = true }`. Field baru
 bisa muncul tanpa naik versi, dan parser yang ketat akan crash pada
 tanggapan yang sebenarnya sah.
+
+---
+
+## 5b. Dua hal yang ditambahkan 25 September, dan kenapa
+
+### `from_image` — pembayaran jarak jauh
+
+Kasusnya sehari-hari: seseorang memfoto QRIS di warung, mengirimkannya
+lewat pesan, lalu **orang lain** membayar dari tempat yang berbeda.
+GoPay, DANA, dan BCA Mobile semuanya punya pilih-dari-galeri.
+
+Koordinat pembayar NYATA — GPS-nya tidak berbohong — tapi tidak
+mengatakan apa pun tentang letak stikernya. Karena itu ia terpisah dari
+`location_source`: yang dipersoalkan bukan dari mana koordinatnya
+berasal, melainkan **apa yang diwakilinya**.
+
+**Nyalakan pada setiap alur pilih-dari-galeri.** Kalau tidak:
+
+- pemindaian menghasilkan `step_up` pada pedagang yang **sah**, semata
+  karena pembayarnya jauh
+- dan yang lebih merusak, ia **menanam jangkar palsu** di lokasi
+  pembayar. Tiap jangkar berjarak >1 km menambah hukuman **permanen**
+  pada merchant yang sah. Di skala penyelenggara, itu mengotori korpus
+  secara sistematis
+
+Yang terjadi kalau dinyalakan: Layer 1 tidak dijalankan, tidak ada
+pengetahuan lokasi yang ditulis, Layer 2 tetap penuh, putusannya
+`unknown` dengan minimal `warn`, dan `known` terisi.
+
+Field ini diisi klien, dan klien bisa berbohong. Aman karena hanya bisa
+**mengetatkan**: menyalakannya membuang verifikasi penempatan, tidak
+pernah menerbitkannya. Kontradiksi struktural tetap `cooling_off`.
+
+### `evidence` — seberapa mahal memalsukan dasar putusan ini
+
+`verdict` menjawab "boleh dibayar atau tidak". `evidence` menjawab
+pertanyaan berbeda yang sama pentingnya.
+
+| field | bisa ditumbuhkan penyerang? |
+|---|---|
+| `observers` | **bisa** — tumbuh dari `device_anon_id`, yang diisi klien |
+| `vouched_observers` | **tidak** — hanya bertambah lewat atestasi yang diperiksa penyelenggara |
+
+Ini diukur, bukan diperdebatkan: **tiga `device_anon_id` karangan dan
+kesabaran 24 jam** cukup membuat jangkar baru di titik kosong menjadi
+`verified`/`proceed`. Sebelum `evidence` ada, "hijau" yang berdiri di
+atas tiga pemindaian anonim terbaca **sama persis** dengan yang berdiri
+di atas lima puluh pemindaian yang dijamin.
+
+Ketika sebuah jangkar mapan tapi `vouched_observers` nol dan
+`registered` false, tanggapan membawa sinyal `consensus_unvouched`
+beserta alasannya dalam bahasa manusia — jadi kalau SDK-mu sudah
+menampilkan `reasons`, pengguna sudah melihatnya.
+
+**Ini pengungkapan, bukan skor.** Tidak satu pun field di sini
+menyentuh penilaian; tier-nya tidak bergeser sedikit pun. Yang berubah
+hanya sistem berhenti menyamarkan kualitas buktinya sendiri — dan
+penyelenggara bisa menyusun kebijakannya sendiri di atas angka itu.
+
+`evidence` menggambarkan keadaan yang menjadi **dasar** putusan, bukan
+keadaan sesudah pemindaian ini ikut dicatat.
 
 ---
 
