@@ -39,5 +39,9 @@ tests/
 docs/
 props/
 sdk/
-.claude/
 *.pdf
+
+# Folder konfigurasi editor dan perkakas lokal
+.vscode/
+.idea/
+.claude/
