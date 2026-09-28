@@ -625,22 +625,78 @@ class Store:
             # maju lalu salah satunya gagal di tengah jalan.
             self.conn.execute("BEGIN IMMEDIATE")
             try:
-                # Upsert: baris dibuat kalau belum ada, diperbarui kalau
-                # sudah. Tidak ada celah antara memeriksa dan menulis.
-                # merchant_name hanya diisi kalau sebelumnya kosong.
-                row = self.conn.execute(
-                    """INSERT INTO bindings
-                       (nmid, lat, lng, geohash_7, geohash_6, merchant_name,
-                        observer_count, first_seen, last_seen)
-                       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
-                       ON CONFLICT (nmid, geohash_7) DO UPDATE SET
-                           last_seen = excluded.last_seen,
-                           merchant_name = COALESCE(bindings.merchant_name,
-                                                    excluded.merchant_name)
-                       RETURNING id""",
-                    (nmid, lat, lng, gh7, gh6, merchant_name, waktu, waktu),
-                ).fetchone()
-                binding_id = row["id"]
+                # Jangkar ditentukan oleh JARAK, bukan oleh kesamaan sel
+                # geohash — dan sampai sekarang baris inilah yang tidak
+                # mematuhinya, meski docstring binding.py menyatakannya
+                # sejak awal.
+                #
+                # Penulisan dulu memakai ON CONFLICT (nmid, geohash_7),
+                # sehingga sel geohash-lah yang menentukan sebuah
+                # pemindaian masuk ke jangkar mana. Sel presisi 7
+                # berukuran ~153 m, jadi dua pemindaian pedagang yang
+                # SAMA yang kebetulan jatuh di sisi berlawanan batas sel
+                # menjadi dua jangkar berbeda walau jaraknya cuma
+                # beberapa puluh meter.
+                #
+                # Terlihat di produksi, bukan di teori: satu warung
+                # dipindai tiga HP dalam menit yang sama dan tercatat
+                # sebagai tiga tempat. Pengamatnya terpecah 2/1/1,
+                # sehingga tidak satu pun jangkar mencapai
+                # MIN_OBSERVERS — pedagang dengan empat pengamat tidak
+                # pernah bisa menjadi hijau.
+                #
+                # Pencarian ini aman dilakukan sebelum menulis:
+                # BEGIN IMMEDIATE sudah memegang kunci tulis, jadi tidak
+                # ada penulis lain yang bisa menyelip di antara SELECT
+                # dan INSERT. Kekhawatiran lama soal balapan
+                # periksa-lalu-tulis berlaku untuk transaksi DEFERRED,
+                # bukan untuk yang ini.
+                sel = bd.index_cells(lat, lng)
+                tanda = ",".join("?" * len(sel))
+                terdekat, jarak_terdekat = None, None
+                for k in self.conn.execute(
+                        f"SELECT id, lat, lng FROM bindings "
+                        f"WHERE nmid = ? AND geohash_7 IN ({tanda})",
+                        (nmid, *sel)):
+                    d = geo.haversine_m(k["lat"], k["lng"], lat, lng)
+                    if d <= bd.ANCHOR_RADIUS_M and (
+                            jarak_terdekat is None or d < jarak_terdekat):
+                        terdekat, jarak_terdekat = k["id"], d
+
+                if terdekat is not None:
+                    # Jangkar yang sudah ada dipakai ulang. Koordinatnya
+                    # TIDAK ditimpa di sini — penghalusan jangkar yang
+                    # menggesernya, dan hanya ketika ada pengamat baru.
+                    binding_id = terdekat
+                    self.conn.execute(
+                        """UPDATE bindings
+                           SET last_seen = ?,
+                               merchant_name = COALESCE(merchant_name, ?)
+                           WHERE id = ?""",
+                        (waktu, merchant_name, binding_id))
+                else:
+                    # Belum ada jangkar dalam radius. ON CONFLICT
+                    # dipertahankan sebagai jaring pengaman untuk sel
+                    # yang persis sama — sesudah pencarian di atas ia
+                    # praktis tidak pernah kena lagi, tapi membuangnya
+                    # berarti mengandalkan pencarian itu tidak pernah
+                    # meleset.
+                    row = self.conn.execute(
+                        """INSERT INTO bindings
+                           (nmid, lat, lng, geohash_7, geohash_6,
+                            merchant_name, observer_count,
+                            first_seen, last_seen)
+                           VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
+                           ON CONFLICT (nmid, geohash_7) DO UPDATE SET
+                               last_seen = excluded.last_seen,
+                               merchant_name = COALESCE(
+                                   bindings.merchant_name,
+                                   excluded.merchant_name)
+                           RETURNING id""",
+                        (nmid, lat, lng, gh7, gh6, merchant_name,
+                         waktu, waktu),
+                    ).fetchone()
+                    binding_id = row["id"]
 
                 # Satu device hanya dihitung sekali per binding. Yang
                 # disimpan adalah rujukan berlingkup, bukan pengenalnya.

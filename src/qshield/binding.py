@@ -698,7 +698,14 @@ def evaluate(
 
     # Saring berdasarkan jarak sebenarnya, bukan kesamaan sel.
     at_anchor = [b for b in nearby if b.at_same_anchor(lat, lng)]
-    current = next((b for b in at_anchor if b.nmid == nmid), None)
+    # Yang TERDEKAT, bukan yang kebetulan pertama dikembalikan basis
+    # data. Sesudah perbaikan jalur tulis, satu NMID tidak bisa lagi
+    # punya dua jangkar dalam radius yang sama — tapi basis data lama
+    # masih memuatnya, dan "yang pertama" berarti urutan rowid, yaitu
+    # kebetulan. Pemilihan yang menentukan putusan tidak boleh
+    # bergantung pada kebetulan.
+    current = min((b for b in at_anchor if b.nmid == nmid),
+                  key=lambda b: b.distance_m(lat, lng), default=None)
     others = [b for b in at_anchor if b.nmid != nmid]
 
     # --- Merchant keliling yang terdaftar ----------------------------

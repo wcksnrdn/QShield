@@ -3476,6 +3476,113 @@ tidak ada yang tahu kapan ia berhenti benar.
 
 ---
 
+## Keputusan 84 — Jalur tulis akhirnya mematuhi aturan yang ditulisnya sendiri
+
+**Cara menemukannya.** Bukan dari test, bukan dari audit kode. Dari
+satu kalimat: *"besok aku akan scan ayam geprek cabe ijo."* Sebelum
+menyetujui rencana itu, korpus produksi diperiksa — dan merchant yang
+dituju ternyata punya **tiga jangkar**, bukan satu.
+
+```
+id142   2 pengamat   23/09 + 28/09
+id172   1 pengamat   28/09 11:38    43 m dari id142
+id173   1 pengamat   28/09 11:38   108 m dari id142
+```
+
+Tiga HP memindai lapak yang sama dalam menit yang sama, dan tercatat
+sebagai tiga tempat. Empat pengamat terpecah 2/1/1, sehingga tidak
+satu pun jangkar mencapai `MIN_OBSERVERS = 3`. **Pedagang dengan empat
+pengamat tidak pernah bisa menjadi hijau.**
+
+**Akar masalahnya, dan kenapa ini bukan sekadar bug.** Docstring
+`binding.py` membuka dengan kalimat ini, sejak commit paling awal:
+
+> Jangkar ditentukan oleh JARAK, bukan oleh kesamaan sel geohash.
+> Geohash presisi 7 dipakai semata sebagai indeks. Memakai kesamaan
+> geohash sebagai jangkar adalah kesalahan.
+
+Jalur BACA mematuhinya — `at_same_anchor()` menyaring dengan jarak.
+Jalur TULIS tidak: `store.record()` memakai
+`ON CONFLICT (nmid, geohash_7)`, sehingga sel geohash-lah yang
+menentukan sebuah pemindaian masuk ke jangkar mana. Sel presisi 7
+berukuran ~153 m, jadi dua pemindaian berjarak 43 m yang kebetulan
+jatuh di sisi berlawanan batas sel menjadi dua jangkar.
+
+Sistem ini melanggar aturannya sendiri di titik yang aturannya sendiri
+sebut sebagai kesalahan.
+
+**Kenapa dulu ditulis begitu.** Komentarnya masih ada dan alasannya
+masuk akal pada waktunya: *"Upsert — tidak ada celah antara memeriksa
+dan menulis."* Kekhawatirannya balapan periksa-lalu-tulis, dan itu
+nyata: pernah terukur 25 dari 60 permintaan paralel gagal. Tapi
+penyelesaiannya sudah ada di baris di atasnya — `BEGIN IMMEDIATE`
+memegang kunci tulis sejak awal. Dengan kunci itu, SELECT di dalam
+transaksi tidak bisa disela penulis lain. Upsert berbasis sel
+menyelesaikan masalah yang sudah diselesaikan, dan menukarnya dengan
+masalah yang lebih sulit dilihat.
+
+**Yang diperbaiki.** `record()` kini mencari jangkar NMID yang sama
+dalam `ANCHOR_RADIUS_M` di seluruh sel indeks, dan memakainya kembali
+kalau ada. `ON CONFLICT` dipertahankan sebagai jaring pengaman untuk
+sel yang persis sama.
+
+Jalur baca ikut dirapikan: `current` dulu mengambil jangkar PERTAMA
+yang cocok — yaitu urutan rowid, yaitu kebetulan. Sekarang yang
+TERDEKAT. Sesudah perbaikan tulis, jangkar kembar tidak bisa lahir
+lagi; tapi basis data lama masih memuatnya, dan pemilihan yang
+menentukan putusan tidak boleh bergantung pada kebetulan.
+
+**Yang TIDAK diperbaiki, dan itu disengaja.** id173 berjarak 108 m —
+di luar `ANCHOR_RADIUS_M`. Ia tetap jangkar terpisah, dan itu benar:
+perbaikan yang menyatukan terlalu rakus sama merusaknya dengan
+pemecahan, karena dua pedagang bersebelahan akan saling menelan.
+Diuji eksplisit di `test_jangkar.py`.
+
+**Diukur, bukan diperkirakan.** Sebelum menyentuh produksi, sebaran
+kerusakannya dihitung: **1 dari 22 NMID** terpecah. Belum luas — tapi
+yang kena persis merchant yang sedang dibutuhkan, dan frekuensinya
+akan naik seiring korpus bertambah.
+
+**Migrasi produksi.** `scripts/satukan_jangkar.py` menyatukan jangkar
+lama dengan aturan yang SAMA dengan penilaian: NMID sama, jarak
+≤ `ANCHOR_RADIUS_M`. Dijalankan setelah `VACUUM INTO` sebagai cadangan.
+
+```
+ayam penyet cabe ijo   id142 (2p) <- id172 (1p), 43 m   ->  3 pengamat
+                       rentang 119,8 jam  ->  HIJAU
+```
+
+Pengamatan dipindah apa adanya beserta stempel waktunya. `device_ref`
+tidak bisa dihitung ulang — ia dilingkupi per binding dan
+`device_anon_id` aslinya memang tidak pernah disimpan — jadi kalau
+perangkat yang sama memindai lagi di jangkar utama, ia terhitung sekali
+lagi. Batasnya satu pengamat per perangkat yang dipindahkan, dan itu
+dipilih sadar: membuang barisnya berarti membuang stempel waktu yang
+benar.
+
+**Satu temuan sampingan.** Pemeriksaan integritas sesudah migrasi
+menemukan satu baris pengamatan yatim — menunjuk binding yang tidak
+ada lagi. Tanggalnya 21 September, seminggu sebelum migrasi ini, jadi
+bukan akibatnya: itu sisa `INSERT OR REPLACE` di `seed_binding` yang
+membuang baris lalu membuat rowid baru (diperbaiki di Keputusan 82).
+Dibersihkan.
+
+**Hasilnya di produksi:**
+
+```
+merchant hijau lapangan:  Es Kelapa (6p) · AremaJuice (4p) · ayam penyet (3p)
+```
+
+Dari satu menjadi tiga, dan yang ketiga didapat tanpa satu pun
+pemindaian tambahan — cuma dengan berhenti memecah data yang sudah ada.
+
+**Pelajarannya.** Aturan yang ditulis di docstring bukan dokumentasi;
+ia klaim yang bisa salah. Yang menemukannya bukan pembacaan kode,
+melainkan pertanyaan praktis dari lapangan — dan itu pola yang sudah
+berulang empat kali dalam seminggu ini.
+
+---
+
 ## Keputusan 55 — Tag wajib diperiksa isinya, tapi hanya bentuknya
 
 **Yang ditemukan.** `MANDATORY_TAGS` menuntut tag 58 (kode negara) HADIR,
