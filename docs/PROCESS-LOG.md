@@ -3583,6 +3583,111 @@ berulang empat kali dalam seminggu ini.
 
 ---
 
+## Keputusan 85 — Satu tempat, bergantian waktu: bukti berselang-seling
+
+**Pertanyaan yang memicunya.** *"Aku suka beli es buah gerobakan, dia
+selalu di situ. Tapi kalau dia pulang terus tempatnya ditempatin
+penjual lain, persis di tempat itu, nanti ke-detect-nya gimana?"*
+
+Bentuk ini berbeda dari tiga kasus yang sudah ditangani, dan tidak satu
+pun mekanisme yang ada dirancang untuknya:
+
+| kasus | bentuknya |
+|---|---|
+| R11 bersebelahan | banyak pedagang, banyak tempat, BERSAMAAN |
+| R12 pindah | satu pedagang, pindah PERMANEN |
+| Keputusan 80 keliling | satu pedagang, BANYAK tempat |
+| **ini** | **banyak pedagang, SATU tempat, bergiliran** |
+
+**Yang terjadi sebelum ini, disimulasikan sebelum menyentuh kode:**
+
+```
+hari pertama          -> ANOMALY / step_up   skor 72
+4 perangkat, 26 jam   -> ANOMALY / step_up   skor 72
+8 perangkat, 26 jam   -> UNKNOWN / warn      skor 20   diterima
+```
+
+Pedagang malam yang sah dituduh menukar stiker sampai
+`ADJACENT_MIN_DEVICES = 8` terpenuhi — **3 sampai 9 hari** tergantung
+ramainya. Di Indonesia, satu lapak dipakai bergantian pagi-sore-malam
+adalah pemandangan sehari-hari, jadi ongkos itu bukan kasus pinggiran.
+
+**Buktinya ternyata sudah ada di data, cuma belum dibaca.**
+
+Bukti yang dipakai jalur lama — `lama_masih_terpindai` — sudah benar
+arahnya tapi terlalu lemah bentuknya: ia menuntut merchant lama muncul
+SEKALI setelah penantang. Yang jauh lebih kuat: merchant lama muncul
+**BERULANG**, berselang-seling dengan penantang.
+
+Stiker yang MENUTUPI tidak bisa menghasilkan pola itu. Begitu ia
+menutup, QR di bawahnya hilang dan tidak pernah muncul lagi.
+
+**Arah perpindahannya menentukan, dan versi pertama salah.** Hitungan
+awal menghitung SEMUA pergantian giliran, dan sapuannya langsung
+membongkarnya: penukaran-yang-menutupi lolos pada ambang 1, karena satu
+perpindahan "lama lalu penantang" sudah memenuhinya — padahal itu
+justru bentuk serangannya. Yang dihitung sekarang hanya arah
+penantang → lama: merchant lama muncul KEMBALI sesudah penantang ada.
+
+**Terukur** (`calibrate_bergiliran.py`), kemunculan kembali setelah 7 hari:
+
+```
+  bergiliran (sah)                 6
+  stiker menutupi (serangan)       0
+  swap paruh waktu                 6
+```
+
+Nol, bukan kecil. Penukaran-yang-menutupi tertutup dari jalur ini
+**secara struktural**, bukan lewat ambang yang tinggi.
+
+**Konstanta baru, dikalibrasi:**
+
+```
+BERGILIRAN_MIN_KEMBALI = 2   pola harus BERULANG; satu kemunculan
+                             sudah dipakai INCUMBENT_PROOF_HOURS dan
+                             tidak menambah kekuatan apa pun
+BERGILIRAN_MIN_DEVICES = 4   separuh ADJACENT_MIN_DEVICES
+```
+
+Kenapa 4 aman: yang menjaga keamanan memang bukan jumlah perangkat
+melainkan syarat merchant lama tetap terpindai — dan di jalur ini
+syarat itu dipenuhi berkali-kali, bukan sekali. Tidak diturunkan sampai
+MIN_OBSERVERS, karena penantang tidak boleh diterima hanya dengan
+konsensus paling minimum: angka itu yang paling murah dikarang (R22).
+
+Hari sampai pedagang giliran yang sah diterima:
+
+```
+  pembeli/hari      1     2     3     5    10
+  jalur baru        4     2     2     2     2
+  jalur lama        9     5     4     3     3
+```
+
+**Batas yang diakui terus terang, dan diuji sebagai test (R24).**
+Penyerang yang memasang lalu MENCOPOT stikernya tiap hari menghasilkan
+pola yang sama persis dengan pedagang giliran yang sah. Tidak ada di
+data yang memisahkan keduanya, dan tidak ada yang akan diklaim bisa.
+
+Yang berubah ONGKOSNYA: dari "tempel sekali lalu pergi" menjadi hadir
+dua kali sehari di lapak orang, setiap hari, selamanya — sambil
+membiarkan korbannya menerima pembayaran separuh waktu. Itu berhenti
+menjadi serangan pasif dan mulai menjadi pekerjaan.
+
+**Pengaman lama utuh.** Peniruan nama tetap membatalkan pengecualian
+lewat jalur mana pun; rentang 24 jam tetap dituntut; `observer_count`
+tidak disentuh sama sekali, jadi invarian §3 dan §5 tidak bergerak.
+Yang berubah hanya SYARAT pengecualian koeksistensi, sama seperti
+Keputusan yang melahirkan `kehadiran_terbukti`.
+
+**Perhatikan pola yang berulang.** Ini kelima kalinya dalam seminggu
+sebuah pertanyaan praktis dari lapangan menemukan lubang yang tidak
+ditemukan pembacaan kode: pembayaran jarak jauh, pedagang keliling,
+asal-usul konsensus, jangkar yang terpecah sel geohash, dan sekarang
+lapak bergiliran. Empat di antaranya menyangkut pedagang kecil yang
+dituduh sistem yang dibuat untuk melindungi mereka.
+
+---
+
 ## Keputusan 55 — Tag wajib diperiksa isinya, tapi hanya bentuknya
 
 **Yang ditemukan.** `MANDATORY_TAGS` menuntut tag 58 (kode negara) HADIR,
@@ -4186,6 +4291,8 @@ Semua berada di `binding.py`, sengaja tidak ditanam di dalam logika.
 | `STALE_DAYS` | 90 | binding lama tidak boleh memblokir merchant baru |
 | `ADJACENT_MIN_RATIO` | 0,10 | basis pengamat minimum relatif tetangga (`calibrate_adjacency.py`) |
 | `ADJACENT_MIN_DEVICES` | 8 | perangkat berbeda yang membuktikan lapak nyata (`calibrate_kehadiran.py`) |
+| `BERGILIRAN_MIN_KEMBALI` | 2 | merchant lama muncul kembali berulang; stiker yang menutupi menghasilkan NOL (`calibrate_bergiliran.py`) |
+| `BERGILIRAN_MIN_DEVICES` | 4 | separuh ADJACENT_MIN_DEVICES, aman karena buktinya berulang bukan sekali |
 | `INCUMBENT_PROOF_HOURS` | 1,0 | bukti QR lama masih terpindai, artinya tidak tertutup |
 | `W_RELOCATED` | 25 | bobot pedagang yang terbukti pindah (`calibrate_relokasi.py`) |
 

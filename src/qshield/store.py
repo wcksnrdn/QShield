@@ -1233,12 +1233,40 @@ class Store:
                    WHERE geohash_7 = ? AND nmid = ?""",
                 (gh7, nmid),
             ).fetchone()
-        if not row or not row["n"]:
-            return None
+            if not row or not row["n"]:
+                return None
+
+            # Garis waktu dua sisi, untuk menghitung berapa kali merchant
+            # lama MUNCUL KEMBALI setelah penantang ada.
+            #
+            # Dibaca di dalam kunci yang sama dengan hitungan di atas:
+            # dua pembacaan terpisah bisa jatuh di sisi berbeda sebuah
+            # penulisan, dan menghasilkan Challenge yang menggambarkan
+            # dua keadaan sekaligus.
+            penantang = [r["t"] for r in self.conn.execute(
+                "SELECT attempted_at AS t FROM anchor_challenge "
+                "WHERE geohash_7 = ? AND nmid = ?", (gh7, nmid))]
+            lama = [r["t"] for r in self.conn.execute(
+                """SELECT o.observed_at AS t
+                   FROM observations o JOIN bindings b ON b.id = o.binding_id
+                   WHERE b.geohash_7 = ? AND b.nmid != ?""",
+                (gh7, nmid))]
+
+        # Hanya perpindahan penantang -> lama yang dihitung. Arah
+        # sebaliknya tidak membuktikan apa pun: "lama lalu penantang,
+        # lalu diam" justru bentuk penukaran stiker.
+        garis = sorted([(t, "P") for t in penantang] + [(t, "L") for t in lama])
+        kembali, sebelum = 0, None
+        for _, sisi in garis:
+            if sisi == "L" and sebelum == "P":
+                kembali += 1
+            sebelum = sisi
+
         return bd.Challenge(
             devices=row["n"],
             first_at=_parse(row["awal"]),
             last_at=_parse(row["akhir"]),
+            kembali=kembali,
         )
 
     def note_anomaly(self, binding_id: int,

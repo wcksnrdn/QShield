@@ -94,6 +94,7 @@ python3 tests/test_keliling.py                 # pedagang keliling vs stiker yan
 python3 tests/test_konsensus.py                # asal-usul reputasi jangkar
 python3 tests/test_enam_belas.py               # klaim dasar: payload tidak memisahkan swap
 python3 tests/test_jangkar.py                  # jangkar ditentukan jarak, bukan sel geohash
+python3 tests/test_bergiliran.py               # satu tempat dipakai bergantian waktu
 PYTHONPATH=scripts python3 tests/test_api.py   # test_api.py mengimpor scripts/seed.py
 
 python3 scripts/calibrate_geo.py               # presisi geohash
@@ -156,6 +157,7 @@ scripts/         skrip yang dijalankan langsung, bukan bagian dari package
   calibrate_keliling.py  ambang kecepatan & rentang pedagang keliling
   enam_belas_ciri.py     peragaan: kenapa analisis payload tidak cukup
   satukan_jangkar.py    satukan jangkar lama yang terpecah sel geohash
+  calibrate_bergiliran.py  ambang bukti berselang-seling
   calibrate_decay.py  kalibrasi peluruhan jejak serangan
   calibrate_falsepos.py gesekan pada pedagang jujur
   calibrate_tetangga.py pedagang bersebelahan (R11)

@@ -166,6 +166,61 @@ ADJACENT_MIN_RATIO = 0.10   # basis pengamat minimum relatif tetangga
 # Jalan cepatnya tetap ada dan memang seharusnya begitu: merchant yang
 # didaftarkan penyelenggara lolos seketika lewat is_registered.
 ADJACENT_MIN_DEVICES = 8
+
+# --- Satu tempat dipakai BERGANTIAN WAKTU ---------------------------
+#
+# Es buah mangkal siang; sore ia pulang dan pedagang lain menempati
+# titik yang sama persis. Keduanya sah, keduanya punya QRIS sendiri.
+#
+# Bentuk ini berbeda dari tiga kasus yang sudah ditangani: bukan banyak
+# pedagang di banyak tempat (R11), bukan satu pedagang yang pindah
+# (R12), bukan satu pedagang di banyak tempat (Keputusan 80). Ini
+# banyak pedagang, SATU tempat, bergiliran.
+#
+# Lewat jalur ADJACENT_MIN_DEVICES, pedagang kedua dituduh menukar
+# stiker selama 3-9 hari. Ongkos itu ditanggung orang yang tidak
+# bersalah, dan di Indonesia bentuk dagang seperti ini sehari-hari.
+#
+# Buktinya sudah ada di data, cuma belum dibaca: BERSELANG-SELING.
+# Merchant lama terpindai, lalu penantang, lalu merchant lama LAGI.
+#
+# Stiker yang menutupi tidak bisa menghasilkan pola itu. Begitu ia
+# menutup, QR di bawahnya hilang dan tidak pernah muncul lagi. Diukur
+# di calibrate_bergiliran.py, dan selisihnya bukan statistik melainkan
+# struktural:
+#
+#   pola                          kemunculan kembali (7 hari)
+#   bergiliran (sah)                        6
+#   stiker menutupi (serangan)              0
+#
+# Karena itu penukaran-yang-menutupi TIDAK PERNAH lolos jalur ini pada
+# ambang berapa pun — bukan karena ambangnya tinggi, tapi karena
+# angkanya nol.
+#
+# Dua kali, bukan sekali: satu kemunculan kembali sudah dipakai
+# INCUMBENT_PROOF_HOURS dan tidak menambah kekuatan apa pun. Yang
+# membenarkan penurunan syarat perangkat adalah POLA YANG BERULANG.
+BERGILIRAN_MIN_KEMBALI = 2
+
+# Perangkat berbeda yang masih diperlukan ketika pola bergiliran sudah
+# terbukti. Separuh dari ADJACENT_MIN_DEVICES.
+#
+# Aman diturunkan karena yang menjaga keamanan memang bukan jumlah
+# perangkat melainkan syarat merchant lama tetap terpindai — dan di
+# jalur ini syarat itu dipenuhi berkali-kali, bukan sekali.
+#
+# Tidak diturunkan sampai MIN_OBSERVERS: penantang tidak boleh diterima
+# hanya dengan konsensus paling minimum, karena angka itu sendiri yang
+# paling murah dikarang (R22).
+#
+# Terukur (calibrate_bergiliran.py), hari sampai pedagang giliran yang
+# sah diterima:
+#
+#   pembeli/hari      1     2     3     5    10
+#   hari              4     2     2     2     2
+#
+# Bandingkan jalur lama: 9 hari pada 1 pembeli/hari.
+BERGILIRAN_MIN_DEVICES = 4
 # Selisih minimal antara pemindaian terakhir merchant lama dan percobaan
 # pertama penantang. Membuktikan QR lama masih bisa dipindai, artinya ia
 # tidak tertutup — jadi ini bukan penempelan di atasnya.
@@ -287,6 +342,14 @@ class Challenge:
     devices: int = 0
     first_at: Optional[datetime] = None
     last_at: Optional[datetime] = None
+    # Berapa kali merchant lama MUNCUL KEMBALI setelah penantang ada.
+    #
+    # Arahnya menentukan. "Lama lalu penantang" tidak membuktikan apa
+    # pun — itu justru bentuk penukaran stiker. Yang membuktikan tidak
+    # ada yang tertutup adalah merchant lama terpindai LAGI SESUDAH
+    # penantang muncul, dan makin sering berulang makin mustahil
+    # dijelaskan oleh stiker yang menutupi.
+    kembali: int = 0
 
     @property
     def span_hours(self) -> float:
@@ -826,6 +889,32 @@ def evaluate(
             and challenge.span_hours >= MIN_AGE_HOURS
         )
 
+        # Jalur kedua: satu tempat dipakai BERGANTIAN WAKTU.
+        #
+        # Buktinya lebih kuat daripada jalur di atas, bukan lebih lemah.
+        # `lama_masih_terpindai` menuntut merchant lama muncul SEKALI
+        # setelah penantang; jalur ini menuntutnya muncul BERULANG,
+        # berselang-seling dengan penantang.
+        #
+        # Stiker yang menutupi menghasilkan NOL kemunculan kembali —
+        # angkanya nol, bukan kecil — jadi jalur ini tertutup untuknya
+        # secara struktural. Karena itu syarat perangkatnya boleh lebih
+        # rendah tanpa melemahkan apa pun.
+        #
+        # Batas yang diakui terus terang: penyerang yang memasang lalu
+        # MENCOPOT stikernya tiap hari menghasilkan pola yang sama
+        # persis dengan pedagang giliran yang sah, dan tidak ada di data
+        # yang bisa memisahkan keduanya. Yang berubah ongkosnya — dari
+        # "tempel sekali lalu pergi" menjadi hadir dua kali sehari di
+        # lapak orang, selamanya, sambil membiarkan korbannya menerima
+        # pembayaran separuh waktu. Tercatat sebagai R24.
+        bergiliran_terbukti = (
+            challenge is not None
+            and challenge.kembali >= BERGILIRAN_MIN_KEMBALI
+            and challenge.devices >= BERGILIRAN_MIN_DEVICES
+            and challenge.span_hours >= MIN_AGE_HOURS
+        )
+
         # Nama yang SAMA PERSIS dengan pemilik jangkar membatalkan
         # pengecualian koeksistensi, berapa pun bukti kehadirannya.
         #
@@ -856,6 +945,7 @@ def evaluate(
             (current is not None and current.is_established
              and basis_sebanding)
             or kehadiran_terbukti
+            or bergiliran_terbukti
         ) and not meniru_nama
 
         # Tetangga yang sedang tumbuh bersama, tapi belum melewati umur
