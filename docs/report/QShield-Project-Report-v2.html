@@ -77,6 +77,15 @@ a { color: var(--aksen); text-decoration: none; }
   color: var(--aksen); margin-bottom: 2.6em;
 }
 .cover em { color: var(--redup); }
+
+figure { margin: 1em 0 1.1em; page-break-inside: avoid; }
+figure img { width: 100%; display: block;
+             border: .6px solid var(--garis); border-radius: 3px; }
+figcaption {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 7.8pt; color: var(--redup); margin-top: .45em; line-height: 1.35;
+}
+figcaption b { color: var(--tinta); font-weight: 600; }
 </style></head><body><div class="cover">
 <h1>Q-Shield</h1>
 <h2>A Pre-Payment Trust Layer for QRIS</h2>
@@ -127,6 +136,7 @@ be.</strong></p></blockquote>
 <p><strong>4. Its limits are published</strong>, with the measurement behind each (§5.4).</p>
 <p><strong>5. Its value compounds across PJPs.</strong> One wallet&#x27;s scan protects every other wallet&#x27;s users (§6.1).</p>
 <h1>Chapter 3 — Proof of Concept &amp; Repository References</h1>
+<figure><img src="fig-1-architecture.svg" alt="Q-Shield proof-of-concept architecture"><figcaption><b>Figure 1 — Proof-of-concept architecture.</b> A scan enters through the PJP, passes four pre-scoring gates, and is evaluated by two independent layers whose results are composed into one verdict. Three of the four gates stop Layer 1 from running at all, while Layer 2 continues in full. The dashed path is the learning loop, which is deliberately narrower than the read path: an anomaly teaches the system nothing, and image or replay scans may only teach payload knowledge, never location.</figcaption></figure>
 <h2>3.1 Repository Structure</h2>
 <p>A modifiable package under <code>src/qshield/</code>, separating evaluation logic from persistence and network I/O.</p>
 <table><thead><tr><th>Module</th><th>Responsibility</th></tr></thead><tbody><tr><td><code>emvco.py</code> / <code>geo.py</code></td><td>recursive EMVCo TLV parsing and CRC16; geohash-7 indexing with haversine distance</td></tr><tr><td><code>binding.py</code></td><td>Layer 1 spatial consensus, tier mapping</td></tr><tr><td><code>behavior.py</code> / <code>profile.py</code></td><td>Layer 2 signals; unsupervised rarity model</td></tr><tr><td><code>store.py</code></td><td>thread-safe SQLite WAL, anchor smoothing, zero-PII schema</td></tr><tr><td><code>ticket.py</code> / <code>transfer.py</code></td><td>HMAC-SHA256 tokens; manual bank-transfer channel</td></tr><tr><td><code>api.py</code> / <code>web/index.html</code></td><td>FastAPI surface; dual-mode scanner, single file, no build step</td></tr></tbody></table>
@@ -157,6 +167,7 @@ be.</strong></p></blockquote>
 <p><strong>Four gates run before any scoring</strong>, and three deliberately stop Layer 1 from running at all:</p>
 <table><thead><tr><th>Gate</th><th>Condition</th><th>Effect</th></tr></thead><tbody><tr><td>1</td><td>payload unparseable, or no NMID</td><td><strong>422, stop</strong> — no verdict, no ticket, nothing learned</td></tr><tr><td>2</td><td><code>mock_location: true</code></td><td>Layer 1 not run; location risk pinned at <strong>65</strong></td></tr><tr><td>3</td><td><code>from_image: true</code></td><td>Layer 1 not run; location risk <strong>0</strong></td></tr><tr><td>4</td><td><code>accuracy_m &gt; 100</code></td><td>Layer 1 not run; location risk <strong>40</strong></td></tr></tbody></table>
 <p>In gates 2–4 <strong>Layer 2 still runs in full</strong>: a malformed payload is malformed regardless of GPS quality, and discarding that evidence because a different sensor failed throws away healthy proof.</p>
+<figure><img src="fig-2-friction-gates.svg" alt="Friction gates and tier mapping"><figcaption><b>Figure 2 — Friction gates.</b> One 0–100 score maps to four tiers, each with a defined client behaviour. Two structural rules protect the mapping: a verdict of <i>unknown</i> can never produce <i>proceed</i>, and Layer 2 carries no negative weight, so a clean payload can never buy back trust that Layer 1 withheld. The last two example rows are the same attack at the same spot — only the accumulated evidence differs.</figcaption></figure>
 <p>Gate 4 is invariant §6 — with an 800 m confidence radius, hundreds of shops fit inside the circle, and scoring an anchor against it is not a less accurate judgement but a meaningless one. Gate 2 is the same logic priced higher, because bad accuracy is misfortune while a mock provider is intent. Gate 3 covers remote payment (a code photographed and sent to a friend to pay): the payer&#x27;s coordinates are real but say nothing about where the sticker hangs.</p>
 <p>Otherwise both layers evaluate and compose under three rules: scores add and clamp to 0–100; Layer 2 can only worsen status (a hard contradiction forces <code>anomaly</code>, any other signal demotes <code>verified</code> to <code>unknown</code>, and an <code>anomaly</code> from Layer 1 is never withdrawn); and the same four tiers apply, with no new scale introduced. Reasons from both layers are <strong>re-sorted by actual weight</strong> before display, because users read from the top and often stop at the first line.</p>
 <p><strong>What the system learns</strong> depends on the verdict:</p>

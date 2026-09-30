@@ -105,6 +105,15 @@ a { color: var(--aksen); text-decoration: none; }
   color: var(--aksen); margin-bottom: 2.6em;
 }
 .cover em { color: var(--redup); }
+
+figure { margin: 1em 0 1.1em; page-break-inside: avoid; }
+figure img { width: 100%; display: block;
+             border: .6px solid var(--garis); border-radius: 3px; }
+figcaption {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 7.8pt; color: var(--redup); margin-top: .45em; line-height: 1.35;
+}
+figcaption b { color: var(--tinta); font-weight: 600; }
 """
 
 
@@ -131,7 +140,7 @@ def ubah(md):
         # apa adanya. WAJIB berada sebelum penanganan paragraf: regex
         # penghenti paragraf ikut mengenali tag ini, jadi tanpa cabang
         # ini `i` tidak pernah maju dan pengurainya berputar selamanya.
-        if re.match(r"^\s*</?(div|section|br|img)\b", b):
+        if re.match(r"^\s*</?(div|section|br|img|figure|figcaption)\b", b):
             keluar.append(b.strip()); i += 1; continue
 
         # Pagar kode boleh MENJOROK — di laporan kita ada satu di dalam

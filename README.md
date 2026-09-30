@@ -138,6 +138,7 @@ docs/            dokumen — dikelompokkan menurut siapa pembacanya
     QShield-Project-Report.pdf     punya Vyone, JANGAN ditimpa
     QShield-Project-Report-v2.md   draf tim — sumbernya, di-review lewat git
     QShield-Project-Report-v2.html + .pdf  dibuat scripts/report_to_html.py
+    fig-1-architecture.svg, fig-2-friction-gates.svg  dibuat scripts/make_figures.py
     SCREENING-REPORT.json          selisih keduanya, beserta alasannya
   panduan/          tatacara untuk tim sendiri
     ALUR-KERJA.md      apa yang terjadi waktu scan, bahasa awam

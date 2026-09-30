@@ -168,6 +168,8 @@ other wallet's users (§6.1).
 
 # Chapter 3 — Proof of Concept & Repository References
 
+<figure><img src="fig-1-architecture.svg" alt="Q-Shield proof-of-concept architecture"><figcaption><b>Figure 1 — Proof-of-concept architecture.</b> A scan enters through the PJP, passes four pre-scoring gates, and is evaluated by two independent layers whose results are composed into one verdict. Three of the four gates stop Layer 1 from running at all, while Layer 2 continues in full. The dashed path is the learning loop, which is deliberately narrower than the read path: an anomaly teaches the system nothing, and image or replay scans may only teach payload knowledge, never location.</figcaption></figure>
+
 ## 3.1 Repository Structure
 
 A modifiable package under `src/qshield/`, separating evaluation logic
@@ -332,6 +334,8 @@ Layer 1 from running at all:
 In gates 2–4 **Layer 2 still runs in full**: a malformed payload is
 malformed regardless of GPS quality, and discarding that evidence because
 a different sensor failed throws away healthy proof.
+
+<figure><img src="fig-2-friction-gates.svg" alt="Friction gates and tier mapping"><figcaption><b>Figure 2 — Friction gates.</b> One 0–100 score maps to four tiers, each with a defined client behaviour. Two structural rules protect the mapping: a verdict of <i>unknown</i> can never produce <i>proceed</i>, and Layer 2 carries no negative weight, so a clean payload can never buy back trust that Layer 1 withheld. The last two example rows are the same attack at the same spot — only the accumulated evidence differs.</figcaption></figure>
 
 Gate 4 is invariant §6 — with an 800 m confidence radius, hundreds of
 shops fit inside the circle, and scoring an anchor against it is not a
