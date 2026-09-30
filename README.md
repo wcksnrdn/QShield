@@ -135,6 +135,7 @@ docs/            dokumen — dikelompokkan menurut siapa pembacanya
   KALIBRASI-BOBOT.md  dari mana tiap angka bobot berasal
   PROCESS-LOG.md    keputusan desain beserta alasannya
   panduan/          tatacara untuk tim sendiri
+    ALUR-KERJA.md      apa yang terjadi waktu scan, bahasa awam
   pitch/            materi lomba + PDF yang perlu diperbarui
 sdk/             tempat SDK native masuk — kontrak, fixture, checklist
   README.md         seam SDK <-> backend; baca §1 sebelum menulis kode
@@ -213,6 +214,7 @@ Dikelompokkan menurut siapa yang membacanya.
 | [`docs/pitch/PITCH-PJP.md`](docs/pitch/PITCH-PJP.md) | alasan bisnis untuk PJP + panduan pendekatan dari nol |
 | [`docs/pitch/PITCH-AUDIT.md`](docs/pitch/PITCH-AUDIT.md) | audit naskah pitch terhadap kode + naskah pengganti |
 | [`docs/panduan/PENJELASAN-SEDERHANA.md`](docs/panduan/PENJELASAN-SEDERHANA.md) | cara kerja Q-Shield tanpa istilah teknis — untuk seluruh tim, termasuk yang tidak ngoding |
+| [`docs/panduan/ALUR-KERJA.md`](docs/panduan/ALUR-KERJA.md) | apa yang terjadi dari scan sampai lampunya nyala, plus kedelapan invarian dalam bahasa awam |
 | [`docs/pitch/MODEL-ML.md`](docs/pitch/MODEL-ML.md) | dua model tak terawasi: nama teknis, bukti, dan naskah jawaban untuk juri |
 | [`docs/pitch/PDF-UPDATE.md`](docs/pitch/PDF-UPDATE.md) | teks pengganti untuk `Q-Shield-Overview.pdf` yang sudah basi |
 
