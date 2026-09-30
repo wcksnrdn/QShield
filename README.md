@@ -95,6 +95,7 @@ python3 tests/test_konsensus.py                # asal-usul reputasi jangkar
 python3 tests/test_enam_belas.py               # klaim dasar: payload tidak memisahkan swap
 python3 tests/test_jangkar.py                  # jangkar ditentukan jarak, bukan sel geohash
 python3 tests/test_bergiliran.py               # satu tempat dipakai bergantian waktu
+python3 tests/test_bobot.py                    # angka yang dikutip docs/KALIBRASI-BOBOT.md
 PYTHONPATH=scripts python3 tests/test_api.py   # test_api.py mengimpor scripts/seed.py
 
 python3 scripts/calibrate_geo.py               # presisi geohash
@@ -131,6 +132,7 @@ docs/            dokumen — dikelompokkan menurut siapa pembacanya
   INTEGRATION.md    panduan integrasi untuk PJP
   DEPLOY.md         deployment, secrets, rencana migrasi basis data
   THREAT-MODEL.md   ancaman, mitigasi, dan risiko yang masih terbuka
+  KALIBRASI-BOBOT.md  dari mana tiap angka bobot berasal
   PROCESS-LOG.md    keputusan desain beserta alasannya
   panduan/          tatacara untuk tim sendiri
   pitch/            materi lomba + PDF yang perlu diperbarui
@@ -188,6 +190,7 @@ Dikelompokkan menurut siapa yang membacanya.
 | [`docs/INTEGRATION.md`](docs/INTEGRATION.md) | panduan integrasi untuk PJP, termasuk slot integritas perangkat |
 | [`docs/DEPLOY.md`](docs/DEPLOY.md) | deployment, secrets, rencana migrasi Postgres |
 | [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) | batas kepercayaan, ancaman, mitigasi + bukti testnya |
+| [`docs/KALIBRASI-BOBOT.md`](docs/KALIBRASI-BOBOT.md) | kenapa tiap bobot bernilai segitu, dan kenapa yang fatal bukan 100 |
 | [`sdk/README.md`](sdk/README.md) | seam untuk penulis SDK native: kontrak, fixture, checklist |
 
 **Riwayat keputusan** — kenapa sesuatu dibuat begitu
