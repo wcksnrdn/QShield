@@ -305,12 +305,160 @@ def friksi():
     return bungkus(W, H, d, "Q-Shield friction gates and tier mapping")
 
 
+def slide():
+    """Satu gambar 16:9 untuk slide "PoC Architecture & Friction Gates".
+
+    Bukan versi laporan yang diperbesar. Slide dibaca dari jauh dalam
+    beberapa detik, jadi isinya dipangkas sampai yang tersisa hanya
+    urutan dan empat tier — rinciannya ada di laporan.
+    """
+    W, H = 1600, 900
+    d = []
+
+    d.append(teks(60, 78, "Proof of Concept Architecture", 40, TINTA, tebal=True))
+    d.append(teks(60, 112, "Two independent layers, four gates, one verdict "
+                  "— all before the PIN screen", 19, REDUP))
+    d.append(f'<line x1="60" y1="140" x2="1540" y2="140" stroke="{GARIS}" '
+             f'stroke-width="2"/>')
+
+    # --- Tahap 1: pemindaian masuk ---
+    d.append(kotak(60, 176, 250, 96, LATAR, GARIS, 8, 1.5))
+    d.append(teks(185, 212, "SCAN", 20, TINTA, tebal=True, tengah=True))
+    d.append(teks(185, 238, "payload + GPS", 16, REDUP, tengah=True))
+    d.append(teks(185, 258, "+ anonymous device id", 16, REDUP, tengah=True))
+
+    # --- Tahap 2: empat gerbang ---
+    d.append(kotak(350, 158, 430, 132, "#fff", GARIS, 8, 1.5, True))
+    d.append(teks(365, 182, "FOUR GATES", 16, AKSEN, tebal=True))
+    gerbang = [("unparseable", "stop, 422", MERAH),
+               ("mock GPS", "Layer 1 off", JINGGA),
+               ("from photo", "Layer 1 off", KUNING),
+               ("GPS > 100 m", "Layer 1 off", KUNING)]
+    for i, (atas, bawah, w) in enumerate(gerbang):
+        x, y = 365 + (i % 2) * 202, 196 + (i // 2) * 46
+        d.append(kotak(x, y, 194, 38, "#fff", w, 5, 1.6))
+        d.append(teks(x + 10, y + 17, atas, 15, w, tebal=True))
+        d.append(teks(x + 10, y + 31, bawah, 13, REDUP))
+
+    # --- Tahap 3: dua lapisan ---
+    d.append(kotak(820, 158, 400, 62, "#fbfcfe", AKSEN, 8, 2))
+    d.append(teks(838, 184, "LAYER 1", 19, AKSEN, tebal=True))
+    d.append(teks(838, 207, "Is this merchant supposed to be HERE?", 16))
+    d.append(kotak(820, 230, 400, 62, "#fbfcfe", AKSEN, 8, 2))
+    d.append(teks(838, 256, "LAYER 2", 19, AKSEN, tebal=True))
+    d.append(teks(838, 279, "Does this code BEHAVE legitimately?", 16))
+
+    # --- Tahap 4: putusan ---
+    d.append(kotak(1290, 176, 250, 96, LATAR, TINTA, 8, 2))
+    d.append(teks(1415, 208, "VERDICT", 20, TINTA, tebal=True, tengah=True))
+    d.append(teks(1415, 234, "+ signed ticket", 16, REDUP, tengah=True))
+    d.append(teks(1415, 254, "bound to this code", 16, REDUP, tengah=True))
+
+    for a, b in ((312, 348), (782, 818), (1222, 1288)):
+        d.append(panah(a, 224, b, 224, REDUP, lebar=2.5))
+
+    d.append(teks(60, 330, "Three of the four gates stop Layer 1 entirely — "
+                  "and Layer 2 still runs in full.", 18, TINTA))
+    d.append(teks(60, 356, "Layer 2 holds no negative weight: a clean payload "
+                  "can never buy back trust that Layer 1 withheld.", 18, REDUP))
+
+    # --- Bagian bawah: gerbang friksi ---
+    d.append(f'<line x1="60" y1="404" x2="1540" y2="404" stroke="{GARIS}" '
+             f'stroke-width="2"/>')
+    d.append(teks(60, 452, "Friction Gates", 36, TINTA, tebal=True))
+    d.append(teks(60, 484, "One 0–100 score, four tiers — and a verdict of "
+                  "\u201cunknown\u201d can never become \u201cproceed\u201d.",
+                  19, REDUP))
+
+    x0, lebar, y = 60, 1480, 520
+    batas = [0, 25, 50, 75, 100]
+    tier = [(HIJAU, "PROCEED", "pay normally"),
+            (KUNING, "WARN", "allow — but show why"),
+            (JINGGA, "STEP_UP", "verify before paying"),
+            (MERAH, "COOLING_OFF", "PIN screen never opens")]
+    for i, (w, nama, arti) in enumerate(tier):
+        a = x0 + lebar * batas[i] / 100
+        b = x0 + lebar * batas[i + 1] / 100
+        d.append(f'<rect x="{a}" y="{y}" width="{b - a}" height="86" rx="6" '
+                 f'fill="{w}" opacity="0.14"/>')
+        d.append(f'<rect x="{a}" y="{y}" width="{b - a}" height="86" rx="6" '
+                 f'fill="none" stroke="{w}" stroke-width="2.4"/>')
+        d.append(teks((a + b) / 2, y + 42, nama, 24, w, tebal=True, tengah=True))
+        d.append(teks((a + b) / 2, y + 70, arti, 17, TINTA, tengah=True))
+        d.append(teks(a, y - 12, str(batas[i]), 16, REDUP, tengah=True))
+    d.append(teks(x0 + lebar, y - 12, "100", 16, REDUP, tengah=True))
+
+    # --- Bukti: serangan yang sama, dua jumlah bukti ---
+    d.append(kotak(60, 650, 1480, 132, "#fff", GARIS, 8, 1.5))
+    d.append(teks(84, 686, "THE SAME ATTACK, TWICE", 17, AKSEN, tebal=True))
+    d.append(teks(84, 718, "Foreign sticker at an anchor with", 19))
+    d.append(teks(430, 718, "6 observers", 19, TINTA, tebal=True))
+    d.append(teks(566, 718, "→  score 63  →", 19, REDUP))
+    d.append(teks(740, 718, "step_up", 19, JINGGA, tebal=True))
+    d.append(teks(84, 750, "Foreign sticker at an anchor with", 19))
+    d.append(teks(430, 750, "47 observers", 19, TINTA, tebal=True))
+    d.append(teks(566, 750, "→  score 83  →", 19, REDUP))
+    d.append(teks(740, 750, "cooling_off", 19, MERAH, tebal=True))
+    d.append(teks(900, 718, "Nothing about the attack changed.", 19, TINTA))
+    d.append(teks(900, 750, "Only the evidence did.", 19, AKSEN, tebal=True))
+
+    d.append(teks(60, 848, "Every number above is produced by a script in the "
+                  "repository, not asserted.", 16, REDUP, miring=True))
+    return bungkus(W, H, d, "Q-Shield PoC architecture and friction gates, slide")
+
+
+CHROME = ("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+          "/Applications/Chromium.app/Contents/MacOS/Chromium",
+          "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge")
+
+
+def ke_png(svg: Path, lebar: int):
+    """Ekspor PNG 2x di sebelah SVG-nya.
+
+    SVG cukup untuk laporan karena dicetak lewat Chrome. Untuk slide
+    tidak: PowerPoint, Canva, dan Google Slides menangani SVG dengan
+    cara yang berbeda-beda, dan yang paling sering terjadi adalah
+    fontnya diganti diam-diam. PNG tidak bisa salah dengan cara itu.
+    """
+    import subprocess
+    import tempfile
+
+    peramban = next((c for c in CHROME if Path(c).exists()), None)
+    if peramban is None:
+        print("  (Chrome tidak ditemukan — PNG dilewati)")
+        return
+    png = svg.with_suffix(".png")
+    with tempfile.TemporaryDirectory() as tmp:
+        laman = Path(tmp) / "v.html"
+        laman.write_text(
+            '<html><body style="margin:0">'
+            f'<img src="{svg.resolve().as_uri()}" '
+            f'style="width:{lebar}px;display:block"></body></html>',
+            encoding="utf-8")
+        tinggi = round(lebar * 900 / 1600) if "slide" in svg.name else lebar
+        subprocess.run(
+            [peramban, "--headless", "--disable-gpu", "--no-sandbox",
+             "--default-background-color=FFFFFFFF",
+             f"--window-size={lebar},{tinggi}",
+             f"--screenshot={png}", laman.resolve().as_uri()],
+            capture_output=True, timeout=120)
+    if png.exists():
+        print(f"  {KELUARAN.name}/{png.name}  ({png.stat().st_size / 1024:.0f} KB, "
+              f"{lebar} px)")
+
+
 def main():
     periksa()
     for nama, isi in (("fig-1-architecture.svg", arsitektur()),
-                      ("fig-2-friction-gates.svg", friksi())):
-        (KELUARAN / nama).write_text(isi, encoding="utf-8")
+                      ("fig-2-friction-gates.svg", friksi()),
+                      ("slide-poc-architecture.svg", slide())):
+        berkas = KELUARAN / nama
+        berkas.write_text(isi, encoding="utf-8")
         print(f"  {KELUARAN.name}/{nama}  ({len(isi) / 1024:.1f} KB)")
+        # Hanya gambar slide yang butuh PNG; yang untuk laporan tetap
+        # vektor supaya tajam saat dicetak.
+        if nama.startswith("slide-"):
+            ke_png(berkas, 3200)
 
 
 if __name__ == "__main__":
