@@ -493,6 +493,40 @@ dalam 4 hari.
 
 ---
 
+#### Kalau pedagangnya TIGA, bukan dua?
+
+Pertanyaan yang wajar, karena di lapangan memang sering begitu: nasi
+uduk pagi, es buah siang, nasi goreng malam — satu titik, tiga
+pedagang, dan tidak ada yang pergi selamanya.
+
+Sudah kami uji, dan ada dua keadaan yang hasilnya berbeda.
+
+**Kalau ketiganya mulai bersamaan** (tempat baru, belum ada yang
+mapan): tidak ada tuduhan sama sekali. Hari kedua ketiganya sudah
+hijau. Mereka tumbuh bersama, jadi tidak ada satu pun yang lebih dulu
+"memiliki" tempat itu.
+
+```
+  hari  nasi uduk          es buah            nasi goreng
+     1  unknown/warn       unknown/warn       unknown/warn
+     2  verified/proceed   verified/proceed   verified/proceed
+```
+
+**Kalau yang ketiga datang belakangan** — dua sudah mapan berbulan —
+dia memang dicurigai dulu, lalu diterima:
+
+```
+  lapak ramai (3 pembeli/hari)  ->  diterima hari ke-2
+  lapak sepi  (1 pembeli/hari)  ->  diterima hari ke-5
+                                    (dulu: hari ke-9)
+```
+
+Jadi jumlah pedagangnya tidak jadi soal. Yang menentukan cuma dua hal:
+**siapa yang sudah mapan lebih dulu**, dan **seberapa ramai** lapak
+yang baru.
+
+---
+
 #### Pengaman yang tetap jalan
 
 **Kalau QR es buah benar-benar tertutup** → dia berhenti terpindai →
