@@ -1,0 +1,442 @@
+{
+  "meta": {
+    "dokumen_yang_disaring": "docs/report/QShield-Project-Report.pdf",
+    "halaman": 10,
+    "penulis": "vyone <vyonelouiss@gmail.com>",
+    "versi_terakhir": "a2d0aee — 2026-09-29 23:54",
+    "disaring_terhadap": "main @ ee77bba — 2026-09-30",
+    "metode": "tiap klaim dicocokkan ke kode/test yang berjalan; klaim yang tidak punya rujukan di repo ditandai tidak_terbukti",
+    "catatan": "SCREENING-REPORT.json ini bukan pengganti laporan. Ia daftar kerja untuk Vyone."
+  },
+  "ringkasan": {
+    "total_temuan": 23,
+    "salah": 5,
+    "klaim_berlebihan": 2,
+    "usang": 9,
+    "tidak_tepat": 5,
+    "editorial": 2,
+    "verdict": "laporan TIDAK sesuai backend sekarang — kerangkanya bagus, isinya tertinggal satu gelombang fitur",
+    "sebab_utama": "laporan terakhir diperbarui 29 Sep 23:54; fitur 'bergiliran' mendarat 29 Sep 15:54 (8 jam sebelumnya) dan tidak ikut masuk. Fitur 25 Sep (from_image, keliling, vouched) juga belum tercermin.",
+    "paling_mendesak": [
+      "F04",
+      "F01",
+      "F05",
+      "F02",
+      "F06"
+    ]
+  },
+  "temuan": [
+    {
+      "id": "F01",
+      "tingkat": "salah",
+      "lokasi": "Bab V, §5.1, baris T3",
+      "kutipan": "T3 Dynamic QR Replay / Invoice Tampering ... Verification Suite: tests/test_emvco.py",
+      "masalah": "Berkas test yang disebut tidak memuat pengujian itu sama sekali.",
+      "fakta_di_kode": "tests/test_emvco.py menguji pembacaan TLV dan CRC. Sinyal dynamic_qr_reused, dynamic_qr_spread, dan bill_amount_changed diuji di tests/test_adversarial.py.",
+      "bukti": "grep -l 'dynamic_qr_reused\\|bill_amount_changed' tests/  ->  hanya tests/test_adversarial.py",
+      "ganti_jadi": "tests/test_adversarial.py",
+      "risiko": "Juri yang membuka berkas itu tidak menemukan apa pun. Sitasi yang meleset merusak kepercayaan pada seluruh tabel."
+    },
+    {
+      "id": "F02",
+      "tingkat": "salah",
+      "lokasi": "Bab V, §5.1, baris T6",
+      "kutipan": "T6 OS-Level Mock Location Spoof — Defense: Accuracy plausibility gate (<1.0m flagged) + AppAttest",
+      "masalah": "Dua mekanisme yang berbeda digabung jadi satu, dan yang disebut justru bukan pertahanan untuk mock location.",
+      "fakta_di_kode": "Mock location punya gerbang sendiri: api.py:1103 — Layer 1 TIDAK dijalankan sama sekali, skor lokasi dikunci 65, sinyal 'mock_location_reported'. Gerbang kelayakan akurasi (<1,0 m) adalah sinyal LAIN: behavior.py:97-98, MIN_PLAUSIBLE_ACCURACY_M = 1.0 dengan W_IMPLAUSIBLE_ACCURACY = 45, dan diuji di tests/test_adversarial.py:298, bukan test_hardening.py.",
+      "bukti": "src/qshield/api.py:1103; src/qshield/behavior.py:97; tests/test_adversarial.py:298",
+      "ganti_jadi": "Defense: dedicated mock-location gate — Layer 1 refuses to run, location risk pinned at 65 (api.py:1103); device attestation vouched by the PJP. Verification: tests/test_hardening.py (mock location) + tests/test_adversarial.py (accuracy plausibility).",
+      "risiko": "Menjelaskan pertahanan yang salah untuk ancaman yang benar. Kalau juri menanyakan alurnya, jawaban tim akan berbeda dari laporannya."
+    },
+    {
+      "id": "F03",
+      "tingkat": "salah",
+      "lokasi": "Bab V, §5.1, baris T1",
+      "kutipan": "T1 Physical Sticker Overlay — Layer 1 spatial consensus; W >= 83 -> cooling_off; Verification Suite: tests/test_binding.py",
+      "masalah": "Dua hal keliru. (a) Ambang cooling_off bukan 83, melainkan >75. (b) test_binding.py tidak memuat angka 83 maupun kata cooling_off.",
+      "fakta_di_kode": "THRESHOLDS = [(25, proceed), (50, warn), (75, step_up)] di binding.py:331 — di atas 75 barulah cooling_off. Bobotnya berskala: 60 + min(25, observer_count // 2) di binding.py:1046. Jadi cooling_off tercapai mulai 32 pengamat (60+16=76); 47 pengamat menghasilkan 83; 6 pengamat hanya 63 -> step_up.",
+      "bukti": "src/qshield/binding.py:331 dan :1046; dijalankan: 31 pengamat -> 75 step_up, 32 pengamat -> 76 cooling_off",
+      "ganti_jadi": "Layer 1 consensus weight = 60 + min(25, observers/2); reaches cooling_off at >=32 independent observers (83 at 47). Verification: tests/test_invariants.py (invariant 5), tests/test_bobot.py",
+      "risiko": "Angka 83 terbaca seolah ambang. Kalau juri menguji dengan jangkar kecil dan hasilnya step_up, laporannya yang terlihat salah — padahal sistemnya benar."
+    },
+    {
+      "id": "F04",
+      "tingkat": "salah",
+      "lokasi": "Bab VI, §6.2, butir 3",
+      "kutipan": "Fail-Safe Offline Mode: If a network timeout exceeds 200ms, the SDK falls back gracefully to warn",
+      "masalah": "Perilaku ini tidak ada di mana pun — tidak di sdk/README.md, tidak di kode SDK, tidak di kontrak. Angka 200 ms adalah ANGGARAN LATENSI, bukan batas timeout.",
+      "fakta_di_kode": "200 ms muncul sebagai anggaran latensi di docs/pitch/PITCH-PJP.md:108 dan docs/PROCESS-LOG.md:2769 ('jauh di bawah anggaran 200 ms'). Tidak ada satu pun aturan fallback ke warn pada timeout, di berkas mana pun.",
+      "bukti": "grep -rn 'timeout' sdk/README.md -> tidak ada; grep '200' docs/ -> semuanya konteks anggaran latensi",
+      "ganti_jadi": "HAPUS butir ini, ATAU implementasikan dulu di SDK lalu tulis. Kalau mau tetap menyebut 200 ms: 'Q-Shield adds one HTTP call with a 200 ms latency budget; measured p50 2.8 ms / p95 3.5 ms over local SQLite (not yet measured at production volume).'",
+      "risiko": "PALING BERBAHAYA di seluruh laporan. Ini janji perilaku produk yang tidak ada barangnya. Kalau juri minta tunjukkan, tidak ada yang bisa ditunjuk."
+    },
+    {
+      "id": "F05",
+      "tingkat": "salah",
+      "lokasi": "Bab I, §1.4",
+      "kutipan": "none of these attributes could differentiate between the two types of tags. The only visible difference, a payload length of 152 versus 154 characters",
+      "masalah": "Bertentangan dengan keluaran skrip peraganya sendiri, dan panjang payload bukan salah satu dari 16 ciri itu.",
+      "fakta_di_kode": "scripts/enam_belas_ciri.py melaporkan: ciri struktural berbeda 0 dari 12; ciri DESKRIPTIF berbeda 2 dari 4 (kategori usaha MCC 5812 vs 5999, dan panjang nama merchant 13 vs 14). Skripnya justru menyatakan dua ciri itu KAMI PAKAI — bukan bahwa tidak ada yang membedakan.",
+      "bukti": "PYTHONPATH=src python3 scripts/enam_belas_ciri.py; tests/test_enam_belas.py (6 pemeriksaan)",
+      "ganti_jadi": "Of the 16 attributes, none of the 12 structural ones differ — both stickers are issued by the same compliant acquirer. Two descriptive attributes (merchant category, merchant-name length) do differ, and Q-Shield does use them, but the attacker fills those fields in himself at registration, so a careful attacker erases the difference without changing the attack. Re-measured on the field corpus: across 52 real merchants from one issuer (93600914), five of six retained structural attributes are identical for ALL 52.",
+      "risiko": "Klaim yang lebih lemah DAN lebih mudah dibantah daripada yang sebenarnya kita punya. Versi sungguhannya lebih kuat karena diukur di 52 merchant nyata."
+    },
+    {
+      "id": "F06",
+      "tingkat": "klaim_berlebihan",
+      "lokasi": "Bab II, §2.1",
+      "kutipan": "an inline, low-latency, zero-trust verification middleware that intercepts the payment execution flow before the transaction becomes irreversible",
+      "masalah": "Kata 'intercepts' menyatakan Q-Shield berada DI JALUR pembayaran. Tidak. Dan §4.1 laporan ini sendiri menggambarkannya dengan benar — aplikasi memanggil backend PJP, PJP yang memanggil Q-Shield.",
+      "fakta_di_kode": "docs/THREAT-MODEL.md R15: 'Tiket MENGIKAT, tidak memaksa. Yang mengeksekusi pembayaran adalah PJP; Q-Shield tidak ada di jalur itu.' src/qshield/ticket.py baris 20-27 menuliskan larangan eksplisit: 'Jangan pernah menuliskan klaim aplikasi tidak bisa mengabaikannya; itu tidak benar.'",
+      "bukti": "docs/THREAT-MODEL.md R15; src/qshield/ticket.py:20-27",
+      "ganti_jadi": "a low-latency, zero-trust verification service the PJP calls synchronously before the PIN screen, returning a verdict and a signed ticket the settlement path can require",
+      "risiko": "Kejujuran soal batas kuasa adalah salah satu nilai jual proyek ini ke juri fintech. Satu kata yang berlebihan membuang keunggulan itu, dan bertentangan dengan halaman 8 laporan yang sama."
+    },
+    {
+      "id": "F07",
+      "tingkat": "klaim_berlebihan",
+      "lokasi": "Bab III, §3.2, butir 3",
+      "kutipan": "ensure full compliance with data protection laws (UU PDP)",
+      "masalah": "'Full compliance' adalah kesimpulan hukum, bukan sifat teknis yang bisa dibuktikan test.",
+      "fakta_di_kode": "Yang BISA dibuktikan: invarian §8 — 69 kolom, 13 tabel, tidak ada identitas pengguna; serangan JOIN, perangkaian antar-lokasi, dan penghitungan rujukan semuanya gagal. device_ref = sha256(salt || binding_id || device_anon_id), dilingkupi per jangkar sehingga tidak bisa dirangkai antar-tempat.",
+      "bukti": "tests/test_invariants.py invarian 8; src/qshield/store.py:62 dan :92",
+      "ganti_jadi": "a zero-PII schema designed for UU PDP alignment: no names, phone numbers, or user GPS traces are stored, and device references are salted and scoped per anchor so they cannot be chained across locations (verified by tests/test_invariants.py, invariant 8: 69 columns, 13 tables, JOIN / cross-location linkage / reference-counting attacks all fail)",
+      "risiko": "Juri berlatar hukum atau kepatuhan akan menanyakan siapa yang menyatakan kepatuhan itu. 'Dirancang selaras dengan' bisa dipertahankan; 'full compliance' tidak."
+    },
+    {
+      "id": "F08",
+      "tingkat": "usang",
+      "lokasi": "seluruh laporan — tidak ada sama sekali",
+      "kutipan": "(tidak disebut)",
+      "masalah": "Fitur 'satu tempat dipakai bergantian waktu' tidak ada di laporan, padahal sudah mendarat 8 jam SEBELUM laporan ini diperbarui.",
+      "fakta_di_kode": "Commit 3dbe469 (29 Sep 15:54) dan 41981a3 (30 Sep). BERGILIRAN_MIN_KEMBALI = 2 (binding.py:203), BERGILIRAN_MIN_DEVICES = 4 (binding.py:223). Dasarnya struktural, bukan statistik: stiker yang MENUTUPI menghasilkan nol kemunculan kembali, karena QR yang tertutup tidak bisa dipindai lagi. Terukur di calibrate_bergiliran.py: bergiliran sah 6 kemunculan kembali / 7 hari, stiker menutupi 0. Diuji di tests/test_bergiliran.py (10 skenario, termasuk kasus TIGA pedagang).",
+      "bukti": "src/qshield/binding.py:167-230; scripts/calibrate_bergiliran.py; tests/test_bergiliran.py",
+      "ganti_jadi": "Tambahkan sub-bab di Bab III atau Bab V. Ini kandidat paten TERKUAT yang dimiliki proyek — lihat F20.",
+      "risiko": "Kehilangan pembeda paling kuat. Ini satu-satunya mekanisme yang memisahkan pedagang giliran dari penukaran stiker TANPA onboarding manual, dan pembedanya bernilai NOL, bukan sekadar kecil."
+    },
+    {
+      "id": "F09",
+      "tingkat": "usang",
+      "lokasi": "Bab III dan Bab VI — tidak disebut",
+      "kutipan": "(tidak disebut)",
+      "masalah": "Jalur 'dipindai dari gambar' (pembayaran jarak jauh) tidak ada di laporan.",
+      "fakta_di_kode": "Field permintaan from_image (api.py:1154). Layer 1 dimatikan dengan sengaja, skor lokasi 0, dan atribusi Merchant ID diberikan sebagai ALASAN tanpa bobot. Ada pagar struktural: kontradiksi payload tetap cooling_off, supaya field yang diisi klien tidak bisa MELONGGARKAN putusan. Diuji di tests/test_gambar.py (10 pemeriksaan). Batasnya diakui terbuka sebagai R20.",
+      "bukti": "src/qshield/api.py:1154-1246; tests/test_gambar.py; docs/THREAT-MODEL.md R20; sdk/contract/10-dipindai-dari-gambar.json",
+      "ganti_jadi": "Tambahkan sebagai butir di §3.2 dan satu baris di matriks ancaman. Kasusnya sehari-hari: pembeli memfoto QRIS lalu dikirim ke temannya lewat WhatsApp untuk dibayarkan.",
+      "risiko": "Kasus penggunaan yang sangat Indonesia, dan kita sudah menanganinya secara eksplisit termasuk mengakui apa yang TIDAK bisa dijamin."
+    },
+    {
+      "id": "F10",
+      "tingkat": "usang",
+      "lokasi": "Bab III, §3.2, butir 1",
+      "kutipan": "handles the movement or relocation of food trucks",
+      "masalah": "Terlalu samar, dan menyatukan dua mekanisme berbeda yang keduanya punya kalibrasi sendiri.",
+      "fakta_di_kode": "Dua hal terpisah. (a) RELOKASI: nmid_relocated, W_RELOCATED = 25, dikalibrasi di calibrate_relokasi.py (R12, ditutup). (b) PEDAGANG KELILING: sebaran antar-area kini menuntut BUKTI POSITIF kehadiran serentak — MOBILITY_MAX_KMH = 80.0 (binding.py:267) dan MOBILITY_MAX_SPAN_KM = 80.0. Dasarnya fisika: satu gerobak hanya bisa berada di satu tempat pada satu waktu. Dikalibrasi di calibrate_keliling.py: pada ambang 80 km/jam, 0,0% pedagang dorong DAN 0,0% pedagang bermotor tertuduh. Diuji di tests/test_keliling.py (9 skenario). Batasnya diakui sebagai R21: penyebar sekota tidak terpisahkan (hanya 3,8% tertangkap).",
+      "bukti": "src/qshield/binding.py:235-315; scripts/calibrate_keliling.py; tests/test_keliling.py; docs/THREAT-MODEL.md R6 dan R21",
+      "ganti_jadi": "Pisahkan jadi dua kalimat, sebut angka kalibrasinya, dan sebut batas R21 secara terbuka.",
+      "risiko": "Kalimat samar tidak bisa dipertahankan saat ditanya 'bagaimana caranya'. Angka 0,0% tertuduh pada dua profil pedagang adalah hasil yang kuat dan sedang disia-siakan."
+    },
+    {
+      "id": "F11",
+      "tingkat": "usang",
+      "lokasi": "Bab V, §5.1 — tidak ada barisnya",
+      "kutipan": "(tidak disebut)",
+      "masalah": "Asal-usul konsensus (vouched vs anonim) tidak ada. Ini temuan keamanan paling serius yang ditemukan tim sendiri.",
+      "fakta_di_kode": "R22: observer_count tumbuh dari device_anon_id, dan field itu diisi KLIEN. Terukur: tiga string karangan yang direntang melebihi MIN_AGE_HOURS membuat jangkar baru menjadi verified/proceed. Keputusan 81 mengungkapkannya, bukan menutupinya: tiap putusan membawa evidence.vouched_observers, dan sinyal consensus_unvouched muncul bila reputasi seluruhnya anonim. Diuji di tests/test_konsensus.py (8 pemeriksaan).",
+      "bukti": "docs/THREAT-MODEL.md R22; src/qshield/binding.py:1197-1204; tests/test_konsensus.py",
+      "ganti_jadi": "Tambahkan baris matriks: 'T7 Forged consensus via synthetic device IDs — High — disclosed, not closed: every verdict carries evidence.vouched_observers and a consensus_unvouched signal; full closure requires PJP registration or attested observers — tests/test_konsensus.py'.",
+      "risiko": "Juri keamanan akan MENCARI celah ini. Menemukannya sendiri lalu mengungkapkannya jauh lebih kuat daripada ketahuan tidak menyebutnya."
+    },
+    {
+      "id": "F12",
+      "tingkat": "usang",
+      "lokasi": "Bab II §2.1 dan Bab III §3.2 butir 2",
+      "kutipan": "(tidak disebut)",
+      "masalah": "Sidik jari WiFi sekitar tidak disebut sama sekali, padahal ia satu-satunya penanda tempat yang bekerja saat GPS tidak berguna.",
+      "fakta_di_kode": "AP_MIN_KNOWN = 4, AP_MIN_OVERLAP = 0,15, AP_LOCATE_MIN_OVERLAP = 0,45 (behavior.py:177-205). Diukur dari sidik jari lapangan tim: tempat sama (1-3 m) irisan 0,66-0,80; tempat berbeda (116 km) irisan 0,00. Dipakai di jalur akurasi rendah: QR milik merchant lain di tempat yang dikenali naik ke step_up (R13, ditutup). Klien yang melakukan hashing, jadi BSSID mentah tidak pernah sampai ke server.",
+      "bukti": "src/qshield/behavior.py:177-206; src/qshield/api.py:1290-1310; docs/THREAT-MODEL.md R13",
+      "ganti_jadi": "Tambahkan ke daftar Layer 2 di §2.1 dan ke §3.2 butir 2, dengan batas yang diakui: sidik jari WiFi TIDAK PERNAH dipakai memberi proceed, karena korpusnya belum memuat kasus tempat-berbeda-tapi-berdekatan.",
+      "risiko": "Fitur yang membedakan kita dari solusi berbasis GPS murni, dan tidak terlihat sama sekali di laporan."
+    },
+    {
+      "id": "F13",
+      "tingkat": "usang",
+      "lokasi": "seluruh laporan — tidak ada",
+      "kutipan": "(tidak disebut)",
+      "masalah": "Jalur transfer bank manual tidak ada. Ini kanal penipuan KEDUA yang ditangani proyek ini.",
+      "fakta_di_kode": "src/qshield/transfer.py (235 baris) plus endpoint POST /api/v1/assess-transfer (api.py:773) dan POST /api/v1/beneficiary-reports (api.py:823). Menilai REKENING TUJUAN memakai telemetri dari PJP (umur rekening, riwayat penerima, laju transaksi), bukan mengumpulkannya sendiri. Pola yang dikenali adalah rekayasa sosial. Diuji di tests/test_transfer.py (12 pemeriksaan) dan dikalibrasi di calibrate_transfer.py.",
+      "bukti": "src/qshield/transfer.py; src/qshield/api.py:773 dan :823; tests/test_transfer.py",
+      "ganti_jadi": "Tambahkan sub-bab. Lomba ini bertrack 'Secure Digital Payments & Fintech', dan cakupan dua kanal lebih kuat daripada satu.",
+      "risiko": "Satu modul utuh berikut dua endpoint dan 12 test menjadi tidak terlihat."
+    },
+    {
+      "id": "F14",
+      "tingkat": "usang",
+      "lokasi": "Bab III dan Bab VI",
+      "kutipan": "hanya POST /api/v1/verify dan POST /api/v1/inspect yang disebut",
+      "masalah": "API punya sepuluh endpoint; laporan menyebut dua.",
+      "fakta_di_kode": "GET /api/v1/health; POST /api/v1/field; POST /api/v1/assess-transfer; POST /api/v1/beneficiary-reports; POST /api/v1/merchants (pendaftaran PJP — jalur R4/R5); DELETE /api/v1/merchants/{nmid} (pencabutan); POST /api/v1/inspect; POST /api/v1/tickets/verify (pemeriksaan tiket sisi switch); POST /api/v1/verify.",
+      "bukti": "grep '@app\\.' src/qshield/api.py",
+      "ganti_jadi": "Tambahkan tabel endpoint ringkas di Bab III. POST /api/v1/merchants penting khusus: itu jalan keluar untuk cold start (R4) dan relokasi (R5), dan §4.1 laporan sudah menyinggung 'without manual onboarding' tanpa menjelaskan bahwa onboarding manual TERSEDIA sebagai jalur cepat.",
+      "risiko": "Kelengkapan PoC terlihat lebih kecil dari yang sebenarnya, dan tiket tanpa endpoint pemeriksanya terbaca tidak selesai."
+    },
+    {
+      "id": "F15",
+      "tingkat": "usang",
+      "lokasi": "Bab III, §3.1, paragraf 2",
+      "kutipan": "regression checks validating eight architectural security invariants test_invariants.py and 44 simulated adversarial attack scenarios test_adversarial.py",
+      "masalah": "Dua berkas disebut; ada 20 berkas test di repo. Yang disebut memang benar, tapi cakupannya terbaca jauh lebih tipis daripada kenyataannya.",
+      "fakta_di_kode": "20 berkas, semuanya hijau per ee77bba: test_adversarial (44 skenario), test_api, test_bergiliran (10), test_binding, test_bobot (9), test_contract (11 bagian), test_emvco, test_enam_belas (6), test_frontend (22), test_gambar (10), test_geo, test_hardening (31), test_invariants (9 pemeriksaan / 8 invarian), test_jangkar (7), test_keliling (9), test_konsensus (8), test_registration (14), test_sdk_contract (4), test_ticket (9), test_transfer (12).",
+      "bukti": "ls tests/*.py | wc -l -> 20; seluruhnya dijalankan dan lolos",
+      "ganti_jadi": "20 test suites covering 8 architectural invariants, 44 adversarial scenarios, and 12 behaviour-specific suites — all green.",
+      "risiko": "Angka 'delapan invarian + 44 skenario' bagus, tapi menyembunyikan enam suite yang ditulis khusus untuk kasus lapangan yang kita temukan sendiri."
+    },
+    {
+      "id": "F16",
+      "tingkat": "usang",
+      "lokasi": "Bab V — tidak ada bagiannya",
+      "kutipan": "(tidak ada)",
+      "masalah": "Tidak ada satu pun batas yang diakui terbuka. Threat model kita punya R19-R24 yang ditulis justru untuk itu.",
+      "fakta_di_kode": "R19 model kelangkaan buta terhadap penyerang yang meniru profil lazim. R20 stiker yang sudah ditukar sebelum DIFOTO tidak bisa ditangkap dari sisi pembayar. R21 penyebar sekota tidak terpisahkan dari pedagang keliling (hanya 3,8% tertangkap). R22 konsensus bisa dikarang. R23 ambang waktu tidak membebani penyerang yang tidak perlu hadir (rencana yang DIBATALKAN, beserta alasannya). R24 swap paruh waktu tidak terpisahkan dari pedagang bergiliran.",
+      "bukti": "docs/THREAT-MODEL.md baris 185-190",
+      "ganti_jadi": "Tambahkan §5.4 'Acknowledged Limits' berisi enam baris itu, masing-masing dengan apa yang menutupnya (umumnya: pendaftaran PJP, atau kerapatan pengamatan yang tumbuh seiring adopsi).",
+      "risiko": "Laporan yang tidak punya batas terbaca seperti brosur. Di lomba keamanan, mengakui batas lebih dulu adalah yang membedakan tim yang mengerti sistemnya dari yang tidak."
+    },
+    {
+      "id": "F17",
+      "tingkat": "tidak_tepat",
+      "lokasi": "Bab IV, §4.1",
+      "kutipan": "Layer 1 (spatial consensus within a 50 m radius based on Geohash-7)",
+      "masalah": "'Based on Geohash-7' menyiratkan sel geohash yang menentukan jangkar. Tidak — dan kekeliruan itu persis bug yang baru diperbaiki 28 Sep.",
+      "fakta_di_kode": "Geohash-7 adalah INDEKS kueri; yang menentukan jangkar adalah jarak haversine <= ANCHOR_RADIUS_M (50 m). Commit 7311fcb memperbaiki jalur TULIS yang dulu memakai ON CONFLICT (nmid, geohash_7): di produksi satu warung dipindai tiga HP dalam menit yang sama dan tercatat sebagai TIGA tempat (2/1/1 pengamat, tidak satu pun mencapai MIN_OBSERVERS). Diuji di tests/test_jangkar.py (7 pemeriksaan).",
+      "bukti": "commit 7311fcb; src/qshield/binding.py baris pembuka docstring; tests/test_jangkar.py",
+      "ganti_jadi": "Layer 1 (spatial consensus within a 50 m haversine radius, with geohash-7 used only as the query index)",
+      "risiko": "§3.1 laporan ini sudah menulisnya dengan benar ('geohash-7 indexing with extended haversine distance checks'). §4.1 membantah §3.1."
+    },
+    {
+      "id": "F18",
+      "tingkat": "tidak_tepat",
+      "lokasi": "Bab IV, §4.1",
+      "kutipan": "If an anomaly is detected, only the anomaly count for that location is incremented. Otherwise, the merchant anchor point is updated based on the scan data.",
+      "masalah": "Benar arahnya, tapi menghilangkan tiga syarat dan satu buku catatan yang justru jadi jalan pulih pedagang sah.",
+      "fakta_di_kode": "note_anomaly() hanya dipanggil bila SEMUA terpenuhi: anomalinya termasuk ANOMALI_LOKASI, lokasinya tepercaya (bukan replay), dan jangkarnya ada. Cacat payload murni TIDAK menandai tempat — ini perbaikan dari temuan lapangan: tujuh merchant sungguhan di satu titik mewarisi empat percobaan anomali yang semuanya berasal dari QR scam bercacat, bukan percobaan pertukaran. Selain itu note_challenge() mencatat dari sudut NMID yang DITOLAK; buku itulah yang dipakai pedagang giliran dan pedagang pindahan membuktikan diri. Pada jalur bersih yang dipelajari bukan hanya jangkar: learn_city, learn_ap, learn_dialect, learn_features — dan untuk replay/gambar hanya dua yang terakhir.",
+      "bukti": "src/qshield/api.py:1494-1521 (note_anomaly :1506, note_challenge :1521); src/qshield/binding.py:315-320 (ANOMALI_LOKASI)",
+      "ganti_jadi": "On a location-related anomaly the anchor's attempt counter is incremented and the rejected NMID is recorded in a challenge ledger (its route back to acceptance); payload-only defects mark nothing. On a clean scan the system learns the anchor, the area's city, and the ambient-WiFi fingerprint; image and replay scans learn payload-level knowledge only, never location.",
+      "risiko": "Pemisahan 'pengetahuan TEMPAT vs pengetahuan PAYLOAD' adalah keputusan desain yang matang dan tidak terlihat sama sekali."
+    },
+    {
+      "id": "F19",
+      "tingkat": "tidak_tepat",
+      "lokasi": "Bab III, §3.1",
+      "kutipan": "binding.py evaluates the spatial consensus on the first layer (layer 1) and the smoothing of the center of gravity of the anchor points",
+      "masalah": "Penghalusan jangkar tidak diimplementasikan di binding.py.",
+      "fakta_di_kode": "binding.py hanya menyimpan konstantanya (ANCHOR_MAX_DRIFT_M = 20, baris 41). Rata-rata berjalannya dijalankan di store.py:1294. Hasilnya terukur di invarian §1: galat 6,9 m -> 1,4 m setelah 47 pengamatan, dan 500 device hanya bisa menyeret jangkar maksimal 20 m.",
+      "bukti": "src/qshield/store.py:1294; src/qshield/binding.py:41; tests/test_invariants.py invarian 1",
+      "ganti_jadi": "binding.py evaluates Layer 1 spatial consensus; store.py maintains the anchor as a bounded running average (6.9 m -> 1.4 m after 47 observations; drift capped at 20 m even against 500 devices)",
+      "risiko": "Kecil, tapi angka 6,9 -> 1,4 m itu hasil yang bagus dan sedang tidak dikutip."
+    },
+    {
+      "id": "F20",
+      "tingkat": "tidak_tepat",
+      "lokasi": "Bab V, §5.3, Method 2",
+      "kutipan": "Method 2: Physical Incumbent Presence Tracking ... by verifying historical scan continuity of incumbent terminals during challenger entry",
+      "masalah": "Menggambarkan mekanisme versi LAMA. Klaim yang sekarang bisa dibuat jauh lebih spesifik dan jauh lebih kuat.",
+      "fakta_di_kode": "Bukan sekadar 'continuity' — yang dipakai sekarang BERSELANG-SELING: merchant lama muncul KEMBALI berulang kali setelah penantang ada. Sifatnya struktural, bukan statistik: stiker yang menutupi menghasilkan NOL kemunculan kembali, karena QR yang tertutup tidak bisa dipindai lagi. Terukur di calibrate_bergiliran.py: sah 6, serangan 0. Akibatnya syarat perangkat turun dari 8 ke 4 dan lapak sepi diterima hari ke-5, bukan hari ke-9.",
+      "bukti": "src/qshield/binding.py:167-230; scripts/calibrate_bergiliran.py; tests/test_bergiliran.py",
+      "ganti_jadi": "A method for resolving physical terminal coexistence conflicts without manual onboarding, by requiring proof of ALTERNATION — repeated re-appearance of the incumbent terminal after a challenger's entry. An overlay sticker structurally cannot produce this pattern: once it covers the code beneath, that code can never be scanned again, so its re-appearance count is zero rather than merely low.",
+      "risiko": "Ini kandidat paten paling kuat yang dimiliki proyek, dan sedang dituliskan dalam bentuk yang paling lemah. 'Nol, bukan kecil' adalah pembeda yang bisa dipertahankan di hadapan pemeriksa paten."
+    },
+    {
+      "id": "F21",
+      "tingkat": "tidak_tepat",
+      "lokasi": "Bab II, §2.1",
+      "kutipan": "Layer 2 ... Determines whether the payload exhibits abnormal syntactic dialects, dynamic QR re-use, invoice amount modification, or printed-vs-encoded mismatches",
+      "masalah": "Empat dari tujuh kelompok sinyal Layer 2 disebut.",
+      "fakta_di_kode": "Tujuh kelompok: (1) kontradiksi struktural W_STRUCTURAL = 70 dengan empat pemeriksaan; (2) QR dinamis dipakai ulang / tersebar / nominal berubah; (3) label tercetak vs isi kode; (4) sidik jari WiFi sekitar; (5) integritas perangkat; (6) asal-usul (kota wilayah, konsistensi nama); (7) kelangkaan profil merchant tak-terawasi.",
+      "bukti": "src/qshield/behavior.py — daftar fungsi _*_signals; docs/KALIBRASI-BOBOT.md tabel Layer 2",
+      "ganti_jadi": "Sebutkan ketujuhnya, atau tulis 'seven signal families' lalu rujuk ke docs/KALIBRASI-BOBOT.md.",
+      "risiko": "§3.2 sudah menyebut sebagian yang hilang, jadi §2.1 dan §3.2 tidak konsisten satu sama lain."
+    },
+    {
+      "id": "F22",
+      "tingkat": "editorial",
+      "lokasi": "Bab III, §3.1, kalimat terakhir",
+      "kutipan": "while counter settings are verified against rat/SDK mechanisms provide an isolated integration interface for native mobile clients",
+      "masalah": "Kalimatnya rusak — tampaknya dua kalimat tergabung, dan 'rat/SDK' kemungkinan artefak penerjemahan.",
+      "fakta_di_kode": "Yang dimaksud kemungkinan: sdk/ menyediakan seam integrasi terisolasi lewat sdk/README.md dan 10 fixture kontrak di sdk/contract/, dijaga tidak basi oleh tests/test_sdk_contract.py.",
+      "bukti": "sdk/README.md; sdk/contract/ (10 fixture + skema OpenAPI); tests/test_sdk_contract.py",
+      "ganti_jadi": "The sdk/ directory provides an isolated integration seam for native mobile clients: a written contract (sdk/README.md), ten request/response fixtures generated from the code (sdk/contract/), and a regression suite that fails if the seam goes stale (tests/test_sdk_contract.py).",
+      "risiko": "Kalimat rusak di bab implementasi. Ini yang paling cepat diperbaiki dan paling terlihat."
+    },
+    {
+      "id": "F23",
+      "tingkat": "editorial",
+      "lokasi": "Bab III, §3.1, kalimat pertama",
+      "kutipan": "The data analysis (payload) and spatial queries (spatial queries) are initiated via emvco.py",
+      "masalah": "Kurung penjelas terduplikasi, dan kalimatnya tidak terbaca.",
+      "fakta_di_kode": "emvco.py melakukan pembacaan TLV EMVCo rekursif dan validasi CRC16; geo.py melakukan pengindeksan geohash-7 dan jarak haversine.",
+      "bukti": "src/qshield/emvco.py; src/qshield/geo.py",
+      "ganti_jadi": "Payload parsing and spatial indexing enter through emvco.py (recursive EMVCo TLV parsing and CRC16 validation) and geo.py (geohash-7 indexing with haversine distance checks).",
+      "risiko": "Kecil, tapi ada di kalimat pembuka bab implementasi."
+    }
+  ],
+  "sudah_benar_jangan_diutak_atik": [
+    {
+      "klaim": "verification ticket HMAC-SHA256, berlaku 90 detik",
+      "bukti": "src/qshield/ticket.py:63 TTL_DETIK = 90"
+    },
+    {
+      "klaim": "cooling_off memblokir layar PIN dengan hitung mundur 30 detik",
+      "bukti": "src/qshield/web/index.html:898 (let sisa = 30) dan :1116 (layar PIN tidak pernah dirender)"
+    },
+    {
+      "klaim": "tiket bisa dipakai ulang dalam 90 detik; tiket mengikat tapi tidak memaksa PJP",
+      "bukti": "§5.2 laporan sudah jujur; sejalan dengan R15 dan R16"
+    },
+    {
+      "klaim": "empat pemeriksaan PJP sebelum menyetujui (fingerprint, HMAC, exp, action)",
+      "bukti": "POST /api/v1/tickets/verify di api.py:1041"
+    },
+    {
+      "klaim": "konsensus menuntut >= 3 perangkat berbeda dalam rentang 24 jam",
+      "bukti": "MIN_OBSERVERS = 3, MIN_AGE_HOURS = 24; invarian §5"
+    },
+    {
+      "klaim": "T2 Sybil cold-start di bawah 5 perangkat penyerang",
+      "bukti": "docs/THREAT-MODEL.md R10 — 'penyerang yang mengeluarkan >5 device masih lolos, TAPI hanya dengan nama merchant yang BERBEDA'"
+    },
+    {
+      "klaim": "QR dinamis: pelacakan tag 62 dan cache nominal, TTL 48 jam",
+      "bukti": "emvco.py:270 bill_ref pada tag 62 sub-tag 01; DYNAMIC_QR_TTL_HOURS = 48"
+    },
+    {
+      "klaim": "20.000 payload sintetis di calibrate_layer2.py",
+      "bukti": "scripts/calibrate_layer2.py:64 CONTOH = 20000"
+    },
+    {
+      "klaim": "44 skenario adversarial",
+      "bukti": "tests/test_adversarial.py — 'Seluruh 44 skenario sesuai harapan'"
+    },
+    {
+      "klaim": "delapan invarian arsitektural",
+      "bukti": "tests/test_invariants.py — 8 invarian, 9 pemeriksaan (§1 diperiksa dua kali)"
+    },
+    {
+      "klaim": "device_integrity JSON {mock_location, rooted, attested, platform}",
+      "bukti": "src/qshield/api.py:202-223 — nama dan tipe field cocok persis"
+    },
+    {
+      "klaim": "scanner web menghindari lensa ultra-wide 0,5x, autofokus kontinu",
+      "bukti": "src/qshield/web/index.html:1187-1212"
+    },
+    {
+      "klaim": "mode ganda: Verification (/verify) dan Catalog (/inspect)",
+      "bukti": "src/qshield/api.py:992 dan :1074"
+    },
+    {
+      "klaim": "SDK melakukan pra-parsing EMVCo di perangkat; QR non-EMVCo ditolak lokal",
+      "bukti": "sdk/README.md:58 'Validator payload offline — selesai'"
+    },
+    {
+      "klaim": "Model A (PJP tunggal) dan Model B (konsorsium berbagi)",
+      "bukti": "docs/pitch/PITCH-PJP.md; peragaan dapat dijalankan: scripts/demo_lintas_pjp.py"
+    },
+    {
+      "klaim": "zero-PII, device_ref di-hash dan dilingkupi per lokasi",
+      "bukti": "src/qshield/store.py:62 dan :92; invarian §8"
+    },
+    {
+      "klaim": "seluruh Bab I (adopsi QRIS, permukaan serangan fisik, kasus 2023 dan 2025)",
+      "bukti": "sitasi eksternal, di luar jangkauan penyaringan kode — tidak diubah"
+    }
+  ],
+  "urutan_kerja_untuk_vyone": [
+    {
+      "langkah": 1,
+      "kerjakan": [
+        "F04"
+      ],
+      "alasan": "satu-satunya temuan yang menjanjikan perilaku produk yang tidak ada barangnya — hapus dulu sebelum apa pun",
+      "perkiraan": "5 menit"
+    },
+    {
+      "langkah": 2,
+      "kerjakan": [
+        "F01",
+        "F02",
+        "F03"
+      ],
+      "alasan": "tiga sitasi test yang salah di satu tabel; kalau juri mengecek satu dan meleset, seluruh tabel diragukan",
+      "perkiraan": "20 menit"
+    },
+    {
+      "langkah": 3,
+      "kerjakan": [
+        "F05",
+        "F06",
+        "F07"
+      ],
+      "alasan": "klaim yang lebih lemah atau lebih rapuh daripada yang sebenarnya kita punya",
+      "perkiraan": "30 menit"
+    },
+    {
+      "langkah": 4,
+      "kerjakan": [
+        "F08",
+        "F20"
+      ],
+      "alasan": "bergiliran: fitur terkuat yang hilang, sekaligus memperkuat klaim paten Method 2",
+      "perkiraan": "1 jam"
+    },
+    {
+      "langkah": 5,
+      "kerjakan": [
+        "F16",
+        "F11"
+      ],
+      "alasan": "batas yang diakui + asal-usul konsensus; ini yang membedakan laporan teknik dari brosur",
+      "perkiraan": "1 jam"
+    },
+    {
+      "langkah": 6,
+      "kerjakan": [
+        "F09",
+        "F10",
+        "F12",
+        "F13",
+        "F14",
+        "F15"
+      ],
+      "alasan": "fitur dan endpoint yang belum terlihat",
+      "perkiraan": "1,5 jam"
+    },
+    {
+      "langkah": 7,
+      "kerjakan": [
+        "F17",
+        "F18",
+        "F19",
+        "F21",
+        "F22",
+        "F23"
+      ],
+      "alasan": "ketelitian dan keterbacaan; paling akhir karena tidak mengubah isi",
+      "perkiraan": "45 menit"
+    }
+  ],
+  "rujukan_yang_bisa_dipakai_vyone": {
+    "angka_bobot_dan_alasannya": "docs/KALIBRASI-BOBOT.md",
+    "alur_satu_pemindaian": "docs/panduan/ALUR-KERJA.md",
+    "ancaman_dan_batas_terbuka": "docs/THREAT-MODEL.md (R1-R24)",
+    "riwayat_keputusan": "docs/PROCESS-LOG.md",
+    "kontrak_api": "docs/API.md",
+    "teks_siap_pakai_untuk_pitch_pdf": "docs/pitch/PDF-UPDATE.md (CATATAN: itu untuk Q-Shield-Overview.pdf, berkas yang BERBEDA dari laporan ini)",
+    "perintah_verifikasi": [
+      "PYTHONPATH=src python3 tests/test_invariants.py",
+      "PYTHONPATH=src python3 tests/test_bobot.py",
+      "PYTHONPATH=src python3 scripts/enam_belas_ciri.py",
+      "PYTHONPATH=src python3 scripts/calibrate_bergiliran.py",
+      "PYTHONPATH=src python3 scripts/calibrate_keliling.py"
+    ]
+  }
+}

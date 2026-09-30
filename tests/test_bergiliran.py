@@ -192,6 +192,44 @@ def _t9():
             "yang naik, bukan deteksinya")
 
 
+@cek("TIGA pedagang berbagi satu titik, bukan cuma dua")
+def _t10():
+    """Nasi uduk pagi, es buah siang, nasi goreng malam.
+
+    Berbeda dari skenario dua pedagang: di sini penantang menghadapi
+    DUA jangkar mapan sekaligus, sehingga pemilihan `strongest` dan
+    perhitungan `kembali` harus benar terhadap beberapa NMID lain.
+    """
+    s = Store(os.path.join(tempfile.mkdtemp(), "tiga.db"))
+    UDUK, BUAH = "ID1011112222333", "ID1022223333444"
+    GORENG = "ID1033334444555"
+
+    # Dua pedagang lama mapan lebih dulu, 10 hari.
+    for hari in range(10, 0, -1):
+        for nm, nama, jam in ((UDUK, "NASI UDUK", 7), (BUAH, "ES BUAH", 13)):
+            s.record(nmid=nm, lat=LAT, lng=LNG,
+                     device_anon_id=f"{nm[-4:]}-{hari}",
+                     merchant_name=nama,
+                     now=NOW - timedelta(days=hari, hours=24 - jam))
+
+    # Pedagang ketiga datang, malam hari, empat hari berturut-turut.
+    for hari in range(4, 0, -1):
+        s.note_challenge(lat=LAT, lng=LNG, nmid=GORENG,
+                         device_anon_id=f"malam-{hari}",
+                         now=NOW - timedelta(days=hari, hours=2))
+
+    t = s.challenge_state(LAT, LNG, GORENG)
+    assert t.kembali >= bd.BERGILIRAN_MIN_KEMBALI, f"kembali={t.kembali}"
+    assert t.devices >= bd.BERGILIRAN_MIN_DEVICES, f"devices={t.devices}"
+
+    v = bd.evaluate(GORENG, LAT, LNG, s.nearby(LAT, LNG),
+                    s.by_nmid(GORENG), now=NOW, challenge=t,
+                    merchant_name="NASI GORENG PAK BUDI")
+    assert v.status != bd.ANOMALY, f"{v.status}: {v.reasons[:1]}"
+    return (f"2 jangkar mapan + pendatang ketiga -> {v.status}/{v.action} "
+            f"(kembali={t.kembali})")
+
+
 print("=" * 70)
 print("SATU TEMPAT, BERGANTIAN WAKTU")
 print("=" * 70)
