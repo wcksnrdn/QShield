@@ -4,8 +4,8 @@
 > ngoding. Tidak ada istilah yang dipakai sebelum dijelaskan. Kalau ada
 > bagian yang bikin bingung, itu salah dokumennya, bukan salah kamu.
 >
-> Isinya: cara kerja Q-Shield secara umum, lalu **empat hal yang
-> dibangun 25 September 2026** beserta alasannya.
+> Isinya: cara kerja Q-Shield secara umum, lalu **hal-hal yang dibangun
+> sejak 25 September 2026** beserta alasannya.
 
 ---
 
@@ -71,11 +71,15 @@ yang memastikan aturan ini tidak pernah bocor.
 
 ---
 
-## 4. Yang dibangun semalam — empat hal
+## 4. Yang dibangun, dan kenapa
 
-Keempatnya berangkat dari **pertanyaan yang diajukan anggota tim**,
-bukan dari daftar fitur. Itu sengaja: pertanyaan orang yang memakai
-sistemnya menemukan lubang yang tidak ditemukan orang yang membangunnya.
+Semuanya berangkat dari **pertanyaan yang diajukan anggota tim**, bukan
+dari daftar fitur. Itu sengaja: pertanyaan orang yang memakai sistemnya
+menemukan lubang yang tidak ditemukan orang yang membangunnya.
+
+Dan perhatikan satu hal yang berulang — **empat dari lima temuan
+menyangkut pedagang kecil yang dituduh oleh sistem yang dibuat untuk
+melindungi mereka.**
 
 ---
 
@@ -362,6 +366,167 @@ Demonya berhenti memperagakan **aturan**, dan mulai memperagakan
 
 ---
 
+### 4.5 Satu tempat dipakai bergantian — "es buah siang, nasi goreng malam"
+
+**Ceritanya.** Kamu langganan es buah gerobakan. Dia selalu di titik
+yang sama, tiap siang. Sore dia pulang — dan malamnya ada tukang nasi
+goreng mangkal **persis di titik yang sama.**
+
+Dua-duanya pedagang jujur. Dua-duanya punya QRIS sendiri. Yang mereka
+bagi cuma tempatnya, bergantian waktu.
+
+**Kenapa ini bikin satpam kita bingung?**
+
+Ingat tugas satpam: *"stiker ini memang yang seharusnya ada di tempat
+ini."* Di titik itu, yang dia kenal adalah es buah. Tiba-tiba malam hari
+muncul QR lain di tempat yang sama.
+
+Dari sudut pandang satpam, itu **bentuknya sama persis** dengan
+penipuan yang paling sering kejadian: seseorang menempelkan stikernya
+menutupi stiker warung orang.
+
+**Jadi dulu hasilnya:**
+
+```
+Pembeli nasi goreng malam pertama
+  -> ANOMALY / step_up   skor 72
+     "Di titik ini tercatat ES BUAH SEGAR. Kode yang dipindai
+      atas nama NASI GORENG PAK BUDI."
+```
+
+Pedagang nasi goreng yang tidak salah apa-apa **dituduh maling**, dan
+pembelinya disuruh verifikasi dulu.
+
+Sistem punya jalan keluar, tapi lambat: butuh **8 HP berbeda** memindai
+si nasi goreng, terentang lebih dari 24 jam. Untuk lapak yang ramai itu
+3 hari; untuk lapak sepi bisa **9 hari**. Selama itu dia dicurigai
+terus.
+
+Di Indonesia, satu lapak dipakai bergantian pagi–sore–malam itu
+pemandangan sehari-hari. Jadi ini bukan kasus pinggiran.
+
+---
+
+#### Buktinya ternyata sudah ada, cuma belum dibaca
+
+Perumpamaannya: **kursi di warteg.**
+
+Bayangin kamu mengawasi satu kursi. Kamu tidak lihat orangnya, kamu cuma
+punya catatan siapa yang duduk, jam berapa.
+
+```
+Catatan A                          Catatan B
+  08:00  Pak Budi duduk             08:00  Pak Budi duduk
+  09:00  Pak Budi duduk             09:00  Pak Budi duduk
+  10:00  Bu Sari duduk              10:00  Bu Sari duduk
+  11:00  Bu Sari duduk              11:00  Pak Budi duduk
+  12:00  Bu Sari duduk              12:00  Bu Sari duduk
+  13:00  Bu Sari duduk              13:00  Pak Budi duduk
+```
+
+**Catatan A**: Pak Budi duduk, lalu hilang selamanya, Bu Sari
+mengambil alih. Itu bentuk **pengambilalihan** — dan kalau ini soal
+stiker, artinya stiker Bu Sari **menutupi** punya Pak Budi.
+
+**Catatan B**: mereka **gantian**. Pak Budi, Bu Sari, Pak Budi lagi,
+Bu Sari lagi.
+
+Dan di sinilah kuncinya:
+
+> **Stiker yang menutupi TIDAK BISA menghasilkan catatan B.**
+>
+> Begitu stikernya menutup, QR di bawahnya hilang. Tidak bisa dipindai
+> lagi. Selamanya. Jadi "Pak Budi" tidak akan pernah muncul lagi di
+> catatan.
+
+Untuk bisa gantian, penipu harus **mencopot stikernya, membiarkan
+korban dipindai, lalu memasangnya lagi** — tiap hari, dua kali sehari.
+
+---
+
+#### Angkanya, dan kenapa ini bukan tebak-tebakan
+
+Kami hitung berapa kali "merchant lama muncul **kembali**" setelah
+penantang ada, selama 7 hari:
+
+| Pola | Muncul kembali |
+|---|---|
+| Bergiliran (es buah ↔ nasi goreng) | **6 kali** |
+| Stiker menutupi (penipuan) | **0 kali** |
+
+Nol. **Bukan sedikit — nol.** Karena secara fisik memang mustahil: QR
+yang tertutup tidak bisa muncul lagi.
+
+Jadi penipuan tertutup dari jalur ini bukan karena kami pasang ambang
+tinggi, tapi karena **angkanya memang nol.**
+
+---
+
+#### Satu kesalahan yang hampir lolos
+
+Hitungan pertama kami menghitung **semua** pergantian — termasuk
+"es buah lalu nasi goreng". Waktu diuji, ketahuan: **penipuan justru
+lolos**, karena pola "korban dipindai, lalu penipu, lalu diam
+selamanya" juga menghasilkan satu pergantian.
+
+Padahal itu **justru bentuk serangannya.**
+
+Sekarang yang dihitung cuma satu arah: **merchant lama muncul KEMBALI
+sesudah penantang ada.** Arah sebaliknya tidak membuktikan apa-apa.
+
+---
+
+#### Hasilnya buat pedagang
+
+Karena buktinya jauh lebih kuat, syarat jumlah HP bisa diturunkan dari
+8 jadi **4** tanpa melemahkan apa pun:
+
+| Pembeli berbeda per hari | Dulu | Sekarang |
+|---|---|---|
+| 1 orang | 9 hari | **4 hari** |
+| 2 orang | 5 hari | **2 hari** |
+| 3 orang | 4 hari | **2 hari** |
+| 5 orang | 3 hari | **2 hari** |
+
+Lapak sepi yang dulu dicurigai hampir seminggu penuh, sekarang beres
+dalam 4 hari.
+
+---
+
+#### Pengaman yang tetap jalan
+
+**Kalau QR es buah benar-benar tertutup** → dia berhenti terpindai →
+"muncul kembali" = 0 → penantang **tidak pernah** diterima, bahkan
+dengan 50 HP sekalipun. Sudah diuji.
+
+**Kalau tukang nasi goreng pakai nama yang sama persis** dengan es buah
+→ langsung **merah total** (`cooling_off`), berapa pun buktinya.
+Tetangga sungguhan tidak pernah pakai nama tetangganya.
+
+---
+
+#### Yang jujur harus diakui (R24)
+
+Ada satu penipu yang **tidak bisa** kami bedakan: yang **memasang lalu
+mencopot** stikernya tiap hari. Polanya sama persis dengan pedagang
+bergiliran yang sah, dan tidak ada di data yang bisa memisahkan
+keduanya. Kami tidak akan mengklaim bisa.
+
+Tapi lihat apa yang harus dia lakukan:
+
+- datang ke lapak orang **dua kali sehari**
+- **setiap hari, selamanya**
+- dan **membiarkan korbannya menerima pembayaran separuh waktu**
+
+Dari "tempel sekali lalu pulang" jadi **pekerjaan harian**. Itu bukan
+penipuan yang dideteksi — itu penipuan yang **tidak sepadan lagi
+dikerjakan.**
+
+Kami tulis ini sebagai test khusus, supaya tercatat sebagai batas yang
+**kami ketahui** — bukan kejutan yang ditemukan juri.
+
+---
+
 ## 5. Satu rencana yang sengaja DIBATALKAN
 
 Kami sempat mau mengganti syarat umur jangkar dari "rentang 24 jam" jadi
@@ -409,6 +574,15 @@ diputar ulang. Tunjukkan itu ke juri — jangan disembunyikan.
 
 ## 7. Kalau juri nanya — contekan
 
+**"Kalau satu tempat dipakai bergantian, pagi tukang A, malam tukang B?"**
+> Itu bentuk dagang sehari-hari di Indonesia, dan dulu pedagang kedua
+> kami tuduh menukar stiker sampai sembilan hari. Sekarang kami baca
+> polanya: stiker yang MENUTUPI membuat QR di bawahnya hilang
+> selamanya, jadi merchant lama tidak pernah muncul lagi. Kalau
+> keduanya muncul BERGANTIAN berulang kali, tidak ada yang tertutup.
+> Terukur: pedagang bergiliran menghasilkan 6 kemunculan kembali dalam
+> seminggu, stiker yang menutupi menghasilkan nol. Bukan sedikit — nol.
+
 **"Kok merchant keliling nggak bisa hijau?"**
 > Karena kami memverifikasi penempatan, dan pedagang keliling memang
 > tidak punya penempatan tetap. Kami tidak menuduhnya — kami bilang
@@ -453,7 +627,10 @@ diputar ulang. Tunjukkan itu ke juri — jangan disembunyikan.
 | Batas rentang | 80 km | di atas ini bukan pedagang keliling |
 | Jarak "area beda" | 1 km | di bawah ini dianggap tempat yang sama |
 | Positif palsu model kelangkaan | 4,1% | diukur ke 122 merchant sungguhan |
-| Merchant terkumpul | 122 | dari 10 penerbit, 5 sudah cukup tebal |
+| Radius jangkar | 50 m | juga dipakai saat MENULIS, bukan cuma menilai |
+| Muncul kembali minimum | 2 kali | bukti tempat dipakai bergantian |
+| HP minimum kalau bergiliran | 4 | turun dari 8, karena buktinya lebih kuat |
+| Merchant terkumpul | 126 | dari 10 penerbit, 5 sudah cukup tebal |
 
 ---
 
