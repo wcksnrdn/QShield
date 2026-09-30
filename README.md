@@ -134,6 +134,11 @@ docs/            dokumen — dikelompokkan menurut siapa pembacanya
   THREAT-MODEL.md   ancaman, mitigasi, dan risiko yang masih terbuka
   KALIBRASI-BOBOT.md  dari mana tiap angka bobot berasal
   PROCESS-LOG.md    keputusan desain beserta alasannya
+  report/           laporan lomba
+    QShield-Project-Report.pdf     punya Vyone, JANGAN ditimpa
+    QShield-Project-Report-v2.md   draf tim — sumbernya, di-review lewat git
+    QShield-Project-Report-v2.html dibuat scripts/report_to_html.py; cetak ke PDF
+    SCREENING-REPORT.json          selisih keduanya, beserta alasannya
   panduan/          tatacara untuk tim sendiri
     ALUR-KERJA.md      apa yang terjadi waktu scan, bahasa awam
   pitch/            materi lomba + PDF yang perlu diperbarui
@@ -215,6 +220,8 @@ Dikelompokkan menurut siapa yang membacanya.
 | [`docs/pitch/PITCH-AUDIT.md`](docs/pitch/PITCH-AUDIT.md) | audit naskah pitch terhadap kode + naskah pengganti |
 | [`docs/panduan/PENJELASAN-SEDERHANA.md`](docs/panduan/PENJELASAN-SEDERHANA.md) | cara kerja Q-Shield tanpa istilah teknis — untuk seluruh tim, termasuk yang tidak ngoding |
 | [`docs/panduan/ALUR-KERJA.md`](docs/panduan/ALUR-KERJA.md) | apa yang terjadi dari scan sampai lampunya nyala, plus kedelapan invarian dalam bahasa awam |
+| [`docs/report/QShield-Project-Report-v2.md`](docs/report/QShield-Project-Report-v2.md) | draf laporan lomba versi tim — berdampingan dengan punya Vyone, bukan menggantikan |
+| [`docs/report/SCREENING-REPORT.json`](docs/report/SCREENING-REPORT.json) | 23 selisih antara laporan Vyone dan backend hari ini |
 | [`docs/pitch/MODEL-ML.md`](docs/pitch/MODEL-ML.md) | dua model tak terawasi: nama teknis, bukti, dan naskah jawaban untuk juri |
 | [`docs/pitch/PDF-UPDATE.md`](docs/pitch/PDF-UPDATE.md) | teks pengganti untuk `Q-Shield-Overview.pdf` yang sudah basi |
 
