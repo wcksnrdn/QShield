@@ -8,11 +8,11 @@
 
 **HackNusa 2026 · Secure Digital Payments & Fintech**
 
-Team — [isi nama tim]
+Miracle Team
 
-Members — [isi nama anggota]
+Filbert Alfredo Saputro · Satria Ardan Wicaksana · Vyone Louis
 
-Institution — Telkom University
+Telkom University
 
 Repository — github.com/wcksnrdn/QShield
 
