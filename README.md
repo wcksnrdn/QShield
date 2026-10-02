@@ -223,6 +223,7 @@ Dikelompokkan menurut siapa yang membacanya.
 | [`docs/panduan/ALUR-KERJA.md`](docs/panduan/ALUR-KERJA.md) | apa yang terjadi dari scan sampai lampunya nyala, plus kedelapan invarian dalam bahasa awam |
 | [`docs/report/QShield-Project-Report-v2.md`](docs/report/QShield-Project-Report-v2.md) | draf laporan lomba versi tim — berdampingan dengan punya Vyone, bukan menggantikan |
 | [`docs/report/SCREENING-REPORT.json`](docs/report/SCREENING-REPORT.json) | 23 selisih antara laporan Vyone dan backend hari ini |
+| [`docs/pitch/KEUNIKAN.md`](docs/pitch/KEUNIKAN.md) | apa yang membedakan Q-Shield, tiap klaim dengan pengukurannya — dibaca seluruh tim sebelum tampil |
 | [`docs/pitch/QA-SCRIPT-EN.md`](docs/pitch/QA-SCRIPT-EN.md) | naskah tanya jawab bahasa Inggris untuk final onsite — 24 pertanyaan, jawaban pendek yang bisa diucapkan |
 | [`docs/pitch/MODEL-ML.md`](docs/pitch/MODEL-ML.md) | dua model tak terawasi: nama teknis, bukti, dan naskah jawaban untuk juri |
 | [`docs/pitch/PDF-UPDATE.md`](docs/pitch/PDF-UPDATE.md) | teks pengganti untuk `Q-Shield-Overview.pdf` yang sudah basi |
